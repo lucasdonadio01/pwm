@@ -7,6 +7,14 @@
 window.WM = window.WM || {};
 WM.keys = { tmdb: 'df6dd2f54a8985efe507d42cfeab6683', omdb: '8a21a5a6' };
 
+// Shared cloud store. The publishable key is safe to expose (that's its purpose) + RLS.
+// The Supabase SECRET key is NEVER placed here. app='pwm' namespaces PWM vs PRB in one table.
+WM.supabase = {
+  url: 'https://kcqrcyxzuskgnxnplbxb.supabase.co',
+  key: 'sb_publishable_SGd6YSFMKYd_8t_uaXm-sQ_AXvawyJX',
+  app: 'pwm',
+};
+
 WM.api = (function () {
   const T = WM.keys.tmdb, O = WM.keys.omdb;
   const IMG = 'https://image.tmdb.org/t/p';

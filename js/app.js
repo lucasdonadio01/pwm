@@ -1076,6 +1076,18 @@
     onScroll();
   }
 
-  const uid = store.getUser();
-  if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
+  (async () => {
+    await store.init(); // load shared state from Supabase (falls back to local cache)
+    const uid = store.getUser();
+    if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
+    // Re-sync with the other user when the tab regains focus.
+    let refreshing = false;
+    window.addEventListener('focus', async () => {
+      if (refreshing || !store.getUser()) return;
+      refreshing = true;
+      await store.refresh();
+      refreshing = false;
+      if ($('#sheet').hidden) renderRoute();
+    });
+  })();
 })();
