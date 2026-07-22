@@ -1,0 +1,438 @@
+/* PRB — Project Read Books — app controller (vanilla) */
+(function () {
+  'use strict';
+  const users = PRB.users;
+  const store = PRB.store;
+  const books = PRB.books.slice();
+  const root = document.documentElement;
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const icon = (n) => `<span class="material-symbols-rounded">${n}</span>`;
+  const byId = (id) => books.find((b) => b.id === id);
+  const escapeHtml = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // avatars are shared with PWM (one level up)
+  const PHOTOS = { bian: '../assets/bian.jpg', luke: '../assets/luke.jpg' };
+  function avatarHTML(u, cls = 'avatar') {
+    const p = PHOTOS[u.id];
+    const img = p ? `<img class="avatar__img" src="${p}" alt="" onerror="this.remove()">` : '';
+    return `<span class="${cls}" style="--c:${u.color}">${u.initial}${img}</span>`;
+  }
+
+  function hash(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff; return Math.abs(h); }
+  // cold-hue placeholder for books without a cover
+  function art(b) {
+    if (b.cover) return `#060c18 url(${b.cover}) center/cover`;
+    const h1 = 190 + (hash(b.id) % 60);          // blues/cyans
+    const h2 = 210 + (hash(b.title) % 50);
+    return `radial-gradient(120% 130% at 20% 12%, hsl(${h1} 80% 30% / .95), transparent 55%),` +
+      `radial-gradient(130% 130% at 88% 92%, hsl(${h2} 85% 26% / .95), transparent 55%),` +
+      `linear-gradient(135deg, hsl(${h1} 60% 10%), hsl(${h2} 65% 7%))`;
+  }
+  const coverArt = art;
+
+  const currentUser = () => users[store.getUser()] || null;
+  function applyAccent() { const u = currentUser(); root.style.setProperty('--accent', u ? u.color : 'var(--hot)'); }
+
+  function starsMarkup(value, size = 'sm') {
+    const pct = (Math.max(0, Math.min(5, value || 0)) / 5) * 100;
+    const five = icon('star').repeat(5);
+    return `<span class="stars stars--${size}"><span class="stars__row stars__base">${five}</span><span class="stars__row stars__fill" style="width:${pct}%">${five}</span></span>`;
+  }
+
+  /* ---------- verdict (store only; no external import for books) ---------- */
+  const verdictOf = (id, uid) => { const e = store.get(id, uid); return { rating: typeof e.rating === 'number' ? e.rating : null, review: e.review || '', liked: !!e.liked }; };
+
+  /* ============================================================= GATE */
+  const gate = $('#gate');
+  function showGate() {
+    $('#site-header').hidden = true; $('#app').hidden = true;
+    const wrap = $('#gate-profiles'); wrap.innerHTML = '';
+    Object.values(users).forEach((u) => {
+      const btn = document.createElement('button');
+      btn.className = 'profile'; btn.style.setProperty('--c', u.color);
+      btn.innerHTML = avatarHTML(u, 'profile__avatar') + `<span class="profile__name">${u.name}</span><span class="profile__handle">@${u.handle}</span>`;
+      btn.addEventListener('click', () => { store.setUser(u.id); applyAccent(); gate.hidden = true; startApp(); });
+      wrap.appendChild(btn);
+    });
+    gate.hidden = false;
+  }
+
+  /* ============================================================= HEADER */
+  const NAV = [
+    { id: 'home', label: 'Home' },
+    { id: 'selectos', label: 'Selectos' },
+    { id: 'leidos', label: 'Leídos' },
+    { id: 'tier', label: 'Tier' },
+  ];
+  let route = 'home';
+
+  function renderHeader() {
+    const u = currentUser();
+    const header = $('#site-header');
+    header.innerHTML =
+      `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
+      `<a class="logo" href="#home" aria-label="PRB — Project Read Books"><b>PRB</b><span class="dot">.</span></a>` +
+      `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}` +
+      `<a class="nav__x" href="../index.html">${icon('movie')} Pelis</a></nav>` +
+      `<div class="header__right"><button class="user-chip" id="user-chip" title="Cambiar de usuario">` +
+      `<span class="user-chip__name">${u ? u.name : ''}</span>` + (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
+      `</button></div>`;
+    header.querySelectorAll('[data-route]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setRoute(a.dataset.route); $('#nav', header).classList.remove('nav--open'); }));
+    $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
+    $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
+    $('#user-chip', header).addEventListener('click', openConfirm);
+    header.hidden = false;
+  }
+  function onScroll() { $('#site-header').classList.toggle('header--solid', route !== 'home' || window.scrollY > 60); }
+
+  /* ============================================================= ROUTING */
+  function setRoute(r) {
+    route = r;
+    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    renderRoute(); onScroll();
+  }
+  function renderRoute() {
+    stopHero();
+    const app = $('#app'); app.hidden = false;
+    if (route === 'home') return renderHome(app);
+    if (route === 'selectos') return renderSelectos(app);
+    if (route === 'leidos') return renderLeidos(app);
+    if (route === 'tier') return renderTier(app);
+  }
+
+  /* ============================================================= HOME */
+  function renderHome(app) {
+    app.innerHTML = '';
+    app.appendChild(buildHero());
+    app.appendChild(buildRecommender());
+    app.appendChild(buildRead('Leídos'));
+    app.appendChild(buildFooter());
+    startHero();
+  }
+
+  /* ---------- hero ---------- */
+  let heroBooks = [], heroIndex = 0, heroTimer = null;
+  function buildHero() {
+    heroBooks = books.filter((b) => b.featured);
+    heroIndex = 0;
+    const hero = document.createElement('section');
+    hero.className = 'hero';
+    hero.innerHTML =
+      `<div class="hero__stage">${heroBooks.map((b, i) => heroSlide(b, i)).join('')}</div>` +
+      `<button class="hero__arrow hero__arrow--prev" aria-label="Anterior">${icon('chevron_left')}</button>` +
+      `<button class="hero__arrow hero__arrow--next" aria-label="Siguiente">${icon('chevron_right')}</button>` +
+      `<div class="hero__dots">${heroBooks.map((_, i) => `<button class="hero__dot ${i === 0 ? 'is-active' : ''}" aria-label="Ir a ${i + 1}"></button>`).join('')}</div>`;
+    hero.querySelector('.hero__arrow--prev').addEventListener('click', () => slideHero(-1, true));
+    hero.querySelector('.hero__arrow--next').addEventListener('click', () => slideHero(1, true));
+    hero.querySelectorAll('.hero__dot').forEach((d, i) => d.addEventListener('click', () => goHeroTo(i, true)));
+    hero.querySelectorAll('[data-hero-rate]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openSheet(heroBooks[+b.dataset.heroRate]); }));
+    hero.querySelectorAll('[data-hero-like]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); toggleLike(heroBooks[+b.dataset.heroLike], b, true); }));
+    hero.addEventListener('mouseenter', () => hero.classList.add('is-paused'));
+    hero.addEventListener('mouseleave', () => hero.classList.remove('is-paused'));
+    return hero;
+  }
+  function heroSlide(b, i) {
+    const meta = [b.genres && b.genres[0], b.year, b.author].filter(Boolean)
+      .map((x, idx) => (idx === 0 ? `<span class="eyebrow" style="color:var(--lime)">${x}</span>` : `<span>${x}</span>`)).join('<span class="dot-sep">·</span>');
+    const u = currentUser();
+    const liked = u && store.get(b.id, u.id).liked;
+    return `<div class="hero__slide ${i === 0 ? 'is-active' : ''}" data-index="${i}">` +
+      `<div class="hero__bg hero__bg--book" style="background:${art(b)}"></div><div class="hero__scrim"></div>` +
+      `<div class="hero__content bhero">` +
+      `<div class="bhero__cover"><div class="poster__img" style="background:${coverArt(b)}"></div></div>` +
+      `<div class="bhero__text"><div class="hero__meta">${meta}</div>` +
+      `<h2 class="hero__title">${escapeHtml(b.title)}</h2>` +
+      `<p class="hero__synopsis">${escapeHtml(b.synopsis || '')}</p>` +
+      `<div class="hero__actions"><button class="btn btn--accent" data-hero-rate="${i}">${icon('star')} Puntuar y reseñar</button>` +
+      `<button class="btn btn--ghost like ${liked ? 'is-liked' : ''}" data-hero-like="${i}">${icon('favorite')} Me gusta</button>` +
+      `</div></div></div></div>`;
+  }
+  function slideHero(dir, manual) { goHeroTo(heroIndex + dir, manual, dir); }
+  function goHeroTo(n, manual, dirHint) {
+    const slides = [...document.querySelectorAll('.hero__slide')]; if (!slides.length) return;
+    const total = heroBooks.length; const newIndex = ((n % total) + total) % total;
+    if (newIndex === heroIndex) { if (manual) restartHeroTimer(); return; }
+    const dir = dirHint != null ? dirHint : newIndex > heroIndex ? 1 : -1;
+    const outEl = slides[heroIndex], inEl = slides[newIndex];
+    inEl.style.transition = 'none'; inEl.style.transform = `translateX(${dir > 0 ? 100 : -100}%)`; inEl.style.zIndex = '3'; outEl.style.zIndex = '2';
+    void inEl.offsetWidth; inEl.style.transition = '';
+    requestAnimationFrame(() => { outEl.style.transform = `translateX(${dir > 0 ? -100 : 100}%)`; inEl.style.transform = 'translateX(0)'; });
+    slides.forEach((s, i) => s.classList.toggle('is-active', i === newIndex));
+    document.querySelectorAll('.hero__dot').forEach((d, i) => d.classList.toggle('is-active', i === newIndex));
+    heroIndex = newIndex; if (manual) restartHeroTimer();
+  }
+  function startHero() { restartHeroTimer(); }
+  function restartHeroTimer() { stopHero(); heroTimer = setInterval(() => slideHero(1, false), 7000); }
+  function stopHero() { if (heroTimer) clearInterval(heroTimer); heroTimer = null; }
+
+  /* ---------- recommender ---------- */
+  const QUIZ = [
+    { id: 'genres', q: 'Género', multi: true, opts: ['Distopía', 'Ciencia ficción', 'Cyberpunk', 'Filosofía', 'Novela', 'Fantasía', 'Clásico', 'Aventura', 'Ensayo'].map((g) => ({ v: g, label: g })) },
+    { id: 'era', q: 'Época', opts: [{ v: 'clasico', label: 'Clásicos (pre-1970)' }, { v: 'moderno', label: 'Modernos (1970+)' }, { v: 'any', label: 'Da igual' }] },
+    { id: 'vibe', q: '¿Qué buscás?', opts: [{ v: 'oscuro', label: 'Oscuro / distópico' }, { v: 'pensar', label: 'Para pensar' }, { v: 'any', label: 'Da igual' }] },
+  ];
+  const answers = { genres: [], era: 'any', vibe: 'any' };
+  const DARK = ['Distopía', 'Cyberpunk', 'Terror'];
+  const THINK = ['Filosofía', 'Ensayo', 'Ciencia ficción'];
+  function scoreBook(b, a) {
+    const g = b.genres || []; let s = 0;
+    if (a.genres.length) { const ov = g.filter((x) => a.genres.includes(x)).length; s += ov ? ov * 4 : -3; }
+    if (a.era === 'clasico') s += b.year < 1970 ? 3 : -2; else if (a.era === 'moderno') s += b.year >= 1970 ? 3 : -2;
+    if (a.vibe === 'oscuro') s += g.some((x) => DARK.includes(x)) ? 3 : -1; else if (a.vibe === 'pensar') s += g.some((x) => THINK.includes(x)) ? 3 : -1;
+    return s;
+  }
+  function recommend(a) { return books.map((b) => ({ b, s: scoreBook(b, a) })).sort((x, y) => y.s - x.s).slice(0, 12).map((o) => o.b); }
+  function buildRecommender() {
+    const s = document.createElement('section'); s.className = 'section recommender';
+    s.innerHTML =
+      `<button class="rec-toggle" id="rec-toggle" aria-expanded="false"><div><h3 class="section__title"><span class="accentbar">/</span> ¿Qué leo ahora?</h3>` +
+      `<p class="section__sub">Respondé y te tiro 12 libros</p></div><span class="material-symbols-rounded rec-chev">expand_more</span></button>` +
+      `<div class="rec-panel" id="rec-panel" hidden><div class="quiz">` +
+      QUIZ.map((q) => `<div class="quiz__q"><div class="quiz__label">${q.q}${q.multi ? ' <span class="quiz__multi">— elegí los que quieras</span>' : ''}</div><div class="quiz__opts" data-q="${q.id}" data-multi="${q.multi ? 1 : 0}">${q.opts.map((o) => `<button class="quiz__opt" data-v="${escapeHtml(o.v)}">${o.label}</button>`).join('')}</div></div>`).join('') +
+      `<div class="quiz__actions"><button class="btn btn--accent" id="quiz-go">${icon('auto_awesome')} Recomendame</button><button class="btn btn--soft" id="quiz-reset">${icon('restart_alt')} Limpiar</button></div>` +
+      `</div><div class="quiz__results" id="quiz-results"></div></div>`;
+    const toggle = s.querySelector('#rec-toggle'), panel = s.querySelector('#rec-panel');
+    toggle.addEventListener('click', () => { const open = panel.hidden; panel.hidden = !open; toggle.classList.toggle('is-open', open); });
+    s.querySelectorAll('.quiz__opts').forEach((group) => group.addEventListener('click', (e) => {
+      const btn = e.target.closest('.quiz__opt'); if (!btn) return; const qid = group.dataset.q;
+      if (group.dataset.multi === '1') { const arr = answers[qid], idx = arr.indexOf(btn.dataset.v); if (idx >= 0) { arr.splice(idx, 1); btn.classList.remove('is-on'); } else { arr.push(btn.dataset.v); btn.classList.add('is-on'); } }
+      else { answers[qid] = btn.dataset.v; group.querySelectorAll('.quiz__opt').forEach((x) => x.classList.toggle('is-on', x === btn)); }
+    }));
+    s.querySelector('#quiz-go').addEventListener('click', () => {
+      const wrap = s.querySelector('#quiz-results');
+      wrap.innerHTML = `<div class="quiz__reshead">${icon('auto_awesome')} Para vos · 12 libros</div><div class="grid" id="quiz-grid"></div>`;
+      recommend(answers).forEach((b) => wrap.querySelector('#quiz-grid').appendChild(bookCard(b)));
+      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    s.querySelector('#quiz-reset').addEventListener('click', () => { answers.genres = []; answers.era = 'any'; answers.vibe = 'any'; s.querySelectorAll('.quiz__opt').forEach((x) => x.classList.remove('is-on')); s.querySelector('#quiz-results').innerHTML = ''; });
+    return s;
+  }
+
+  /* ---------- Leídos ---------- */
+  function buildRead(title) {
+    const s = document.createElement('section'); s.className = 'section';
+    const read = books.filter((b) => Object.values(users).some((u) => { const v = verdictOf(b.id, u.id); return v.rating != null || v.review || v.liked; }));
+    s.innerHTML = `<div class="section__head"><div><h3 class="section__title"><span class="accentbar">/</span> ${title}</h3><p class="section__sub">Lo que leímos y puntuamos</p></div></div>`;
+    if (!read.length) { const e = document.createElement('div'); e.className = 'empty'; e.innerHTML = `${icon('menu_book')}<p>Todavía no puntuaron ningún libro.<br>Abrí uno y tirale estrellas.</p>`; s.appendChild(e); }
+    else { const grid = document.createElement('div'); grid.className = 'grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))'; read.forEach((b) => grid.appendChild(readCard(b))); s.appendChild(grid); }
+    return s;
+  }
+  function readCard(b) {
+    const card = document.createElement('article'); card.className = 'watched'; card.style.cursor = 'pointer';
+    const verdicts = Object.values(users).map((u) => {
+      const e = verdictOf(b.id, u.id); const rated = typeof e.rating === 'number'; if (!(rated || e.review || e.liked)) return '';
+      const stars = rated ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`;
+      const heart = e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '';
+      const review = e.review ? `<p class="verdict__review">“${escapeHtml(e.review)}”</p>` : '';
+      return `<div class="verdict">${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${u.name}</span>${stars}${heart}</div>${review}</div></div>`;
+    }).join('');
+    card.innerHTML = `<div class="watched__poster"><div class="poster__img" style="background:${coverArt(b)}"></div></div><div class="watched__body"><div class="watched__title">${escapeHtml(b.title)}</div><div class="watched__year">${[b.year, b.author].filter(Boolean).join(' · ')}</div><div class="verdicts">${verdicts}</div></div>`;
+    card.addEventListener('click', () => openSheet(b));
+    return card;
+  }
+
+  /* ---------- Selectos (priority list) ---------- */
+  let wlQuery = '';
+  function orderedBooks() { const pos = new Map(store.getOrder().map((id, i) => [id, i])); return books.slice().sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : Infinity) - (pos.has(b.id) ? pos.get(b.id) : Infinity)); }
+  function renderSelectos(app) {
+    app.innerHTML = '';
+    const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    s.innerHTML =
+      `<div class="section__head section__head--search"><div><h3 class="section__title">Selectos</h3><p class="section__sub">Nuestra selección · ${books.length} libros · ordenala por prioridad</p></div>` +
+      `<label class="search"><span class="material-symbols-rounded">search</span><input id="wl-search" type="search" placeholder="Buscar libro o autor…" value="${escapeHtml(wlQuery)}"></label></div>` +
+      `<p class="plist__hint">${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición.</p><div class="plist" id="plist"></div>`;
+    app.appendChild(s); app.appendChild(buildFooter());
+    s.querySelector('#wl-search').addEventListener('input', (e) => { wlQuery = e.target.value; fillPlist(); });
+    enableReorder(s.querySelector('#plist')); fillPlist();
+  }
+  function fillPlist() {
+    const plist = document.getElementById('plist'); if (!plist) return; plist.innerHTML = '';
+    const full = orderedBooks(); const rankOf = new Map(full.map((b, i) => [b.id, i + 1]));
+    const q = wlQuery.trim().toLowerCase();
+    const list = q ? full.filter((b) => b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)) : full;
+    if (!list.length) { plist.innerHTML = `<div class="empty">${icon('search_off')}<p>Nada con “${escapeHtml(wlQuery)}”.</p></div>`; return; }
+    list.forEach((b) => plist.appendChild(plRow(b, rankOf.get(b.id), full.length)));
+  }
+  function setPriority(id, newPos) {
+    const cur = orderedBooks().map((b) => b.id); const from = cur.indexOf(id); if (from < 0) return;
+    cur.splice(from, 1); const to = Math.max(0, Math.min(cur.length, (parseInt(newPos, 10) || 1) - 1)); cur.splice(to, 0, id);
+    store.setOrder(cur); fillPlist();
+  }
+  function plRow(b, rank, total) {
+    const row = document.createElement('div'); row.className = 'plitem'; row.draggable = true; row.dataset.id = b.id;
+    row.innerHTML = `<input class="plitem__rankin" type="number" min="1" max="${total}" value="${rank}" aria-label="Prioridad">` +
+      `<div class="plitem__poster"><div class="chip__img" style="background:${coverArt(b)}"></div></div>` +
+      `<div class="plitem__body"><div class="plitem__title">${escapeHtml(b.title)}</div><div class="plitem__meta"><span>${b.author || ''}</span><span>${b.year || ''}</span></div></div>` +
+      `<div class="plitem__handle">${icon('drag_indicator')}</div>`;
+    const input = row.querySelector('.plitem__rankin');
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+    input.addEventListener('change', () => setPriority(b.id, input.value));
+    row.addEventListener('click', (e) => { if (e.target === input || row.dataset.dragged) return; openSheet(b); });
+    return row;
+  }
+  function enableReorder(container) {
+    let dragEl = null;
+    container.addEventListener('dragstart', (e) => { if (wlQuery.trim()) { e.preventDefault(); return; } const it = e.target.closest('.plitem'); if (!it) return; dragEl = it; it.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', it.dataset.id); } catch {} });
+    container.addEventListener('dragover', (e) => { if (!dragEl) return; e.preventDefault(); const after = dragAfter(container, e.clientY); if (after == null) container.appendChild(dragEl); else container.insertBefore(dragEl, after); });
+    container.addEventListener('dragend', () => { if (!dragEl) return; dragEl.classList.remove('dragging'); dragEl.dataset.dragged = '1'; const el = dragEl; setTimeout(() => delete el.dataset.dragged, 60); dragEl = null; const rows = [...container.querySelectorAll('.plitem')]; store.setOrder(rows.map((n) => n.dataset.id)); rows.forEach((n, i) => { const inp = n.querySelector('.plitem__rankin'); if (inp) inp.value = i + 1; }); });
+  }
+  function dragAfter(container, y) { const els = [...container.querySelectorAll('.plitem:not(.dragging)')]; return els.reduce((c, ch) => { const box = ch.getBoundingClientRect(); const off = y - box.top - box.height / 2; return off < 0 && off > c.offset ? { offset: off, element: ch } : c; }, { offset: -Infinity, element: null }).element; }
+
+  function renderLeidos(app) { app.innerHTML = ''; const s = buildRead('Leídos'); s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)'; app.appendChild(s); app.appendChild(buildFooter()); }
+
+  /* ---------- book card ---------- */
+  function bookCard(b) {
+    const card = document.createElement('button'); card.className = 'card';
+    card.innerHTML = `<div class="poster"><div class="poster__img" style="background:${coverArt(b)}"></div><div class="poster__label"><span class="t">${escapeHtml(b.title)}</span><span class="y">${b.author || ''}${b.year ? ` · ${b.year}` : ''}</span></div></div>`;
+    card.addEventListener('click', () => openSheet(b));
+    return card;
+  }
+
+  /* ============================================================= TIER */
+  const TIERS = [
+    { id: 'prime', label: 'PRIME', sub: 'lo mejor', color: '#22D3EE' },
+    { id: 'buena', label: 'Muy bueno', sub: '', color: '#3D7BFF' },
+    { id: 'nifu', label: 'Ni fu ni fa', sub: 'del montón', color: '#8B7BFF' },
+    { id: 'meh', label: 'Meh', sub: '', color: '#B06BE0' },
+    { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF4D6D' },
+  ];
+  function tierEligible(u) { return books.filter((b) => verdictOf(b.id, u.id).rating != null || store.getTier(b.id, u.id)); }
+  function renderTier(app, viewId) {
+    const me = currentUser(); const viewU = users[viewId] || me; const isMine = viewU.id === me.id; const other = Object.values(users).find((x) => x.id !== me.id);
+    app.innerHTML = '';
+    const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    s.innerHTML =
+      `<div class="section__head section__head--search"><div><h3 class="section__title">Tier list</h3>` +
+      `<p class="section__sub">${isMine ? `El ranking de <b style="color:${viewU.color}">vos (${viewU.name})</b>` : `Mirando el tier de <b style="color:${viewU.color}">${viewU.name}</b> · solo lectura`}</p></div>` +
+      `<button class="btn btn--soft" id="tier-view">${icon('swap_horiz')} ${isMine ? `Ver tier de ${other.name}` : 'Volver al mío'}</button></div>` +
+      (isMine ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué libro poner; tocá uno puesto para moverlo.' : 'Arrastrá los libros al tier que merezcan (o tocá uno para moverlo).'}</p>` : '') +
+      `<div class="tier-board" id="tier-board">${TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('')}</div>` +
+      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${isMine ? 'los que ya puntuaste' : `los que ${viewU.name} leyó`}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>`;
+    app.appendChild(s); app.appendChild(buildFooter());
+    s.querySelector('#tier-view').addEventListener('click', () => renderTier(app, isMine ? other.id : me.id));
+    if (isMine && isTouch()) {
+      s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, viewU); }));
+      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, viewU); });
+    } else { s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip && !chip.classList.contains('dragging')) { const b = byId(chip.dataset.id); if (b) openSheet(b); } }); }
+    fillTier(viewU);
+    if (isMine && !isTouch()) enableTierDnD(viewU);
+  }
+  function tierChip(b, draggable) { const c = document.createElement('div'); c.className = 'chip' + (draggable ? '' : ' chip--ro'); c.draggable = !!draggable; c.dataset.id = b.id; c.title = b.title; c.innerHTML = `<div class="chip__img" style="background:${coverArt(b)}"></div><div class="chip__t">${escapeHtml(b.title)}</div>`; return c; }
+  function fillTier(u) {
+    const draggable = currentUser().id === u.id;
+    document.querySelectorAll('.tier__drop, #tier-pool').forEach((d) => (d.innerHTML = ''));
+    tierEligible(u).forEach((b) => { const t = store.getTier(b.id, u.id); const target = t ? document.querySelector(`.tier__drop[data-tier="${t}"]`) : document.querySelector('#tier-pool'); if (target) target.appendChild(tierChip(b, draggable)); });
+    const pool = document.querySelector('#tier-pool'); if (pool && !pool.children.length) pool.innerHTML = `<p class="tier-pool__empty">${draggable ? 'Puntuá un libro y va a aparecer acá para ubicarlo.' : 'Sin libros para mostrar.'}</p>`;
+  }
+  function enableTierDnD(u) {
+    let dragId = null; const section = document.querySelector('#tier-board').closest('.section');
+    section.addEventListener('dragstart', (e) => { const chip = e.target.closest('.chip'); if (!chip) return; dragId = chip.dataset.id; chip.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', dragId); } catch {} });
+    section.addEventListener('dragend', (e) => { const chip = e.target.closest('.chip'); if (chip) chip.classList.remove('dragging'); dragId = null; document.querySelectorAll('.drag-over').forEach((d) => d.classList.remove('drag-over')); });
+    [...document.querySelectorAll('.tier__drop'), document.querySelector('#tier-pool')].forEach((drop) => {
+      drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag-over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+      drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('drag-over'); const id = dragId || (e.dataTransfer && e.dataTransfer.getData('text/plain')); if (!id) return; store.setTier(id, u.id, drop.dataset.tier || null); fillTier(u); });
+    });
+  }
+
+  /* ---------- mobile pick-sheet ---------- */
+  const isTouch = () => window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(pointer: coarse)').matches;
+  function openPickSheet(title, itemsFn) {
+    let el = document.getElementById('picksheet'); if (!el) { el = document.createElement('div'); el.id = 'picksheet'; el.className = 'picksheet'; document.body.appendChild(el); }
+    const render = () => {
+      const items = itemsFn();
+      el.innerHTML = `<div class="picksheet__scrim" data-pclose></div><div class="picksheet__panel"><div class="picksheet__head"><h3>${escapeHtml(title)}</h3><button class="icon-btn" data-pclose>${icon('close')}</button></div><div class="picksheet__list">` +
+        (items.length ? items.map((it, i) => `<button class="pickrow" data-i="${i}">${it.thumb ? `<span class="pickrow__thumb" style="background:${it.thumb}"></span>` : `<span class="pickrow__ic material-symbols-rounded"${it.color ? ` style="color:${it.color}"` : ''}>${it.icon || 'label'}</span>`}<span class="pickrow__label">${escapeHtml(it.label)}</span>${it.check ? `<span class="pickrow__check material-symbols-rounded">check</span>` : ''}</button>`).join('') : `<p class="addfilm__hint">Nada para elegir. Puntuá un libro primero.</p>`) +
+        `</div></div>`;
+      el.querySelectorAll('[data-pclose]').forEach((b) => b.addEventListener('click', closePickSheet));
+      el.querySelectorAll('.pickrow').forEach((b) => b.addEventListener('click', () => { const it = itemsFn()[+b.dataset.i]; if (it && it.onClick) it.onClick(render); }));
+    };
+    render(); el.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onPickKey);
+  }
+  function onPickKey(e) { if (e.key === 'Escape') closePickSheet(); }
+  function closePickSheet() { const el = document.getElementById('picksheet'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onPickKey); }
+  function openTierPicker(tierId, u) {
+    const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
+    openPickSheet(`Poné en ${label}`, () => tierEligible(u).filter((b) => (store.getTier(b.id, u.id) || null) !== tierId).map((b) => ({ thumb: coverArt(b), label: b.title, onClick: (render) => { store.setTier(b.id, u.id, tierId); fillTier(u); render(); } })));
+  }
+  function openChipMenu(id, u) {
+    const b = byId(id); if (!b) return;
+    openPickSheet(b.title, () => { const cur = store.getTier(id, u.id); return [...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { store.setTier(id, u.id, t.id); fillTier(u); closePickSheet(); } })), { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { store.setTier(id, u.id, null); fillTier(u); closePickSheet(); } }, { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(b); } }]; });
+  }
+
+  /* ============================================================= SHEET */
+  const sheet = $('#sheet');
+  function openSheet(b) {
+    const u = currentUser(); const me = verdictOf(b.id, u.id);
+    const other = Object.values(users).find((x) => x.id !== u.id); const otherE = verdictOf(b.id, other.id);
+    const otherHas = typeof otherE.rating === 'number' || otherE.review || otherE.liked;
+    sheet.innerHTML =
+      `<div class="sheet__scrim" data-close></div><div class="sheet__panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(b.title)}">` +
+      `<div class="sheet__hero"><div class="hero__bg hero__bg--book" style="background:${art(b)}"></div><button class="sheet__close" data-close>${icon('close')}</button></div>` +
+      `<div class="sheet__content"><div class="sheet__meta"><span class="eyebrow" style="color:var(--lime)">${(b.genres && b.genres[0]) || 'Libro'}</span>` +
+      [b.author, b.year].filter(Boolean).map((x) => `<span class="dot-sep">·</span><span class="eyebrow">${escapeHtml(String(x))}</span>`).join('') + `</div>` +
+      `<h2 class="sheet__title">${escapeHtml(b.title)}</h2>` +
+      `<div class="sheet__genres">${(b.genres || []).map((g) => `<span class="gtag">${g}</span>`).join('')}</div>` +
+      `<p class="sheet__synopsis">${escapeHtml(b.synopsis || '')}</p>` +
+      `<div class="rate-box"><div class="rate-box__head">${avatarHTML(u)}<span class="rate-box__you">Tu puntaje, ${u.name}</span></div>` +
+      `<div class="rate-box__row"><div class="rate-box__stars" id="rate-stars"></div><button class="rate-clear" id="rate-clear" ${typeof me.rating === 'number' ? '' : 'hidden'}>borrar</button></div>` +
+      `<div class="review-field"><label for="review">Tu reseña</label><textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
+      `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} Guardar reseña</button><button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button><span class="saved-flag" id="saved-flag">guardado ✓</span></div></div></div>` +
+      (otherHas ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijo ${other.name}</div><div class="verdict">${avatarHTML(other, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${typeof otherE.rating === 'number' ? `${starsMarkup(otherE.rating, 'sm')}<span class="stars-value">${otherE.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>'}${otherE.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : ''}</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}</div></div></div>` : '') +
+      `</div></div>`;
+    mountStars($('#rate-stars', sheet), b, u, me.rating);
+    $('#rate-clear', sheet).addEventListener('click', () => { store.setRating(b.id, u.id, null); openSheet(b); });
+    $('#save-review', sheet).addEventListener('click', () => { store.setReview(b.id, u.id, $('#review', sheet).value.trim()); const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600); });
+    $('#review', sheet).addEventListener('blur', (e) => store.setReview(b.id, u.id, e.target.value.trim()));
+    $('#sheet-like', sheet).addEventListener('click', (e) => toggleLike(b, e.currentTarget, true));
+    sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
+    sheet.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onSheetKey);
+  }
+  function onSheetKey(e) { if (e.key === 'Escape') closeSheet(); }
+  function closeSheet() { sheet.hidden = true; sheet.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKey); if (route === 'home') renderHome($('#app')); }
+  function mountStars(container, b, u, initial) {
+    let value = typeof initial === 'number' ? initial : 0;
+    container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="rate-num" style="margin-left:.7rem">${value ? value.toFixed(1) : '—'}</span>`;
+    const widget = container.querySelector('.stars'), fill = container.querySelector('.stars__fill'), num = container.querySelector('#rate-num');
+    widget.classList.add('stars--interactive'); widget.tabIndex = 0; widget.setAttribute('role', 'slider');
+    const setV = (v) => { fill.style.width = (v / 5) * 100 + '%'; num.textContent = v ? v.toFixed(1) : '—'; };
+    const fromX = (x) => { const r = widget.getBoundingClientRect(); return Math.max(0.5, Math.ceil(Math.min(1, Math.max(0, (x - r.left) / r.width)) * 10) / 2); };
+    widget.addEventListener('pointermove', (e) => setV(fromX(e.clientX)));
+    widget.addEventListener('pointerleave', () => setV(value));
+    widget.addEventListener('pointerdown', (e) => { value = fromX(e.clientX); commit(); });
+    widget.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { value = Math.min(5, value + 0.5); commit(); e.preventDefault(); } if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { value = Math.max(0, value - 0.5); commit(); e.preventDefault(); } });
+    function commit() { setV(value); store.setRating(b.id, u.id, value || null); const c = $('#rate-clear', sheet); if (c) c.hidden = !value; }
+  }
+
+  function toggleLike(b, btn, relabel) { const u = currentUser(); store.toggleLike(b.id, u.id); const liked = store.get(b.id, u.id).liked; btn.classList.toggle('is-liked', liked); btn.classList.add('pop'); setTimeout(() => btn.classList.remove('pop'), 360); if (relabel) btn.innerHTML = `${icon('favorite')} ${liked ? 'Te gusta' : 'Me gusta'}`; }
+
+  /* ============================================================= CONFIRM */
+  function openConfirm() {
+    const u = currentUser(); const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card"><div class="confirm__title">¿Cambiar de usuario?</div><p class="confirm__text">Estás como <b style="color:${u.color}">${u.name}</b>.</p><div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" data-switch>${icon('switch_account')} Cambiar</button></div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('[data-switch]').addEventListener('click', () => { el.hidden = true; stopHero(); store.clearUser(); showGate(); });
+  }
+
+  function buildFooter() {
+    const f = document.createElement('footer'); f.className = 'footer';
+    const bld = PRB.build || { version: '1.0', built: null };
+    let ver = `versión ${bld.version}`; if (bld.built) { const d = new Date(bld.built); ver += ` · ${d.toLocaleDateString('es-AR')} · ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`; }
+    f.innerHTML = `<b>PRB</b> — <b style="color:var(--ink-dim)">Project Read Books</b>. Portadas y datos de Open Library · el micro-sitio de libros de <a href="../index.html" style="color:var(--accent)">PWM</a>.<span class="footer__ver">${ver}</span>`;
+    return f;
+  }
+
+  /* ============================================================= BOOT */
+  function startApp() { applyAccent(); renderHeader(); setRoute('home'); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
+  (async () => {
+    await store.init();
+    const uid = store.getUser();
+    if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
+    let refreshing = false;
+    window.addEventListener('focus', async () => { if (refreshing || !store.getUser()) return; refreshing = true; await store.refresh(); refreshing = false; if ($('#sheet').hidden) renderRoute(); });
+  })();
+})();

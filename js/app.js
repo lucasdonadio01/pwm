@@ -1062,7 +1062,9 @@
     const b = WM.build || { version: '1.0', built: null };
     let ver = `versión ${b.version}`;
     if (b.built) { const d = new Date(b.built); ver += ` · ${d.toLocaleDateString('es-AR')} · ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`; }
-    f.innerHTML = `<b>PWM</b> — <b style="color:var(--ink-dim)">Project Watch Movies</b>. Watchlists de Letterboxd con actualización semanal automática · imágenes en HD por TMDB · puntajes de IMDb + Rotten Tomatoes (OMDb).<span class="footer__ver">${ver}</span>`;
+    f.innerHTML =
+      `<a class="footer__x" href="prb/index.html">${icon('menu_book')} <span><b>PRB</b> · Project Read Books</span> <span class="footer__x-go">${icon('arrow_forward')}</span></a>` +
+      `<div class="footer__meta"><b>PWM</b> — <b style="color:var(--ink-dim)">Project Watch Movies</b>. Watchlists de Letterboxd con actualización semanal · imágenes HD (TMDB) · puntajes IMDb + Rotten Tomatoes (OMDb).<span class="footer__ver">${ver}</span></div>`;
     return f;
   }
   function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
