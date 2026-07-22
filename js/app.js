@@ -133,7 +133,7 @@
     header.innerHTML =
       `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
       `<a class="logo" href="#home" aria-label="PWM — Project Watch Movies, inicio"><b>PWM</b><span class="dot">.</span></a>` +
-      `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}</nav>` +
+      `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}<a class="nav__x" href="prb/index.html">${icon('menu_book')} Libritos</a></nav>` +
       `<div class="header__right">` +
       `<button class="user-chip" id="user-chip" title="Cambiar de usuario">` +
       `<span class="user-chip__name">${u ? u.name : ''}</span>` +

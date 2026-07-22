@@ -1,47 +1,43 @@
 /* WatchMovies — store (shared via Supabase, with localStorage as offline cache)
  *
- * State: ratings, reviews, likes, tier — per film, per user. Plus a shared priority `order`.
- * When WM.supabase = { url, key, app } is set, the store loads from / writes to Supabase so the
- * two users sync across devices. If Supabase is unreachable/unconfigured, it falls back to
- * localStorage transparently. Reads are synchronous against an in-memory cache; call init() once
- * at boot (awaited) to fill it.
- *
- * State shape: { [filmId]: { [userId]: { rating, review, liked, tier, updatedAt } } }
+ * Per-film/per-user verdicts (rating, review, liked, tier) live in the `reviews` table.
+ * Shared app-wide settings (priority `order`, user-added items…) live in the `settings` table.
+ * When WM.supabase = { url, key, app } is set, both sync across devices; otherwise localStorage only.
+ * Reads are synchronous against an in-memory cache; call init() once at boot (awaited).
  */
 window.WM = window.WM || {};
 
 WM.config = {
   activeUserKey: 'wm.activeUser',
   stateKey: 'wm.state.v1',
-  orderKey: 'wm.order.v1',
+  settingsKey: 'wm.settings.v1',
 };
 
 WM.store = (function () {
   const sb = () => WM.supabase || null;
   let state = {};
-  let order = [];
+  let settings = {};
   const listeners = new Set();
   const notify = () => listeners.forEach((f) => f());
 
-  /* ---- localStorage mirror (offline cache) ---- */
+  /* ---- localStorage mirror ---- */
   function loadLocal() {
     try { state = JSON.parse(localStorage.getItem(WM.config.stateKey)) || {}; } catch { state = {}; }
-    try { order = JSON.parse(localStorage.getItem(WM.config.orderKey)) || []; } catch { order = []; }
+    try { settings = JSON.parse(localStorage.getItem(WM.config.settingsKey)) || {}; } catch { settings = {}; }
+    // migrate legacy order key
+    if (!settings.order) { try { const o = JSON.parse(localStorage.getItem('wm.order.v1')); if (Array.isArray(o)) settings.order = o; } catch {} }
   }
   function saveLocal() {
     try {
       localStorage.setItem(WM.config.stateKey, JSON.stringify(state));
-      localStorage.setItem(WM.config.orderKey, JSON.stringify(order));
+      localStorage.setItem(WM.config.settingsKey, JSON.stringify(settings));
     } catch {}
   }
 
   /* ---- Supabase REST ---- */
   async function sbFetch(path, opts = {}) {
     const c = sb();
-    return fetch(`${c.url}/rest/v1/${path}`, {
-      ...opts,
-      headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    });
+    return fetch(`${c.url}/rest/v1/${path}`, { ...opts, headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
   }
   async function pull() {
     const c = sb();
@@ -49,34 +45,20 @@ WM.store = (function () {
     if (!res.ok) throw new Error('sb reviews ' + res.status);
     const rows = await res.json();
     const next = {};
-    rows.forEach((r) => {
-      (next[r.film_id] = next[r.film_id] || {})[r.user_id] = {
-        rating: typeof r.rating === 'number' ? r.rating : null,
-        review: r.review || '', liked: !!r.liked, tier: r.tier || null, updatedAt: r.updated_at,
-      };
-    });
-    const res2 = await sbFetch(`settings?app=eq.${c.app}&key=eq.order&select=value`);
-    let ord = order;
-    if (res2.ok) { const s = await res2.json(); if (s[0] && Array.isArray(s[0].value)) ord = s[0].value; }
-    state = next; order = ord;
-    saveLocal();
+    rows.forEach((r) => { (next[r.film_id] = next[r.film_id] || {})[r.user_id] = { rating: typeof r.rating === 'number' ? r.rating : null, review: r.review || '', liked: !!r.liked, tier: r.tier || null, updatedAt: r.updated_at }; });
+    const res2 = await sbFetch(`settings?app=eq.${c.app}&select=key,value`);
+    const nextSettings = {};
+    if (res2.ok) { (await res2.json()).forEach((r) => (nextSettings[r.key] = r.value)); }
+    state = next; settings = nextSettings; saveLocal();
   }
   function pushEntry(filmId, userId) {
     if (!sb()) return;
     const e = entry(filmId, userId);
-    sbFetch('reviews', {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify({ app: sb().app, film_id: filmId, user_id: userId, rating: e.rating, review: e.review || '', liked: !!e.liked, tier: e.tier || null, updated_at: new Date().toISOString() }),
-    }).catch(() => {});
+    sbFetch('reviews', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ app: sb().app, film_id: filmId, user_id: userId, rating: e.rating, review: e.review || '', liked: !!e.liked, tier: e.tier || null, updated_at: new Date().toISOString() }) }).catch(() => {});
   }
-  function pushOrder() {
+  function pushSetting(key) {
     if (!sb()) return;
-    sbFetch('settings', {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify({ app: sb().app, key: 'order', value: order, updated_at: new Date().toISOString() }),
-    }).catch(() => {});
+    sbFetch('settings', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ app: sb().app, key, value: settings[key] === undefined ? null : settings[key], updated_at: new Date().toISOString() }) }).catch(() => {});
   }
 
   /* ---- core ---- */
@@ -89,12 +71,8 @@ WM.store = (function () {
 
   return {
     async init() {
-      loadLocal(); // instant offline cache first
-      if (sb()) {
-        try {
-          await Promise.race([pull(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]);
-        } catch (e) { console.warn('[WM] Supabase offline, using local cache:', e.message); }
-      }
+      loadLocal();
+      if (sb()) { try { await Promise.race([pull(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]); } catch (e) { console.warn('[WM] Supabase offline, using local cache:', e.message); } }
       notify();
     },
     async refresh() { if (sb()) { try { await pull(); notify(); } catch {} } },
@@ -111,8 +89,11 @@ WM.store = (function () {
     setTier(filmId, userId, tier) { write(filmId, userId, { tier }); },
     getTier(filmId, userId) { return entry(filmId, userId).tier || null; },
 
-    getOrder() { return order.slice(); },
-    setOrder(ids) { order = ids.slice(); saveLocal(); notify(); pushOrder(); },
+    // shared settings
+    getSetting(key) { return settings[key]; },
+    setSetting(key, value) { settings[key] = value; saveLocal(); notify(); pushSetting(key); },
+    getOrder() { return Array.isArray(settings.order) ? settings.order.slice() : []; },
+    setOrder(ids) { settings.order = ids.slice(); saveLocal(); notify(); pushSetting('order'); },
 
     isWatched(filmId) { const f = state[filmId]; return !!(f && Object.values(f).some((e) => typeof e.rating === 'number')); },
     watchedFilmIds() { return Object.keys(state).filter((id) => this.isWatched(id)); },

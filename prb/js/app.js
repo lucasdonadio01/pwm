@@ -11,6 +11,15 @@
   const byId = (id) => books.find((b) => b.id === id);
   const escapeHtml = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // Books the users added by hand (shared via Supabase settings 'extra_books').
+  function mergeExtras() { (store.getSetting('extra_books') || []).forEach((b) => { if (!books.some((x) => x.id === b.id)) books.push(b); }); }
+  function addExtraBook(b) {
+    if (books.some((x) => x.id === b.id)) return false;
+    b.extra = true; books.push(b);
+    const ex = store.getSetting('extra_books') || []; ex.push(b); store.setSetting('extra_books', ex);
+    return true;
+  }
+
   // avatars are shared with PWM (one level up)
   const PHOTOS = { bian: '../assets/bian.jpg', luke: '../assets/luke.jpg' };
   function avatarHTML(u, cls = 'avatar') {
@@ -214,9 +223,10 @@
   function buildRead(title) {
     const s = document.createElement('section'); s.className = 'section';
     const read = books.filter((b) => Object.values(users).some((u) => { const v = verdictOf(b.id, u.id); return v.rating != null || v.review || v.liked; }));
-    s.innerHTML = `<div class="section__head"><div><h3 class="section__title"><span class="accentbar">/</span> ${title}</h3><p class="section__sub">Lo que leímos y puntuamos</p></div></div>`;
-    if (!read.length) { const e = document.createElement('div'); e.className = 'empty'; e.innerHTML = `${icon('menu_book')}<p>Todavía no puntuaron ningún libro.<br>Abrí uno y tirale estrellas.</p>`; s.appendChild(e); }
+    s.innerHTML = `<div class="section__head section__head--search"><div><h3 class="section__title"><span class="accentbar">/</span> ${title}</h3><p class="section__sub">Lo que leímos y puntuamos</p></div><button class="btn btn--soft" id="read-add">${icon('add_circle')} Agregar libro</button></div>`;
+    if (!read.length) { const e = document.createElement('div'); e.className = 'empty'; e.innerHTML = `${icon('menu_book')}<p>Todavía no puntuaron ningún libro.<br>Tocá <b>Agregar libro</b>, o abrí uno y tirale estrellas.</p>`; s.appendChild(e); }
     else { const grid = document.createElement('div'); grid.className = 'grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))'; read.forEach((b) => grid.appendChild(readCard(b))); s.appendChild(grid); }
+    s.querySelector('#read-add').addEventListener('click', () => openAddBook((b) => { closeAddBook(); openSheet(b); }));
     return s;
   }
   function readCard(b) {
@@ -299,7 +309,7 @@
     { id: 'meh', label: 'Meh', sub: '', color: '#B06BE0' },
     { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF4D6D' },
   ];
-  function tierEligible(u) { return books.filter((b) => verdictOf(b.id, u.id).rating != null || store.getTier(b.id, u.id)); }
+  function tierEligible(u) { return books.filter((b) => verdictOf(b.id, u.id).rating != null || store.getTier(b.id, u.id) || b.extra); }
   function renderTier(app, viewId) {
     const me = currentUser(); const viewU = users[viewId] || me; const isMine = viewU.id === me.id; const other = Object.values(users).find((x) => x.id !== me.id);
     app.innerHTML = '';
@@ -310,9 +320,11 @@
       `<button class="btn btn--soft" id="tier-view">${icon('swap_horiz')} ${isMine ? `Ver tier de ${other.name}` : 'Volver al mío'}</button></div>` +
       (isMine ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué libro poner; tocá uno puesto para moverlo.' : 'Arrastrá los libros al tier que merezcan (o tocá uno para moverlo).'}</p>` : '') +
       `<div class="tier-board" id="tier-board">${TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('')}</div>` +
-      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${isMine ? 'los que ya puntuaste' : `los que ${viewU.name} leyó`}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>`;
+      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${isMine ? 'los que ya puntuaste o agregaste' : `los que ${viewU.name} leyó`}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
+      (isMine ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar libro</button></div>` : '');
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#tier-view').addEventListener('click', () => renderTier(app, isMine ? other.id : me.id));
+    if (isMine) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddBook(() => { closeAddBook(); fillTier(viewU); }));
     if (isMine && isTouch()) {
       s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, viewU); }));
       s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, viewU); });
@@ -354,6 +366,41 @@
   }
   function onPickKey(e) { if (e.key === 'Escape') closePickSheet(); }
   function closePickSheet() { const el = document.getElementById('picksheet'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onPickKey); }
+
+  /* ---------- add-book live search (Open Library) ---------- */
+  function openAddBook(onAdded) {
+    let el = document.getElementById('addbook'); if (!el) { el = document.createElement('div'); el.id = 'addbook'; el.className = 'addfilm'; document.body.appendChild(el); }
+    el.innerHTML = `<div class="addfilm__scrim" data-aclose></div><div class="addfilm__panel"><div class="addfilm__head"><h3>Agregar libro</h3><button class="icon-btn" data-aclose aria-label="Cerrar">${icon('close')}</button></div><label class="search search--lg"><span class="material-symbols-rounded">search</span><input id="ab-input" type="search" placeholder="Buscar libro o autor…" autocomplete="off"></label><div class="addfilm__results" id="ab-results"><p class="addfilm__hint">Escribí un título para buscar.</p></div></div>`;
+    el.hidden = false; document.body.style.overflow = 'hidden';
+    const input = el.querySelector('#ab-input'), results = el.querySelector('#ab-results'); let t;
+    input.addEventListener('input', () => {
+      clearTimeout(t); const q = input.value.trim();
+      if (q.length < 2) { results.innerHTML = `<p class="addfilm__hint">Escribí al menos 2 letras…</p>`; return; }
+      results.innerHTML = `<p class="addfilm__hint">Buscando…</p>`;
+      t = setTimeout(async () => {
+        try {
+          const list = await PRB.api.search(q);
+          if (!list.length) { results.innerHTML = `<p class="addfilm__hint">Sin resultados.</p>`; return; }
+          results.innerHTML = '';
+          list.forEach((it) => {
+            const already = books.some((b) => b.id === PRB.bookId(it.key));
+            const card = document.createElement('button'); card.className = 'af-res'; if (already) card.disabled = true;
+            card.innerHTML = `<div class="af-res__poster" style="background:${it.cover ? `#060c18 url(${it.cover}) center/cover` : 'var(--surface-2)'}"></div><div class="af-res__body"><div class="af-res__title">${escapeHtml(it.title)}</div><div class="af-res__meta">${escapeHtml(it.author || '')}${it.year ? ` · ${it.year}` : ''}</div></div><span class="af-res__add material-symbols-rounded">${already ? 'check_circle' : 'add_circle'}</span>`;
+            card.addEventListener('click', async () => {
+              if (card.disabled) return; card.disabled = true; card.querySelector('.af-res__add').textContent = 'hourglass_top';
+              try { const book = await PRB.api.add(it); addExtraBook(book); card.querySelector('.af-res__add').textContent = 'check_circle'; if (onAdded) onAdded(book); }
+              catch { card.disabled = false; card.querySelector('.af-res__add').textContent = 'error'; }
+            });
+            results.appendChild(card);
+          });
+        } catch { results.innerHTML = `<p class="addfilm__hint">Error al buscar. Probá de nuevo.</p>`; }
+      }, 350);
+    });
+    el.querySelectorAll('[data-aclose]').forEach((b) => b.addEventListener('click', closeAddBook));
+    document.addEventListener('keydown', onAddBookKey); setTimeout(() => input.focus(), 60);
+  }
+  function onAddBookKey(e) { if (e.key === 'Escape') closeAddBook(); }
+  function closeAddBook() { const el = document.getElementById('addbook'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onAddBookKey); }
   function openTierPicker(tierId, u) {
     const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
     openPickSheet(`Poné en ${label}`, () => tierEligible(u).filter((b) => (store.getTier(b.id, u.id) || null) !== tierId).map((b) => ({ thumb: coverArt(b), label: b.title, onClick: (render) => { store.setTier(b.id, u.id, tierId); fillTier(u); render(); } })));
@@ -392,7 +439,7 @@
     sheet.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onSheetKey);
   }
   function onSheetKey(e) { if (e.key === 'Escape') closeSheet(); }
-  function closeSheet() { sheet.hidden = true; sheet.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKey); if (route === 'home') renderHome($('#app')); }
+  function closeSheet() { sheet.hidden = true; sheet.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKey); renderRoute(); }
   function mountStars(container, b, u, initial) {
     let value = typeof initial === 'number' ? initial : 0;
     container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="rate-num" style="margin-left:.7rem">${value ? value.toFixed(1) : '—'}</span>`;
@@ -430,9 +477,10 @@
   function startApp() { applyAccent(); renderHeader(); setRoute('home'); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
   (async () => {
     await store.init();
+    mergeExtras();
     const uid = store.getUser();
     if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
     let refreshing = false;
-    window.addEventListener('focus', async () => { if (refreshing || !store.getUser()) return; refreshing = true; await store.refresh(); refreshing = false; if ($('#sheet').hidden) renderRoute(); });
+    window.addEventListener('focus', async () => { if (refreshing || !store.getUser()) return; refreshing = true; await store.refresh(); mergeExtras(); refreshing = false; if ($('#sheet').hidden) renderRoute(); });
   })();
 })();
