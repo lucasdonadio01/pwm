@@ -6,7 +6,7 @@
  * Run:  TMDB_TOKEN=<v4 read token> OMDB_KEY=<key> node scripts/build-data.mjs
  * (This is exactly what the weekly GitHub Action runs, with the keys as repo secrets.)
  */
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -18,6 +18,15 @@ const OMDB_KEY = process.env.OMDB_KEY;
 if (!TMDB_TOKEN || !OMDB_KEY) { console.error('Missing TMDB_TOKEN or OMDB_KEY env vars'); process.exit(1); }
 
 const IMG = 'https://image.tmdb.org/t/p';
+
+// TMDB leaves some TV genres in English even with language=es-ES.
+const GENRE_ES = {
+  'Action & Adventure': 'Acción y Aventura',
+  'Sci-Fi & Fantasy': 'Ciencia ficción y Fantasía',
+  'War & Politics': 'Guerra y Política',
+  Kids: 'Infantil', News: 'Noticias', Reality: 'Reality', Soap: 'Telenovela', Talk: 'Talk show',
+};
+const esGenre = (n) => GENRE_ES[n] || n;
 const BACKDROP = (p) => (p ? `${IMG}/original${p}` : null);       // full-res (≥1920) for hero
 const POSTER = (p) => (p ? `${IMG}/w780${p}` : null);             // crisp poster for cards
 
@@ -209,7 +218,7 @@ async function details(id, kind) {
     director,
     runtime: d.runtime || (d.episode_run_time && d.episode_run_time[0]) || 0,
     synopsis: d.overview || (dEn && dEn.overview) || '',
-    genres: (d.genres || []).map((g) => g.name),
+    genres: (d.genres || []).map((g) => esGenre(g.name)),
     lang: d.original_language || '',
     backdrop: BACKDROP(d.backdrop_path),
     poster: POSTER(d.poster_path),
@@ -247,6 +256,10 @@ async function buildFilm(slug, owner) {
 }
 
 async function buildTrending() {
+  const gmap = {};
+  for (const k of ['movie', 'tv']) {
+    try { const g = await tmdb(`/genre/${k}/list`, { language: 'es-ES' }); (g.genres || []).forEach((x) => (gmap[x.id] = esGenre(x.name))); } catch {}
+  }
   const t = await tmdb('/trending/all/week', { language: 'es-ES' });
   const out = [];
   let rank = 0;
@@ -270,6 +283,7 @@ async function buildTrending() {
       imdb: imdb ?? (item.vote_average ? +item.vote_average.toFixed(1) : null),
       rt,
       synopsis: item.overview || '',
+      genres: (item.genre_ids || []).map((id) => gmap[id]).filter(Boolean),
       backdrop: BACKDROP(item.backdrop_path),
       poster: POSTER(item.poster_path),
       trailer,
@@ -338,6 +352,16 @@ async function main() {
 
   await writeFile(OUT, header + body, 'utf8');
   console.log(`✓ Wrote ${OUT}`);
+
+  // Cache-bust: stamp local assets with the build epoch so weekly updates aren't masked by caches.
+  try {
+    const idxPath = join(__dirname, '..', 'index.html');
+    let idx = await readFile(idxPath, 'utf8');
+    const v = Date.now();
+    idx = idx.replace(/(src|href)="((?:js|css)\/[^"?]+?)(?:\?v=\d+)?"/g, `$1="$2?v=${v}"`);
+    await writeFile(idxPath, idx, 'utf8');
+    console.log('✓ Cache-busted index.html');
+  } catch (e) { console.warn('index cache-bust skipped:', e.message); }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -182,9 +182,9 @@
   }
 
   function seriesList() {
-    const fromWatch = watchlistFilms().filter((m) => m.kind === 'series');
-    const fromTrend = trending.filter((t) => t.kind === 'series');
-    return [...fromWatch, ...fromTrend];
+    const all = [...movies.filter((m) => m.kind === 'series'), ...trending.filter((t) => t.kind === 'series')];
+    const seen = new Set();
+    return all.filter((f) => (seen.has(f.id) ? false : seen.add(f.id)));
   }
 
   /* ============================================================= HOME */
@@ -649,7 +649,7 @@
       `<h3 class="section__title">Tier list</h3>` +
       `<p class="section__sub">${isMine ? `El ranking de <b style="color:${viewU.color}">vos (${viewU.name})</b>` : `Mirando el tier de <b style="color:${viewU.color}">${viewU.name}</b> · solo lectura`}</p></div>` +
       `<button class="btn btn--soft" id="tier-view">${icon('swap_horiz')} ${isMine ? `Ver tier de ${other.name}` : 'Volver al mío'}</button></div>` +
-      (isMine ? `<p class="tier-hint">${icon('drag_indicator')} Arrastrá un póster desde “Sin ubicar” al tier que merezca.</p>` : '') +
+      (isMine ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
       `<div class="tier-board" id="tier-board">` +
       TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('') +
       `</div>` +
@@ -659,9 +659,18 @@
     app.appendChild(buildFooter());
     s.querySelector('#tier-view').addEventListener('click', () => renderTier(app, isMine ? other.id : me.id));
     if (isMine) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm(() => { closeAddFilm(); fillTier(viewU); }));
-    s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip && !chip.classList.contains('dragging')) { const f = byId(chip.dataset.id); if (f) openSheet(f); } });
+    if (isMine && isTouch()) {
+      // Mobile: tap a tier to pick films into it; tap a placed chip to move it.
+      s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => {
+        if (e.target.closest('.chip')) return;
+        openTierPicker(drop.dataset.tier, viewU);
+      }));
+      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, viewU); });
+    } else {
+      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip && !chip.classList.contains('dragging')) { const f = byId(chip.dataset.id); if (f) openSheet(f); } });
+    }
     fillTier(viewU);
-    if (isMine) enableTierDnD(viewU);
+    if (isMine && !isTouch()) enableTierDnD(viewU);
   }
 
   function tierEligible(u) {
@@ -968,6 +977,62 @@
     if (el) { el.innerHTML = ''; el.hidden = true; }
     document.body.style.overflow = '';
     document.removeEventListener('keydown', onAddKey);
+  }
+
+  /* ---------- mobile tap-to-place (tier can't be dragged on touch) ---------- */
+  const isTouch = () => window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(pointer: coarse)').matches;
+
+  function openPickSheet(title, itemsFn) {
+    let el = document.getElementById('picksheet');
+    if (!el) { el = document.createElement('div'); el.id = 'picksheet'; el.className = 'picksheet'; document.body.appendChild(el); }
+    const render = () => {
+      const items = itemsFn();
+      el.innerHTML =
+        `<div class="picksheet__scrim" data-pclose></div>` +
+        `<div class="picksheet__panel"><div class="picksheet__head"><h3>${title}</h3><button class="icon-btn" data-pclose aria-label="Cerrar">${icon('close')}</button></div>` +
+        `<div class="picksheet__list">` +
+        (items.length ? items.map((it, i) =>
+          `<button class="pickrow" data-i="${i}">` +
+          (it.thumb ? `<span class="pickrow__thumb" style="background:${it.thumb}"></span>` : `<span class="pickrow__ic material-symbols-rounded"${it.color ? ` style="color:${it.color}"` : ''}>${it.icon || 'label'}</span>`) +
+          `<span class="pickrow__label">${escapeHtml(it.label)}</span>${it.sub ? `<span class="pickrow__sub">${it.sub}</span>` : ''}${it.check ? `<span class="pickrow__check material-symbols-rounded">check</span>` : ''}</button>`).join('')
+          : `<p class="addfilm__hint">No hay pelis para elegir. Puntuá alguna o usá “Agregar peli”.</p>`) +
+        `</div></div>`;
+      el.querySelectorAll('[data-pclose]').forEach((b) => b.addEventListener('click', closePickSheet));
+      el.querySelectorAll('.pickrow').forEach((b) => b.addEventListener('click', () => { const it = itemsFn()[+b.dataset.i]; if (it && it.onClick) it.onClick(render); }));
+    };
+    render();
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onPickKey);
+  }
+  function onPickKey(e) { if (e.key === 'Escape') closePickSheet(); }
+  function closePickSheet() {
+    const el = document.getElementById('picksheet');
+    if (el) { el.innerHTML = ''; el.hidden = true; }
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onPickKey);
+  }
+
+  function openTierPicker(tierId, u) {
+    const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
+    openPickSheet(`Poné en ${label}`, () =>
+      tierEligible(u)
+        .filter((f) => (store.getTier(f.id, u.id) || null) !== tierId)
+        .map((f) => ({
+          thumb: posterArt(f), label: f.title, sub: store.getTier(f.id, u.id) ? '(mover)' : '',
+          onClick: (render) => { store.setTier(f.id, u.id, tierId); fillTier(u); render(); },
+        })));
+  }
+  function openChipMenu(filmId, u) {
+    const f = byId(filmId); if (!f) return;
+    openPickSheet(f.title, () => {
+      const cur = store.getTier(filmId, u.id);
+      return [
+        ...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { store.setTier(filmId, u.id, t.id); fillTier(u); closePickSheet(); } })),
+        { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { store.setTier(filmId, u.id, null); fillTier(u); closePickSheet(); } },
+        { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(f); } },
+      ];
+    });
   }
 
   /* ============================================================= CONFIRM (change user) */
