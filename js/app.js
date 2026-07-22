@@ -192,8 +192,8 @@
     app.innerHTML = '';
     app.appendChild(buildHero());
     app.appendChild(buildTrending());
-    app.appendChild(buildWatched());
     app.appendChild(buildRecommender());
+    app.appendChild(buildWatched());
     app.appendChild(buildFooter());
     startHero();
   }
