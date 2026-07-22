@@ -1,0 +1,54 @@
+<!--
+  WatchMovies — direction contract (Neón Lux)
+  THESIS: A private two-person cinema. Refuses the generic "streaming grid" home: it opens on ONE
+          film at full-viewport scale, marquee-loud, and treats rating/reviewing as the real product.
+  OWN-WORLD: Warm near-black (#0D0303) ground; neon carries meaning only — lime (#BBEF1F) = rating,
+          pink (#FF2E9A)=Bian, red (#FF2D2D)=Luke. Fully-rounded "neon pill" buttons with soft outer glow.
+          Archivo 900 marquee titles; JetBrains Mono eyebrow labels for scores/meta.
+  STORY: You pick who you are (Bian/Luke), browse the shared watchlist as a cinematic reel, then rate
+          (half-stars), review and like — attributed to you, in your color.
+  FIRST VIEWPORT: Edge-to-edge HD backdrop, slow Ken-Burns; bottom-left: mono meta → giant title →
+          synopsis → IMDb+RT badges → WATCH (accent pill) + ADD LIST (ghost). Side arrows, dot progress, 7s.
+  FORM: Cinema marquee × Letterboxd rating grammar. Brief-pinned world (neon-lux swatch board).
+-->
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0D0303" />
+<title>PWM — Project Watch Movies</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap"
+  rel="stylesheet"
+/>
+<link
+  href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&display=swap"
+  rel="stylesheet"
+/>
+<link rel="stylesheet" href="css/styles.css" />
+
+<!-- Profile gate (Netflix-style "¿Quién sos?") — shown by app.js when no user is chosen -->
+<div id="gate" class="gate" hidden>
+  <div class="gate__inner">
+    <p class="eyebrow gate__brand">PROJECT WATCH <span>MOVIES</span></p>
+    <h1 class="gate__title">¿Quién sos?</h1>
+    <div id="gate-profiles" class="gate__profiles"><!-- profiles injected --></div>
+    <p class="gate__hint">Podés cambiar de usuario cuando quieras, arriba a la derecha.</p>
+  </div>
+</div>
+
+<!-- App shell -->
+<header id="site-header" class="header" hidden><!-- rendered by app.js --></header>
+<main id="app" class="app" hidden><!-- routed views rendered by app.js --></main>
+
+<!-- Film detail / rating sheet -->
+<div id="sheet" class="sheet" hidden aria-hidden="true"><!-- rendered by app.js --></div>
+
+<!-- Small confirm popover (change user) -->
+<div id="confirm" class="confirm" hidden></div>
+
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
