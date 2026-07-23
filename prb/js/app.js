@@ -377,42 +377,64 @@
   function renderLeidos(app) { app.innerHTML = ''; const s = buildRead('Leídos'); s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)'; app.appendChild(s); app.appendChild(buildFooter()); }
 
   /* ---------- Leyendo (in progress) ---------- */
+  let leyendoView = 'list';
   function renderLeyendo(app) {
     app.innerHTML = '';
     const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     const list = readingBooks();
-    s.innerHTML = `<div class="section__head section__head--search"><div><h3 class="section__title">Leyendo</h3><p class="section__sub">Lo que tenemos en curso · marcá por dónde vas</p></div><button class="btn btn--soft" id="ly-add">${icon('add_circle')} Agregar libro</button></div>`;
+    s.innerHTML = `<div class="section__head section__head--search"><div><h3 class="section__title">Leyendo</h3><p class="section__sub">Lo que tenemos en curso · marcá por dónde vas</p></div>` +
+      `<div class="section__tools"><div class="viewtoggle" id="ly-view" role="group" aria-label="Cómo verlo">` +
+      `<button class="vtbtn${leyendoView === 'list' ? ' is-on' : ''}" data-view="list" title="Lista">${icon('view_list')}</button>` +
+      `<button class="vtbtn${leyendoView === 'grid' ? ' is-on' : ''}" data-view="grid" title="Grilla">${icon('grid_view')}</button></div>` +
+      `<button class="btn btn--soft" id="ly-add">${icon('add_circle')} Agregar libro</button></div></div>`;
     if (!list.length) {
       const e = document.createElement('div'); e.className = 'empty';
       e.innerHTML = `${icon('auto_stories')}<p>No hay libros en curso.<br>Abrí un libro y tocá <b>Empecé a leer</b>, o agregá uno.</p>`;
       s.appendChild(e);
+    } else if (leyendoView === 'grid') {
+      const g = document.createElement('div'); g.className = 'reading-gallery';
+      list.forEach((b) => g.appendChild(readingGridCell(b)));
+      s.appendChild(g);
     } else {
-      const grid = document.createElement('div'); grid.className = 'reading-grid';
-      list.forEach((b) => grid.appendChild(readingCard(b)));
-      s.appendChild(grid);
+      const wrap = document.createElement('div'); wrap.className = 'reading-list';
+      list.forEach((b) => wrap.appendChild(readingCard(b)));
+      s.appendChild(wrap);
     }
     app.appendChild(s); app.appendChild(buildFooter());
+    s.querySelector('#ly-view').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; leyendoView = b.dataset.view; renderLeyendo(document.getElementById('app')); });
     s.querySelector('#ly-add').addEventListener('click', () => openAddBook((b) => { closeAddBook(); openSheet(b); }));
   }
   function readingCard(b) {
     const u = currentUser();
     const r = store.getReading(b.id, u.id);
+    const other = Object.values(users).find((x) => x.id !== u.id);
+    const ro = other ? store.getReading(b.id, other.id) : null;
+    const meReading = r.status === 'reading';
     const card = document.createElement('article'); card.className = 'reading';
-    const statLine = (rr) => { const p = readingPercent(rr); return `${p != null ? `<b>${p}%</b>` : '<b>—</b>'}${rr.chapter ? ` · cap. ${escapeHtml(rr.chapter)}` : ''}<span class="reading__since">${rr.startedAt ? `desde ${fmtDate(rr.startedAt)}` : 'sin fecha de inicio'}</span>`; };
+    const p = readingPercent(r);
+    const statLine = (rr) => `${readingPercent(rr) != null ? `<b>${readingPercent(rr)}%</b>` : '<b>—</b>'}${rr.chapter ? ` · cap. ${escapeHtml(rr.chapter)}` : ''}${rr.page != null && rr.pageTotal != null ? ` · pág. ${rr.page}/${rr.pageTotal}` : ''}<span class="reading__since">${rr.startedAt ? `desde ${fmtDate(rr.startedAt)}` : 'sin fecha de inicio'}</span>`;
+    let ctrls;
+    if (meReading) {
+      ctrls =
+        `<div class="reading__bar"><span class="reading__fill" style="width:${p != null ? p : 0}%"></span></div>` +
+        `<div class="reading__stat" data-rc-stat>${statLine(r)}</div>` +
+        `<div class="reading__ctrls">` +
+        `<label class="reading__in">pág.<input type="number" min="0" data-rc="page" value="${r.page != null ? r.page : ''}" placeholder="—"></label>` +
+        `<span class="reading__of">de</span>` +
+        `<label class="reading__in"><input type="number" min="1" data-rc="pageTotal" value="${r.pageTotal != null ? r.pageTotal : ''}" placeholder="—"></label>` +
+        `<label class="reading__in reading__in--cap">cap.<input type="text" data-rc="chapter" value="${r.chapter ? escapeHtml(r.chapter) : ''}" placeholder="—"></label>` +
+        `<button class="btn btn--accent reading__done" data-rc-done>${icon('task_alt')} Lo terminé</button></div>`;
+    } else {
+      ctrls = `<button class="btn btn--soft reading__start" data-rc-start>${icon('auto_stories')} Lo estoy leyendo yo también</button>`;
+    }
+    const otherChip = (ro && ro.status === 'reading') ? `<div class="reading__other">${avatarHTML(other, 'avatar reading__oavatar')}<span>${other.name} va ${readingPercent(ro) != null ? readingPercent(ro) + '%' : '—'}${ro.chapter ? ` · cap. ${escapeHtml(ro.chapter)}` : ''}</span></div>` : '';
     card.innerHTML =
       `<div class="reading__poster" data-open><div class="poster__img" style="background:${coverArt(b)}"></div></div>` +
       `<div class="reading__body">` +
       `<div class="reading__title" data-open>${escapeHtml(b.title)}</div>` +
       `<div class="reading__meta">${[b.author, b.year].filter(Boolean).join(' · ')}</div>` +
-      `<div class="reading__bar"><span class="reading__fill" style="width:${readingPercent(r) != null ? readingPercent(r) : 0}%"></span></div>` +
-      `<div class="reading__stat" data-rc-stat>${statLine(r)}</div>` +
-      `<div class="reading__ctrls">` +
-      `<label class="reading__in">pág.<input type="number" min="0" data-rc="page" value="${r.page != null ? r.page : ''}" placeholder="—"></label>` +
-      `<span class="reading__of">de</span>` +
-      `<label class="reading__in"><input type="number" min="1" data-rc="pageTotal" value="${r.pageTotal != null ? r.pageTotal : ''}" placeholder="—"></label>` +
-      `<label class="reading__in reading__in--cap">cap.<input type="text" data-rc="chapter" value="${r.chapter ? escapeHtml(r.chapter) : ''}" placeholder="—"></label>` +
-      `<button class="btn btn--accent reading__done" data-rc-done>${icon('task_alt')} Lo terminé</button>` +
-      `</div></div>`;
+      ctrls + otherChip +
+      `</div>`;
     const save = () => {
       const page = card.querySelector('[data-rc="page"]').value;
       const total = card.querySelector('[data-rc="pageTotal"]').value;
@@ -423,9 +445,27 @@
       card.querySelector('[data-rc-stat]').innerHTML = statLine(r2);
     };
     card.querySelectorAll('[data-rc]').forEach((i) => i.addEventListener('change', save));
-    card.querySelector('[data-rc-done]').addEventListener('click', () => { store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
+    const done = card.querySelector('[data-rc-done]'); if (done) done.addEventListener('click', () => { store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
+    const start = card.querySelector('[data-rc-start]'); if (start) start.addEventListener('click', () => { store.setReading(b.id, u.id, { status: 'reading', startedAt: store.getReading(b.id, u.id).startedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
     card.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => openSheet(b)));
     return card;
+  }
+  // Grid cell: the cover "fills in" from the bottom up as you read; % on top.
+  function readingGridCell(b) {
+    const u = currentUser();
+    let r = store.getReading(b.id, u.id); let who = u;
+    if (r.status !== 'reading') { const o = Object.values(users).find((x) => store.getReading(b.id, x.id).status === 'reading'); if (o) { who = o; r = store.getReading(b.id, o.id); } }
+    const p = readingPercent(r) || 0;
+    const cell = document.createElement('button'); cell.className = 'rgcell'; cell.title = `${b.title} — ${p}%`;
+    cell.innerHTML =
+      `<div class="rgcell__cover">` +
+      `<div class="rgcell__dim" style="background:${coverArt(b)}"></div>` +
+      `<div class="rgcell__fill" style="background:${coverArt(b)};clip-path:inset(${100 - p}% 0 0 0)"></div>` +
+      `<span class="rgcell__pct">${p}%</span>` +
+      (who.id !== u.id ? avatarHTML(who, 'avatar rgcell__avatar') : '') +
+      `</div><span class="rgcell__t">${escapeHtml(b.title)}</span>`;
+    cell.addEventListener('click', () => openSheet(b));
+    return cell;
   }
 
   /* ---------- book card ---------- */
@@ -448,17 +488,29 @@
   let tierBoardId = null;
   function currentBoards() {
     const me = currentUser();
-    const other = Object.values(users).find((x) => x.id !== me.id);
-    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, name: 'Mi tier', editable: true }];
-    if (other) list.push({ id: 'def:' + other.id, type: 'default', kind: 'personal', owner: other.id, name: 'Tier de ' + other.name, editable: false });
-    store.getTierlists().forEach((l) => list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, name: l.name, editable: l.kind === 'shared' ? true : l.owner === me.id }));
+    const others = Object.values(users).filter((x) => x.id !== me.id);
+    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, members: [me.id], name: 'Mi tier', editable: true }];
+    others.forEach((o) => list.push({ id: 'def:' + o.id, type: 'default', kind: 'personal', owner: o.id, members: [o.id], name: 'Tier de ' + o.name, editable: false }));
+    store.getTierlists().forEach((l) => {
+      const members = l.kind === 'shared' ? (Array.isArray(l.members) && l.members.length ? l.members : Object.values(users).map((u) => u.id)) : [l.owner];
+      list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, members, name: l.name, editable: members.includes(me.id) });
+    });
     return list;
+  }
+  function userThumb(uid) { const p = PHOTOS[uid]; return p ? `#060c18 url(${p}) center/cover` : ((users[uid] || {}).color || 'var(--surface-2)'); }
+  function openTierOthers(app, others) {
+    openPickSheet('Tier lists de otros', () => others.map((b) => ({
+      thumb: userThumb(b.owner),
+      label: `${b.name}${b.kind === 'shared' ? ' · compartida' : ''} — ${ownerName(b.owner)}`,
+      check: b.id === tierBoardId,
+      onClick: () => { tierBoardId = b.id; closePickSheet(); renderTier(app); },
+    })));
   }
   function boardGet(B, id) { return B.type === 'default' ? store.getTier(id, B.owner) : store.getListTier(B.id, id); }
   function boardSet(B, id, tier) { if (B.type === 'default') store.setTier(id, B.owner, tier); else store.setListTier(B.id, id, tier); }
   function boardEligible(B) {
     const placed = (b) => boardGet(B, b.id);
-    if (B.kind === 'shared') return books.filter((b) => Object.values(users).some((u) => verdictOf(b.id, u.id).rating != null) || b.extra || placed(b));
+    if (B.kind === 'shared') { const mem = B.members || Object.values(users).map((u) => u.id); return books.filter((b) => mem.some((uid) => verdictOf(b.id, uid).rating != null) || b.extra || placed(b)); }
     return books.filter((b) => verdictOf(b.id, B.owner).rating != null || (B.type === 'default' && store.getTier(b.id, B.owner)) || b.extra || placed(b));
   }
   const ownerName = (uid) => (users[uid] || {}).name || '';
@@ -469,14 +521,18 @@
     tierBoardId = B.id;
     app.innerHTML = '';
     const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    const mine = boards.filter((b) => b.editable);
+    const others = boards.filter((b) => !b.editable);
     const sub = B.type === 'default'
       ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
-      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la armamos entre los dos, con los libros de ambos` : `Tier <b>personal</b>: ${escapeHtml(B.name)}${B.editable ? '' : ' · de ' + ownerName(B.owner) + ' · solo lectura'}`);
+      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la editan ${B.members.map(ownerName).join(' y ')}${B.editable ? '' : ' · vos solo mirás'}` : `Tier <b>personal</b> de ${ownerName(B.owner)}${B.editable ? '' : ' · solo lectura'}`);
     s.innerHTML =
       `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
       `<div class="tier-switch" id="tier-switch">` +
-      boards.map((b) => `<button class="tswitch${b.id === B.id ? ' is-on' : ''}" data-board="${b.id}">${b.kind === 'shared' ? icon('group') : ''}${escapeHtml(b.name)}</button>`).join('') +
-      `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button></div>` +
+      mine.map((b) => `<button class="tswitch${b.id === B.id ? ' is-on' : ''}" data-board="${b.id}">${b.kind === 'shared' ? icon('group') : ''}${escapeHtml(b.name)}</button>`).join('') +
+      `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button>` +
+      (others.length ? `<button class="tswitch tswitch--others${!B.editable ? ' is-on' : ''}" id="tier-others">${icon('visibility')} ${!B.editable ? escapeHtml(B.name) : 'Ver tier de otros'}</button>` : '') +
+      `</div>` +
       (B.type === 'custom' && B.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button></div>` : '') +
       (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué libro poner; tocá uno puesto para moverlo.' : 'Arrastrá los libros al tier que merezcan (o tocá uno para moverlo).'}</p>` : '') +
       `<div class="tier-board" id="tier-board">${TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('')}</div>` +
@@ -485,6 +541,7 @@
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#tier-switch').addEventListener('click', (e) => { const btn = e.target.closest('[data-board]'); if (!btn) return; tierBoardId = btn.dataset.board; renderTier(app); });
     s.querySelector('#tier-new').addEventListener('click', () => openTierlistModal(app, null));
+    const othersBtn = s.querySelector('#tier-others'); if (othersBtn) othersBtn.addEventListener('click', () => openTierOthers(app, others));
     const rn = s.querySelector('#tl-rename'); if (rn) rn.addEventListener('click', () => openTierlistModal(app, B));
     const dl = s.querySelector('#tl-del'); if (dl) dl.addEventListener('click', () => deleteTierlist(app, B));
     if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddBook(() => { closeAddBook(); fillTier(B); }));
@@ -498,21 +555,26 @@
   /* ---------- tier list create / rename / delete ---------- */
   function openTierlistModal(app, B) {
     const editing = !!B; const me = currentUser();
+    const others = Object.values(users).filter((x) => x.id !== me.id);
     let kind = editing ? B.kind : 'personal';
+    const members = new Set(editing && Array.isArray(B.members) ? B.members.filter((id) => id !== me.id) : others.map((o) => o.id));
     const el = $('#confirm');
     el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
-      `<div class="confirm__title">${editing ? 'Renombrar tier list' : 'Nueva tier list'}</div>` +
+      `<div class="confirm__title">${editing ? 'Editar tier list' : 'Nueva tier list'}</div>` +
       `<label class="tl-field"><span>Nombre</span><input id="tl-name" type="text" maxlength="40" placeholder="Ej: Ciencia ficción, Favoritos…" value="${editing ? escapeHtml(B.name) : ''}"></label>` +
-      (editing ? '' : `<div class="tl-kind"><button class="tl-kopt is-on" data-kind="personal">${icon('person')} Personal<small>solo la armás vos</small></button><button class="tl-kopt" data-kind="shared">${icon('group')} Compartida<small>la arman los dos, con libros de ambos</small></button></div>`) +
+      (editing ? '' : `<div class="tl-kind"><button class="tl-kopt is-on" data-kind="personal">${icon('person')} Personal<small>solo la armás vos</small></button><button class="tl-kopt" data-kind="shared">${icon('group')} Compartida<small>la editan los miembros que elijas</small></button></div>`) +
+      `<div class="tl-members" id="tl-members"${(editing && kind === 'shared') ? '' : ' hidden'}><div class="tl-members__lbl">¿Con quién la compartís? (la editan vos + ellos; el resto solo la ve)</div>${others.map((o) => `<button class="tl-member${members.has(o.id) ? ' is-on' : ''}" data-member="${o.id}">${avatarHTML(o, 'avatar tl-member__av')} ${o.name}</button>`).join('')}</div>` +
       `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="tl-ok">${icon('check')} ${editing ? 'Guardar' : 'Crear'}</button></div></div>`;
     el.hidden = false;
     const nameInput = el.querySelector('#tl-name'); setTimeout(() => nameInput.focus(), 40);
-    el.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.kind; el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); }));
+    const membersBox = el.querySelector('#tl-members');
+    el.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.kind; el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); if (membersBox) membersBox.hidden = kind !== 'shared'; }));
+    el.querySelectorAll('[data-member]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.member; if (members.has(id)) members.delete(id); else members.add(id); b.classList.toggle('is-on', members.has(id)); }));
     el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
     const commit = () => {
       const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; }
-      if (editing) { store.saveTierlists(store.getTierlists().map((l) => (l.id === B.id ? { ...l, name } : l))); }
-      else { const id = 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); store.saveTierlists([...store.getTierlists(), { id, name, kind, owner: me.id }]); tierBoardId = id; }
+      if (editing) { store.saveTierlists(store.getTierlists().map((l) => (l.id === B.id ? { ...l, name, members: l.kind === 'shared' ? [me.id, ...members] : l.members } : l))); }
+      else { const id = 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); const rec = { id, name, kind, owner: me.id }; if (kind === 'shared') rec.members = [me.id, ...members]; store.saveTierlists([...store.getTierlists(), rec]); tierBoardId = id; }
       el.hidden = true; renderTier(app);
     };
     el.querySelector('#tl-ok').addEventListener('click', commit);

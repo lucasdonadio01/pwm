@@ -2869,4 +2869,4 @@ WM.letterboxd = {
   }
 };
 
-WM.build = {"version":"1.0","built":"2026-07-22T21:32:47.025Z"};
+WM.build = {"version":"1.2","built":"2026-07-23T06:45:47.982Z"};

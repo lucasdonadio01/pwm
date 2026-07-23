@@ -98,7 +98,7 @@ WM.store = (function () {
     // extra review metadata (per film, per user): what year you saw it + where — synced via 'watchmeta' blob
     getWatchMeta(filmId, userId) {
       const m = (settings.watchmeta && settings.watchmeta[filmId] && settings.watchmeta[filmId][userId]) || {};
-      return { year: m.year || null, where: m.where || null };   // where: 'imax' | 'cine' | 'casa' | 'celu'
+      return { date: m.date || null, year: m.year || null, where: m.where || null };   // date: 'YYYY-MM-DD'; where: 'imax'|'cine'|'casa'|'celu'
     },
     setWatchMeta(filmId, userId, patch) {
       const all = settings.watchmeta || (settings.watchmeta = {});
@@ -118,6 +118,13 @@ WM.store = (function () {
       settings.tierdata = d; saveLocal(); notify(); pushSetting('tierdata');
     },
     clearListData(listId) { const d = settings.tierdata || {}; delete d[listId]; settings.tierdata = d; saveLocal(); notify(); pushSetting('tierdata'); },
+
+    // shared calendars: metadata + planned events ({calId: {'YYYY-MM-DD': [{id,filmId,time,place}]}})
+    getCalendars() { return Array.isArray(settings.calendars) ? settings.calendars.slice() : []; },
+    saveCalendars(list) { settings.calendars = list.slice(); saveLocal(); notify(); pushSetting('calendars'); },
+    getCalEvents(calId) { const all = settings.calevents || {}; return all[calId] ? JSON.parse(JSON.stringify(all[calId])) : {}; },
+    saveCalEvents(calId, map) { const all = settings.calevents || (settings.calevents = {}); all[calId] = map; settings.calevents = all; saveLocal(); notify(); pushSetting('calevents'); },
+    clearCalEvents(calId) { const all = settings.calevents || {}; delete all[calId]; settings.calevents = all; saveLocal(); notify(); pushSetting('calevents'); },
 
     isWatched(filmId) { const f = state[filmId]; return !!(f && Object.values(f).some((e) => typeof e.rating === 'number')); },
     watchedFilmIds() { return Object.keys(state).filter((id) => this.isWatched(id)); },

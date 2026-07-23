@@ -153,6 +153,7 @@
     { id: 'home', label: 'Home' },
     { id: 'watchlist', label: 'Watchlist' },
     { id: 'tier', label: 'Tier' },
+    { id: 'calendario', label: 'Calendario' },
     { id: 'movies', label: 'Movies' },
     { id: 'series', label: 'Series' },
   ];
@@ -167,6 +168,7 @@
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}<a class="nav__x" href="prb/index.html">${icon('menu_book')} Libritos</a></nav>` +
       `<div class="header__right">` +
       `<button class="icon-btn hdr-bolt" id="hdr-bolt" title="Modo relámpago" aria-label="Modo relámpago">${icon('bolt')}</button>` +
+      `<button class="icon-btn hdr-cal" id="hdr-cal" title="Calendario" aria-label="Calendario">${icon('calendar_month')}</button>` +
       `<button class="user-chip" id="user-chip" title="Cambiar de usuario">` +
       `<span class="user-chip__name">${u ? u.name : ''}</span>` +
       (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
@@ -178,6 +180,7 @@
     $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
     $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
     $('#hdr-bolt', header).addEventListener('click', openSwiper);
+    $('#hdr-cal', header).addEventListener('click', () => setRoute('calendario'));
     $('#user-chip', header).addEventListener('click', openConfirm);
     header.hidden = false;
   }
@@ -207,6 +210,7 @@
     if (route === 'home') return renderHome(app);
     if (route === 'watchlist') return renderWatchlist(app);
     if (route === 'tier') return renderTier(app);
+    if (route === 'calendario') return renderCalendario(app);
     const cfg = {
       movies: { title: 'Movies', sub: 'Solo películas', list: watchlistFilms().filter((m) => m.kind === 'movie') },
       series: { title: 'Series', sub: 'Series de la watchlist + trending del momento', list: seriesList() },
@@ -251,6 +255,7 @@
       { v: '6', label: '6+' }, { v: '7', label: '7+' }, { v: '8', label: '8+ (aclamadas)' }, { v: 'any', label: 'Cualquiera' }] },
   ];
   const answers = { genres: [], era: 'any', dur: 'any', style: 'any', imdbmin: 'any' };
+  let recSource = 'watchlist'; // 'watchlist' | 'discover' (TMDB, fuera de la watchlist)
 
   function scoreFilm(f, a) {
     const g = f.genres || []; let s = 0;
@@ -292,7 +297,7 @@
     s.innerHTML =
       `<button class="rec-toggle" id="rec-toggle" aria-expanded="false">` +
       `<div><h3 class="section__title"><span class="accentbar">/</span> ¿No saben qué ver?</h3>` +
-      `<p class="section__sub">Respondé y te tiro 15 de la watchlist</p></div>` +
+      `<p class="section__sub">Respondé y te tiro 15 — de la watchlist o pelis nuevas</p></div>` +
       `<span class="material-symbols-rounded rec-chev">expand_more</span></button>` +
       `<div class="rec-panel" id="rec-panel" hidden><div class="quiz">` +
       QUIZ.map((q) =>
@@ -300,6 +305,9 @@
         `<div class="quiz__opts" data-q="${q.id}" data-multi="${q.multi ? 1 : 0}">` +
         q.opts.map((o) => `<button class="quiz__opt" data-v="${escapeHtml(o.v)}">${o.label}</button>`).join('') +
         `</div></div>`).join('') +
+      `<div class="rec-source" id="rec-source"><span class="rec-source__lbl">¿De dónde?</span>` +
+      `<button class="rsrc${recSource === 'watchlist' ? ' is-on' : ''}" data-src="watchlist">${icon('bookmark')} De la watchlist</button>` +
+      `<button class="rsrc${recSource === 'discover' ? ' is-on' : ''}" data-src="discover">${icon('travel_explore')} Descubrir nuevas</button></div>` +
       `<div class="quiz__actions"><button class="btn btn--accent" id="quiz-go">${icon('auto_awesome')} Recomendame 15</button>` +
       `<button class="btn btn--soft" id="quiz-reset">${icon('restart_alt')} Limpiar</button></div>` +
       `</div><div class="quiz__results" id="quiz-results"></div></div>`;
@@ -318,9 +326,24 @@
           group.querySelectorAll('.quiz__opt').forEach((x) => x.classList.toggle('is-on', x === b));
         }
       }));
-    s.querySelector('#quiz-go').addEventListener('click', () => {
+    const srcBar = s.querySelector('#rec-source');
+    if (srcBar) srcBar.addEventListener('click', (e) => { const b = e.target.closest('[data-src]'); if (!b) return; recSource = b.dataset.src; srcBar.querySelectorAll('.rsrc').forEach((x) => x.classList.toggle('is-on', x.dataset.src === recSource)); });
+    s.querySelector('#quiz-go').addEventListener('click', async () => {
       const wrap = s.querySelector('#quiz-results');
-      wrap.innerHTML = `<div class="quiz__reshead">${icon('auto_awesome')} Para ustedes · 15 pelis</div><div class="grid" id="quiz-grid"></div>`;
+      if (recSource === 'discover') {
+        if (!(WM.api && WM.api.available)) { wrap.innerHTML = `<p class="addfilm__hint">El descubrimiento necesita la API de TMDB (no está disponible ahora).</p>`; return; }
+        wrap.innerHTML = `<div class="quiz__reshead">${icon('travel_explore')} Buscando pelis nuevas…</div>`;
+        wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        try {
+          const list = await WM.api.discover(answers);
+          if (!list.length) { wrap.innerHTML = `<p class="addfilm__hint">No encontré pelis nuevas con esos filtros. Probá aflojar alguno.</p>`; return; }
+          wrap.innerHTML = `<div class="quiz__reshead">${icon('travel_explore')} Pelis nuevas para ustedes · ${list.length}</div><div class="grid" id="quiz-grid"></div>`;
+          const grid = wrap.querySelector('#quiz-grid');
+          list.forEach((f) => grid.appendChild(posterCard(f)));
+        } catch { wrap.innerHTML = `<p class="addfilm__hint">Error buscando en TMDB. Probá de nuevo.</p>`; }
+        return;
+      }
+      wrap.innerHTML = `<div class="quiz__reshead">${icon('auto_awesome')} Para ustedes · 15 de la watchlist</div><div class="grid" id="quiz-grid"></div>`;
       const grid = wrap.querySelector('#quiz-grid');
       recommend(answers).forEach((f) => grid.appendChild(posterCard(f)));
       wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -717,17 +740,29 @@
   const ownerName = (uid) => (users[uid] || {}).name || '';
   function currentBoards() {
     const me = currentUser();
-    const other = Object.values(users).find((x) => x.id !== me.id);
-    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, name: 'Mi tier', editable: true }];
-    if (other) list.push({ id: 'def:' + other.id, type: 'default', kind: 'personal', owner: other.id, name: 'Tier de ' + other.name, editable: false });
-    store.getTierlists().forEach((l) => list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, name: l.name, editable: l.kind === 'shared' ? true : l.owner === me.id }));
+    const others = Object.values(users).filter((x) => x.id !== me.id);
+    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, members: [me.id], name: 'Mi tier', editable: true }];
+    others.forEach((o) => list.push({ id: 'def:' + o.id, type: 'default', kind: 'personal', owner: o.id, members: [o.id], name: 'Tier de ' + o.name, editable: false }));
+    store.getTierlists().forEach((l) => {
+      const members = l.kind === 'shared' ? (Array.isArray(l.members) && l.members.length ? l.members : Object.values(users).map((u) => u.id)) : [l.owner];
+      list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, members, name: l.name, editable: members.includes(me.id) });
+    });
     return list;
+  }
+  function userThumb(uid) { const p = PHOTOS[uid]; return p ? `#0d0303 url(${p}) center/cover` : ((users[uid] || {}).color || 'var(--surface-2)'); }
+  function openTierOthers(app, others) {
+    openPickSheet('Tier lists de otros', () => others.map((b) => ({
+      thumb: userThumb(b.owner),
+      label: `${b.name}${b.kind === 'shared' ? ' · compartida' : ''} — ${ownerName(b.owner)}`,
+      check: b.id === tierBoardId,
+      onClick: () => { tierBoardId = b.id; closePickSheet(); renderTier(app); },
+    })));
   }
   function boardGet(B, id) { return B.type === 'default' ? store.getTier(id, B.owner) : store.getListTier(B.id, id); }
   function boardSet(B, id, tier) { if (B.type === 'default') store.setTier(id, B.owner, tier); else store.setListTier(B.id, id, tier); }
   function boardEligible(B) {
     const placed = (f) => boardGet(B, f.id);
-    if (B.kind === 'shared') return movies.filter((f) => Object.values(users).some((u) => verdictOf(f.id, u.id).rating != null) || f.extra || placed(f));
+    if (B.kind === 'shared') { const mem = B.members || Object.values(users).map((u) => u.id); return movies.filter((f) => mem.some((uid) => verdictOf(f.id, uid).rating != null) || f.extra || placed(f)); }
     return movies.filter((f) => verdictOf(f.id, B.owner).rating != null || (B.type === 'default' && store.getTier(f.id, B.owner)) || f.extra || placed(f));
   }
 
@@ -740,14 +775,18 @@
     const s = document.createElement('section');
     s.className = 'section';
     s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    const mine = boards.filter((b) => b.editable);
+    const others = boards.filter((b) => !b.editable);
     const sub = B.type === 'default'
       ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
-      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la armamos entre los dos, con las pelis de ambos` : `Tier <b>personal</b>: ${escapeHtml(B.name)}${B.editable ? '' : ' · de ' + ownerName(B.owner) + ' · solo lectura'}`);
+      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la editan ${B.members.map(ownerName).join(' y ')}${B.editable ? '' : ' · vos solo mirás'}` : `Tier <b>personal</b> de ${ownerName(B.owner)}${B.editable ? '' : ' · solo lectura'}`);
     s.innerHTML =
       `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
       `<div class="tier-switch" id="tier-switch">` +
-      boards.map((b) => `<button class="tswitch${b.id === B.id ? ' is-on' : ''}" data-board="${b.id}">${b.kind === 'shared' ? icon('group') : ''}${escapeHtml(b.name)}</button>`).join('') +
-      `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button></div>` +
+      mine.map((b) => `<button class="tswitch${b.id === B.id ? ' is-on' : ''}" data-board="${b.id}">${b.kind === 'shared' ? icon('group') : ''}${escapeHtml(b.name)}</button>`).join('') +
+      `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button>` +
+      (others.length ? `<button class="tswitch tswitch--others${!B.editable ? ' is-on' : ''}" id="tier-others">${icon('visibility')} ${!B.editable ? escapeHtml(B.name) : 'Ver tier de otros'}</button>` : '') +
+      `</div>` +
       (B.type === 'custom' && B.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button></div>` : '') +
       (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
       `<div class="genrebar tier-filter" id="tier-filter">${TIER_FILTERS.map((f) => `<button class="genre${tierFilter === f.id ? ' is-on' : ''}" data-tf="${f.id}">${f.label}</button>`).join('')}</div>` +
@@ -760,6 +799,7 @@
     app.appendChild(buildFooter());
     s.querySelector('#tier-switch').addEventListener('click', (e) => { const btn = e.target.closest('[data-board]'); if (!btn) return; tierBoardId = btn.dataset.board; renderTier(app); });
     s.querySelector('#tier-new').addEventListener('click', () => openTierlistModal(app, null));
+    const othersBtn = s.querySelector('#tier-others'); if (othersBtn) othersBtn.addEventListener('click', () => openTierOthers(app, others));
     const rn = s.querySelector('#tl-rename'); if (rn) rn.addEventListener('click', () => openTierlistModal(app, B));
     const dl = s.querySelector('#tl-del'); if (dl) dl.addEventListener('click', () => deleteTierlist(app, B));
     s.querySelector('#tier-filter').addEventListener('click', (e) => { const b = e.target.closest('[data-tf]'); if (!b) return; tierFilter = b.dataset.tf; s.querySelectorAll('#tier-filter .genre').forEach((x) => x.classList.toggle('is-on', x.dataset.tf === tierFilter)); fillTier(B); });
@@ -776,21 +816,26 @@
   /* ---------- tier list create / rename / delete ---------- */
   function openTierlistModal(app, B) {
     const editing = !!B; const me = currentUser();
+    const others = Object.values(users).filter((x) => x.id !== me.id);
     let kind = editing ? B.kind : 'personal';
+    const members = new Set(editing && Array.isArray(B.members) ? B.members.filter((id) => id !== me.id) : others.map((o) => o.id));
     const el = $('#confirm');
     el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
-      `<div class="confirm__title">${editing ? 'Renombrar tier list' : 'Nueva tier list'}</div>` +
+      `<div class="confirm__title">${editing ? 'Editar tier list' : 'Nueva tier list'}</div>` +
       `<label class="tl-field"><span>Nombre</span><input id="tl-name" type="text" maxlength="40" placeholder="Ej: Comedias, Favoritas…" value="${editing ? escapeHtml(B.name) : ''}"></label>` +
-      (editing ? '' : `<div class="tl-kind"><button class="tl-kopt is-on" data-kind="personal">${icon('person')} Personal<small>solo la armás vos</small></button><button class="tl-kopt" data-kind="shared">${icon('group')} Compartida<small>la arman los dos, con pelis de ambos</small></button></div>`) +
+      (editing ? '' : `<div class="tl-kind"><button class="tl-kopt is-on" data-kind="personal">${icon('person')} Personal<small>solo la armás vos</small></button><button class="tl-kopt" data-kind="shared">${icon('group')} Compartida<small>la editan los miembros que elijas</small></button></div>`) +
+      `<div class="tl-members" id="tl-members"${(editing && kind === 'shared') ? '' : ' hidden'}><div class="tl-members__lbl">¿Con quién la compartís? (la editan vos + ellos; el resto solo la ve)</div>${others.map((o) => `<button class="tl-member${members.has(o.id) ? ' is-on' : ''}" data-member="${o.id}">${avatarHTML(o, 'avatar tl-member__av')} ${o.name}</button>`).join('')}</div>` +
       `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="tl-ok">${icon('check')} ${editing ? 'Guardar' : 'Crear'}</button></div></div>`;
     el.hidden = false;
     const nameInput = el.querySelector('#tl-name'); setTimeout(() => nameInput.focus(), 40);
-    el.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.kind; el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); }));
+    const membersBox = el.querySelector('#tl-members');
+    el.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.kind; el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); if (membersBox) membersBox.hidden = kind !== 'shared'; }));
+    el.querySelectorAll('[data-member]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.member; if (members.has(id)) members.delete(id); else members.add(id); b.classList.toggle('is-on', members.has(id)); }));
     el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
     const commit = () => {
       const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; }
-      if (editing) { store.saveTierlists(store.getTierlists().map((l) => (l.id === B.id ? { ...l, name } : l))); }
-      else { const id = 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); store.saveTierlists([...store.getTierlists(), { id, name, kind, owner: me.id }]); tierBoardId = id; }
+      if (editing) { store.saveTierlists(store.getTierlists().map((l) => (l.id === B.id ? { ...l, name, members: l.kind === 'shared' ? [me.id, ...members] : l.members } : l))); }
+      else { const id = 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); const rec = { id, name, kind, owner: me.id }; if (kind === 'shared') rec.members = [me.id, ...members]; store.saveTierlists([...store.getTierlists(), rec]); tierBoardId = id; }
       el.hidden = true; renderTier(app);
     };
     el.querySelector('#tl-ok').addEventListener('click', commit);
@@ -802,6 +847,163 @@
     el.hidden = false;
     el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
     el.querySelector('#tl-delok').addEventListener('click', () => { store.saveTierlists(store.getTierlists().filter((l) => l.id !== B.id)); store.clearListData(B.id); tierBoardId = null; el.hidden = true; renderTier(app); });
+  }
+
+  /* ============================================================= CALENDAR (shared) */
+  let calBoardId = null;
+  let calCursor = null;
+  const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const WEEKDAYS = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
+  const isoDate = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  function currentCalendars() {
+    const me = currentUser();
+    const list = [{ id: 'cal-main', type: 'default', name: 'Nuestro calendario', owner: me.id, members: Object.values(users).map((u) => u.id), editable: true }];
+    store.getCalendars().forEach((c) => { const members = Array.isArray(c.members) && c.members.length ? c.members : [c.owner]; list.push({ id: c.id, type: 'custom', name: c.name, owner: c.owner, members, editable: members.includes(me.id) }); });
+    return list;
+  }
+  function calEventsMap(calId) { return store.getCalEvents(calId); }
+  function watchedByDate(members) {
+    const map = {};
+    movies.forEach((f) => members.forEach((uid) => { const wm = store.getWatchMeta(f.id, uid); if (wm.date) (map[wm.date] = map[wm.date] || []).push({ film: f, uid }); }));
+    return map;
+  }
+  const filmThumb = (f) => (f && f.poster ? `#0d0303 url(${f.poster}) center/cover` : posterArt(f || { id: 'x', title: '?' }));
+  function renderCalendario(app) {
+    const cals = currentCalendars();
+    let C = cals.find((c) => c.id === calBoardId) || cals[0];
+    calBoardId = C.id;
+    if (!calCursor) { const now = new Date(); calCursor = { y: now.getFullYear(), m: now.getMonth() }; }
+    app.innerHTML = '';
+    const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    const mine = cals.filter((c) => c.editable);
+    const others = cals.filter((c) => !c.editable);
+    s.innerHTML =
+      `<div class="section__head"><div><h3 class="section__title">Calendario</h3><p class="section__sub">${C.members.map(ownerName).join(' y ')} · poné pelis en fechas y mirá lo que vieron</p></div></div>` +
+      `<div class="tier-switch" id="cal-switch">` +
+      mine.map((c) => `<button class="tswitch${c.id === C.id ? ' is-on' : ''}" data-cal="${c.id}">${icon('calendar_month')}${escapeHtml(c.name)}</button>`).join('') +
+      `<button class="tswitch tswitch--add" id="cal-new">${icon('add')} Nuevo</button>` +
+      (others.length ? `<button class="tswitch tswitch--others${!C.editable ? ' is-on' : ''}" id="cal-others">${icon('visibility')} ${!C.editable ? escapeHtml(C.name) : 'Ver de otros'}</button>` : '') +
+      `</div>` +
+      (C.type === 'custom' && C.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="cal-edit">${icon('edit')} Editar</button><button class="btn btn--soft btn--xs" id="cal-del">${icon('delete')} Borrar</button></div>` : '') +
+      `<div class="calbar"><button class="icon-btn" id="cal-prev" aria-label="Mes anterior">${icon('chevron_left')}</button>` +
+      `<div class="calbar__title">${MONTHS[calCursor.m]} ${calCursor.y}</div>` +
+      `<button class="icon-btn" id="cal-next" aria-label="Mes siguiente">${icon('chevron_right')}</button>` +
+      `<button class="btn btn--soft btn--xs cal-today" id="cal-today">Hoy</button></div>` +
+      `<div class="calgrid" id="calgrid"></div>` +
+      `<div class="cal-legend">${icon('theaters')} función planeada · ${icon('event_available')} ya la vieron (según la fecha de la reseña)</div>`;
+    app.appendChild(s); app.appendChild(buildFooter());
+    s.querySelector('#cal-switch').addEventListener('click', (e) => { const b = e.target.closest('[data-cal]'); if (!b) return; calBoardId = b.dataset.cal; renderCalendario(app); });
+    s.querySelector('#cal-new').addEventListener('click', () => openCalendarModal(app, null));
+    const co = s.querySelector('#cal-others'); if (co) co.addEventListener('click', () => openCalOthers(app, others));
+    const ce = s.querySelector('#cal-edit'); if (ce) ce.addEventListener('click', () => openCalendarModal(app, C));
+    const cd = s.querySelector('#cal-del'); if (cd) cd.addEventListener('click', () => deleteCalendar(app, C));
+    s.querySelector('#cal-prev').addEventListener('click', () => { calCursor.m--; if (calCursor.m < 0) { calCursor.m = 11; calCursor.y--; } renderCalGrid(C); });
+    s.querySelector('#cal-next').addEventListener('click', () => { calCursor.m++; if (calCursor.m > 11) { calCursor.m = 0; calCursor.y++; } renderCalGrid(C); });
+    s.querySelector('#cal-today').addEventListener('click', () => { const n = new Date(); calCursor = { y: n.getFullYear(), m: n.getMonth() }; renderCalGrid(C); });
+    renderCalGrid(C);
+  }
+  function renderCalGrid(C) {
+    const grid = document.getElementById('calgrid'); if (!grid) return;
+    const titleEl = document.querySelector('.calbar__title'); if (titleEl) titleEl.textContent = `${MONTHS[calCursor.m]} ${calCursor.y}`;
+    const events = calEventsMap(C.id);
+    const watched = watchedByDate(C.members);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const startDow = (new Date(calCursor.y, calCursor.m, 1).getDay() + 6) % 7; // Monday=0
+    const daysInMonth = new Date(calCursor.y, calCursor.m + 1, 0).getDate();
+    let html = WEEKDAYS.map((w) => `<div class="calhead">${w}</div>`).join('');
+    for (let i = 0; i < startDow; i++) html += `<div class="calcell calcell--empty"></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = isoDate(calCursor.y, calCursor.m, d);
+      const evs = events[iso] || [];
+      const wat = watched[iso] || [];
+      const thumbs = evs.slice(0, 3).map((e) => { const f = byId(e.filmId) || { id: e.filmId, title: '?' }; return `<span class="calthumb" title="${escapeHtml(f.title)}${e.time ? ' · ' + e.time : ''}" style="background:${filmThumb(f)}"></span>`; }).join('');
+      const watMarks = wat.slice(0, 3).map((w) => avatarHTML(users[w.uid], 'avatar calwatch__av')).join('');
+      const extra = (evs.length + wat.length) - (evs.slice(0, 3).length + wat.slice(0, 3).length);
+      html += `<button class="calcell${iso === todayIso ? ' is-today' : ''}${evs.length ? ' has-ev' : ''}" data-day="${iso}">` +
+        `<span class="calcell__d">${d}</span>` +
+        (thumbs ? `<span class="calcell__thumbs">${thumbs}</span>` : '') +
+        ((watMarks || extra > 0) ? `<span class="calcell__watch">${watMarks}${extra > 0 ? `<span class="calmore">+${extra}</span>` : ''}</span>` : '') +
+        `</button>`;
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll('[data-day]').forEach((cell) => cell.addEventListener('click', () => openCalDay(C, cell.dataset.day)));
+  }
+  function openCalDay(C, iso) {
+    let el = document.getElementById('calday'); if (!el) { el = document.createElement('div'); el.id = 'calday'; el.className = 'picksheet'; document.body.appendChild(el); }
+    const render = () => {
+      const evs = calEventsMap(C.id)[iso] || [];
+      const wat = watchedByDate(C.members)[iso] || [];
+      const dateLabel = new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      el.innerHTML =
+        `<div class="picksheet__scrim" data-cdclose></div><div class="picksheet__panel">` +
+        `<div class="picksheet__head"><h3>${dateLabel}</h3><button class="icon-btn" data-cdclose>${icon('close')}</button></div>` +
+        `<div class="picksheet__list">` +
+        (evs.length ? `<div class="calday__sec">${icon('theaters')} Funciones planeadas</div>` + evs.map((e) => { const f = byId(e.filmId) || { id: e.filmId, title: '?' }; return `<div class="calev"><span class="calev__poster" style="background:${filmThumb(f)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(f.title)}</div><div class="calev__meta">${[e.time ? icon('schedule') + ' ' + e.time : '', e.place ? icon('place') + ' ' + escapeHtml(e.place) : ''].filter(Boolean).join(' · ') || 'sin horario ni lugar'}</div></div>${C.editable ? `<button class="icon-btn calev__edit" data-edit="${e.id}" aria-label="Editar">${icon('edit')}</button>` : ''}</div>`; }).join('') : '') +
+        (wat.length ? `<div class="calday__sec">${icon('event_available')} Vieron ese día</div>` + wat.map((w) => `<div class="calev"><span class="calev__poster" style="background:${filmThumb(w.film)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(w.film.title)}</div><div class="calev__meta">${avatarHTML(users[w.uid], 'avatar calev__av')} ${users[w.uid].name}</div></div></div>`).join('') : '') +
+        (!evs.length && !wat.length ? `<p class="addfilm__hint">Nada este día${C.editable ? '. Agregá una función 👇' : '.'}</p>` : '') +
+        `</div>` +
+        (C.editable ? `<button class="btn btn--accent calday__add" data-cdadd>${icon('add_circle')} Agregar función</button>` : '') +
+        `</div>`;
+      el.querySelectorAll('[data-cdclose]').forEach((b) => b.addEventListener('click', closeCalDay));
+      const add = el.querySelector('[data-cdadd]'); if (add) add.addEventListener('click', () => openCalEventModal(C, iso, null, render));
+      el.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { const ev = (calEventsMap(C.id)[iso] || []).find((x) => x.id === b.dataset.edit); if (ev) openCalEventModal(C, iso, ev, render); }));
+    };
+    render(); el.hidden = false; document.body.style.overflow = 'hidden';
+  }
+  function closeCalDay() { const el = document.getElementById('calday'); if (el) { el.hidden = true; el.innerHTML = ''; } document.body.style.overflow = ''; if (route === 'calendario') { const C = currentCalendars().find((c) => c.id === calBoardId) || currentCalendars()[0]; renderCalGrid(C); } }
+  function openCalEventModal(C, iso, ev, onDone) {
+    const editing = !!ev;
+    const el = $('#confirm');
+    const opts = movies.slice().sort((a, b) => a.title.localeCompare(b.title)).map((f) => `<option value="${f.id}"${ev && ev.filmId === f.id ? ' selected' : ''}>${escapeHtml(f.title)}${f.year ? ' (' + f.year + ')' : ''}</option>`).join('');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+      `<div class="confirm__title">${editing ? 'Editar función' : 'Agregar función'}</div>` +
+      `<label class="tl-field"><span>Película</span><select id="cev-film">${opts}</select></label>` +
+      `<div class="cev-row"><label class="fieldlet">Horario<input type="time" id="cev-time" value="${ev && ev.time ? ev.time : ''}"></label>` +
+      `<label class="fieldlet cev-place">Dónde<input type="text" id="cev-place" maxlength="60" placeholder="Cine, casa…" value="${ev && ev.place ? escapeHtml(ev.place) : ''}"></label></div>` +
+      `<div class="confirm__actions">` + (editing ? `<button class="btn btn--soft" id="cev-del">${icon('delete')} Borrar</button>` : '') + `<button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cev-ok">${icon('check')} ${editing ? 'Guardar' : 'Agregar'}</button></div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#cev-ok').addEventListener('click', () => {
+      const filmId = el.querySelector('#cev-film').value; if (!filmId) return;
+      const time = el.querySelector('#cev-time').value || null;
+      const place = el.querySelector('#cev-place').value.trim() || null;
+      const map = store.getCalEvents(C.id); map[iso] = map[iso] || [];
+      if (editing) { const e2 = map[iso].find((x) => x.id === ev.id); if (e2) { e2.filmId = filmId; e2.time = time; e2.place = place; } }
+      else { map[iso].push({ id: 'ce-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), filmId, time, place }); }
+      store.saveCalEvents(C.id, map); el.hidden = true; if (onDone) onDone();
+    });
+    const del = el.querySelector('#cev-del'); if (del) del.addEventListener('click', () => { const map = store.getCalEvents(C.id); map[iso] = (map[iso] || []).filter((x) => x.id !== ev.id); if (!map[iso].length) delete map[iso]; store.saveCalEvents(C.id, map); el.hidden = true; if (onDone) onDone(); });
+  }
+  function openCalendarModal(app, C) {
+    const editing = !!C; const me = currentUser();
+    const others = Object.values(users).filter((x) => x.id !== me.id);
+    const members = new Set(editing && Array.isArray(C.members) ? C.members.filter((id) => id !== me.id) : others.map((o) => o.id));
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+      `<div class="confirm__title">${editing ? 'Editar calendario' : 'Nuevo calendario'}</div>` +
+      `<label class="tl-field"><span>Nombre</span><input id="cal-name" type="text" maxlength="40" placeholder="Ej: Ciclo de terror…" value="${editing ? escapeHtml(C.name) : ''}"></label>` +
+      `<div class="tl-members"><div class="tl-members__lbl">¿Con quién lo compartís? (lo editan vos + ellos; el resto solo lo ve)</div>${others.map((o) => `<button class="tl-member${members.has(o.id) ? ' is-on' : ''}" data-member="${o.id}">${avatarHTML(o, 'avatar tl-member__av')} ${o.name}</button>`).join('')}</div>` +
+      `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cal-ok">${icon('check')} ${editing ? 'Guardar' : 'Crear'}</button></div></div>`;
+    el.hidden = false;
+    const nameInput = el.querySelector('#cal-name'); setTimeout(() => nameInput.focus(), 40);
+    el.querySelectorAll('[data-member]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.member; if (members.has(id)) members.delete(id); else members.add(id); b.classList.toggle('is-on', members.has(id)); }));
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#cal-ok').addEventListener('click', () => {
+      const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; }
+      if (editing) { store.saveCalendars(store.getCalendars().map((c) => (c.id === C.id ? { ...c, name, members: [me.id, ...members] } : c))); }
+      else { const id = 'cal-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); store.saveCalendars([...store.getCalendars(), { id, name, owner: me.id, members: [me.id, ...members] }]); calBoardId = id; }
+      el.hidden = true; renderCalendario(app);
+    });
+  }
+  function deleteCalendar(app, C) {
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card"><div class="confirm__title">¿Borrar “${escapeHtml(C.name)}”?</div><p class="confirm__text">Se borran las funciones planeadas de este calendario. Las reseñas no se tocan.</p><div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cal-delok">${icon('delete')} Borrar</button></div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#cal-delok').addEventListener('click', () => { store.saveCalendars(store.getCalendars().filter((c) => c.id !== C.id)); store.clearCalEvents(C.id); calBoardId = null; el.hidden = true; renderCalendario(app); });
+  }
+  function openCalOthers(app, others) {
+    openPickSheet('Calendarios de otros', () => others.map((c) => ({ thumb: userThumb(c.owner), label: `${c.name} — ${ownerName(c.owner)}`, check: c.id === calBoardId, onClick: () => { calBoardId = c.id; closePickSheet(); renderCalendario(app); } })));
   }
 
   function tierChip(f, draggable) {
@@ -1004,19 +1206,17 @@
     { v: 'casa', label: 'Casa', icon: 'home' },
     { v: 'celu', label: 'Celu', icon: 'smartphone' },
   ];
+  function fmtDay(iso) { if (!iso) return ''; const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }); }
   function watchMetaHTML(f, u) {
     const m = store.getWatchMeta(f.id, u.id);
-    const nowY = new Date().getFullYear();
-    let opts = '<option value="">—</option>';
-    for (let y = nowY; y >= 1950; y--) opts += `<option value="${y}"${m.year == y ? ' selected' : ''}>${y}</option>`;
     return `<div class="watchmeta">` +
-      `<label class="fieldlet fieldlet--wm">Año en que la vi<select data-wm="year">${opts}</select></label>` +
+      `<label class="fieldlet fieldlet--wm">Fecha en que la vi<input type="date" data-wm="date" value="${m.date || ''}"></label>` +
       `<div class="watchmeta__where"><span class="watchmeta__lbl">¿Dónde?</span>${WHERE.map((w) => `<button class="wchip${m.where === w.v ? ' is-on' : ''}" data-where="${w.v}">${icon(w.icon)} ${w.label}</button>`).join('')}</div>` +
       `</div>`;
   }
   function wireWatchMeta(scope, f, u) {
-    const sel = scope.querySelector('[data-wm="year"]');
-    if (sel) sel.addEventListener('change', () => store.setWatchMeta(f.id, u.id, { year: sel.value ? +sel.value : null }));
+    const d = scope.querySelector('[data-wm="date"]');
+    if (d) d.addEventListener('change', () => store.setWatchMeta(f.id, u.id, { date: d.value || null }));
     scope.querySelectorAll('[data-where]').forEach((b) => b.addEventListener('click', () => {
       const cur = store.getWatchMeta(f.id, u.id).where; const val = cur === b.dataset.where ? null : b.dataset.where;
       store.setWatchMeta(f.id, u.id, { where: val });
@@ -1027,7 +1227,8 @@
     const m = store.getWatchMeta(f.id, uid);
     const w = (WHERE.find((x) => x.v === m.where) || {}).label;
     const parts = [];
-    if (m.year) parts.push(`vista en ${m.year}`);
+    if (m.date) parts.push(`vista el ${fmtDay(m.date)}`);
+    else if (m.year) parts.push(`vista en ${m.year}`);
     if (w) parts.push(w);
     return parts.length ? `<p class="verdict__dates">${icon('event')} ${parts.join(' · ')}</p>` : '';
   }
@@ -1142,6 +1343,7 @@
     function commit() {
       setVisual(value);
       widget.setAttribute('aria-valuenow', value);
+      if (value && !movies.some((x) => x.id === f.id)) addExtraFilm({ ...f }); // persist discovered/new films when rated
       store.setRating(f.id, u.id, value || null);
       const clear = $('#rate-clear', sheet); if (clear) clear.hidden = !value;
     }

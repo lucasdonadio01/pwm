@@ -112,5 +112,32 @@ WM.api = (function () {
     return list;
   }
 
-  return { search, addDetails, randomMovies, available: !!T };
+  // Discover NEW movies (outside the watchlist) that match the recommender answers.
+  async function discover(a) {
+    await ensureGenres();
+    const nameToId = {}; Object.entries(genreMap).forEach(([id, name]) => (nameToId[name] = id));
+    const nowY = new Date().getFullYear();
+    const params = { sort_by: 'popularity.desc', 'vote_count.gte': 80, include_adult: false, language: 'es-ES', page: 1 + Math.floor(Math.random() * 5) };
+    const gids = (a.genres || []).map((n) => nameToId[n]).filter(Boolean);
+    if (gids.length) params.with_genres = gids.join(',');
+    const eras = { pre80: ['1900-01-01', '1979-12-31'], '80s': ['1980-01-01', '1989-12-31'], '90s': ['1990-01-01', '1999-12-31'], '00s': ['2000-01-01', '2009-12-31'], '10s': ['2010-01-01', '2019-12-31'], recent: [`${nowY - 5}-01-01`, `${nowY}-12-31`] };
+    if (a.era && eras[a.era]) { params['primary_release_date.gte'] = eras[a.era][0]; params['primary_release_date.lte'] = eras[a.era][1]; }
+    const durs = { s: [null, 90], m: [90, 120], l: [120, 150], xl: [150, null] };
+    if (a.dur && durs[a.dur]) { if (durs[a.dur][0]) params['with_runtime.gte'] = durs[a.dur][0]; if (durs[a.dur][1]) params['with_runtime.lte'] = durs[a.dur][1]; }
+    if (a.imdbmin && a.imdbmin !== 'any') params['vote_average.gte'] = +a.imdbmin;
+    if (a.style === 'anime') { params.with_genres = [params.with_genres, '16'].filter(Boolean).join(','); params.with_original_language = 'ja'; }
+    else if (a.style === 'anim') { params.with_genres = [params.with_genres, '16'].filter(Boolean).join(','); }
+    else if (a.style === 'live') { params.without_genres = '16'; }
+    const d = await tmdb('/discover/movie', params);
+    return (d.results || []).filter((m) => m.poster_path).slice(0, 15).map((m) => ({
+      id: `x-movie-${m.id}`, tmdb: m.id, title: m.title,
+      year: (m.release_date || '').slice(0, 4) ? +(m.release_date).slice(0, 4) : null,
+      kind: 'movie', owner: 'extra', extra: true,
+      genres: (m.genre_ids || []).map((id) => genreMap[id]).filter(Boolean),
+      synopsis: m.overview || '', imdb: m.vote_average ? +m.vote_average.toFixed(1) : null, rt: null,
+      poster: poster(m.poster_path), backdrop: backdrop(m.backdrop_path), trailer: null,
+    }));
+  }
+
+  return { search, addDetails, randomMovies, discover, available: !!T };
 })();
