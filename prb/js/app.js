@@ -61,11 +61,46 @@
       const btn = document.createElement('button');
       btn.className = 'profile'; btn.style.setProperty('--c', u.color);
       btn.innerHTML = avatarHTML(u, 'profile__avatar') + `<span class="profile__name">${u.name}</span><span class="profile__handle">@${u.handle}</span>`;
-      btn.addEventListener('click', () => { store.setUser(u.id); applyAccent(); gate.hidden = true; startApp(); });
+      btn.addEventListener('click', () => { showPassword(u, () => { store.setUser(u.id); applyAccent(); gate.hidden = true; startApp(); }); });
       wrap.appendChild(btn);
     });
     gate.hidden = false;
   }
+
+  /* ---------- password gate (numeric keypad) ---------- */
+  const PIN = '1234';
+  let passKeyHandler = null;
+  function showPassword(u, onOk) {
+    let el = document.getElementById('passgate');
+    if (!el) { el = document.createElement('div'); el.id = 'passgate'; el.className = 'passgate'; document.body.appendChild(el); }
+    el.style.setProperty('--c', u.color);
+    let entered = '';
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'ok'];
+    function draw(err) {
+      el.innerHTML =
+        `<button class="passgate__back" data-pgback aria-label="Volver">${icon('arrow_back')}</button>` +
+        `<div class="passgate__inner">` + avatarHTML(u, 'profile__avatar') +
+        `<div class="passgate__name" style="color:${u.color}">${u.name}</div>` +
+        `<div class="passgate__label">Ingresá la contraseña</div>` +
+        `<div class="passgate__dots${err ? ' shake' : ''}">${[0, 1, 2, 3].map((i) => `<span class="pdot${i < entered.length ? ' on' : ''}"></span>`).join('')}</div>` +
+        `<div class="passgate__keys">` + keys.map((k) => k === 'back' ? `<button class="pkey pkey--fn" data-k="back" aria-label="Borrar">${icon('backspace')}</button>` : k === 'ok' ? `<button class="pkey pkey--fn" data-k="ok" aria-label="Aceptar">${icon('check')}</button>` : `<button class="pkey" data-k="${k}">${k}</button>`).join('') + `</div>` +
+        `<div class="passgate__err"${err ? '' : ' style="visibility:hidden"'}>Contraseña incorrecta</div></div>`;
+      el.querySelector('[data-pgback]').addEventListener('click', closePassword);
+      el.querySelectorAll('.pkey').forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
+    }
+    function press(k) {
+      if (k === 'back') { entered = entered.slice(0, -1); return draw(); }
+      if (k === 'ok') return check();
+      if (entered.length >= 4) return;
+      entered += k; draw();
+      if (entered.length === 4) setTimeout(check, 180);
+    }
+    function check() { if (entered === PIN) { closePassword(); onOk(); } else { entered = ''; draw(true); } }
+    passKeyHandler = (e) => { if (/^[0-9]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('back'); else if (e.key === 'Enter') press('ok'); else if (e.key === 'Escape') closePassword(); };
+    document.addEventListener('keydown', passKeyHandler);
+    draw(); el.hidden = false;
+  }
+  function closePassword() { const el = document.getElementById('passgate'); if (el) { el.hidden = true; el.innerHTML = ''; } if (passKeyHandler) { document.removeEventListener('keydown', passKeyHandler); passKeyHandler = null; } }
 
   /* ============================================================= HEADER */
   const NAV = [

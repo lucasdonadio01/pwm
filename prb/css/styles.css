@@ -852,3 +852,24 @@ a { color: inherit; text-decoration: none; }
 
 .sheet__genres { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.1rem; }
 .gtag { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 0.04em; padding: 0.25rem 0.55rem; border-radius: 7px; color: var(--ink-dim); background: var(--surface-2); border: 1px solid var(--hairline); }
+
+/* password gate (numeric keypad) */
+.passgate { position: fixed; inset: 0; z-index: 105; display: grid; place-items: center; padding: var(--gutter); background: radial-gradient(90% 70% at 50% 18%, color-mix(in srgb, var(--c) 16%, transparent), transparent 60%), var(--ground-deep); animation: fade 0.3s var(--ease); }
+.passgate__inner { text-align: center; width: min(320px, 100%); }
+.passgate .profile__avatar { width: 88px; margin: 0 auto 1rem; font-size: 2rem; }
+.passgate__name { font-weight: 800; font-size: 1.2rem; }
+.passgate__label { color: var(--ink-dim); margin: 0.3rem 0 1.5rem; font-size: 0.95rem; }
+.passgate__dots { display: flex; justify-content: center; gap: 0.9rem; margin-bottom: 1.8rem; }
+.pdot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hairline-2); transition: background 0.15s, border-color 0.15s, box-shadow 0.15s; }
+.pdot.on { background: var(--c); border-color: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 55%, transparent); }
+.passgate__dots.shake { animation: shake 0.4s; }
+.passgate__keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.7rem; }
+.pkey { height: 60px; border-radius: 16px; background: var(--surface); border: 1px solid var(--hairline); font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: var(--ink); transition: background 0.15s, transform 0.08s, border-color 0.15s; }
+.pkey:hover { background: var(--surface-2); border-color: var(--hairline-2); }
+.pkey:active { transform: scale(0.94); }
+.pkey--fn { color: var(--ink-dim); }
+.pkey--fn .material-symbols-rounded { font-size: 26px; }
+.passgate__back { position: absolute; top: var(--gutter); left: var(--gutter); width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-dim); background: var(--surface); border: 1px solid var(--hairline); }
+.passgate__back:hover { color: var(--ink); }
+.passgate__err { color: #ff5b6e; font-size: 0.82rem; margin-top: 1.1rem; font-family: 'JetBrains Mono', monospace; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
