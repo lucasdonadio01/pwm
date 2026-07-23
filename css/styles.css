@@ -604,7 +604,7 @@ a { color: inherit; text-decoration: none; }
 .trailer__ctrls { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .trailer__ctrls .btn { padding: 0.62rem 1.1rem; }
 @media (max-width: 620px) {
-  .trailer { place-items: center; padding: 58px 10px 14px; overflow-y: auto; }
+  .trailer { grid-template-columns: 1fr; align-items: center; justify-items: stretch; padding: 58px 10px 14px; overflow-y: auto; }
   .trailer__box { width: 100%; }
   .trailer__bar { flex-direction: column; align-items: stretch; gap: 0.7rem; margin-top: 0.8rem; }
   .trailer__title { text-align: center; }
