@@ -6,15 +6,14 @@
   const store = WM.store;
 
   // Watchlist films + any films the users added by hand (persisted locally, Supabase-ready).
-  const EXTRA_KEY = 'wm.extra.v1';
-  const loadExtra = () => { try { return JSON.parse(localStorage.getItem(EXTRA_KEY)) || []; } catch { return []; } };
-  const saveExtra = (list) => localStorage.setItem(EXTRA_KEY, JSON.stringify(list));
-  const movies = [...WM.movies, ...loadExtra()];
+  const movies = WM.movies.slice();
+  // Films added by hand or via the swiper — shared through Supabase settings.
+  function mergeExtras() { (store.getSetting('extra_films') || []).forEach((f) => { if (!movies.some((m) => m.id === f.id)) movies.push(f); }); }
   function addExtraFilm(f) {
     if (movies.some((m) => m.id === f.id)) return false;
-    f.owner = f.owner || store.getUser() || 'extra';
+    f.owner = f.owner || 'extra';
     movies.push(f);
-    const list = loadExtra(); list.push(f); saveExtra(list);
+    const ex = store.getSetting('extra_films') || []; ex.push(f); store.setSetting('extra_films', ex);
     return true;
   }
   // Watchlist = films that live on a Letterboxd watchlist (not the already-watched imports/extras).
@@ -225,6 +224,7 @@
     app.appendChild(buildHero());
     app.appendChild(buildTrending());
     app.appendChild(buildRecommender());
+    app.appendChild(buildSecretCTA());
     app.appendChild(buildWatched());
     app.appendChild(buildFooter());
     startHero();
@@ -777,6 +777,100 @@
     return card;
   }
 
+  /* ============================================================= SECRET SWIPER (rate random movies, TikTok-style) */
+  function buildSecretCTA() {
+    const s = document.createElement('section');
+    s.className = 'section secret-wrap';
+    s.innerHTML =
+      `<button class="secret-cta" id="secret-cta" aria-label="Modo relámpago">` +
+      `<span class="secret-cta__ic">${icon('bolt')}</span>` +
+      `<span class="secret-cta__txt"><b>Modo relámpago</b><small>¿Viste una peli suelta? Te la tiramos al azar y la puntuás al toque, sin buscarla.</small></span>` +
+      `<span class="secret-cta__go">${icon('arrow_forward')}</span></button>`;
+    s.querySelector('#secret-cta').addEventListener('click', openSwiper);
+    return s;
+  }
+
+  let swMovies = [], swIndex = 0, swLoading = false;
+  async function loadMoreSw() {
+    if (swLoading || !(WM.api && WM.api.available)) return;
+    swLoading = true;
+    try { (await WM.api.randomMovies()).forEach((m) => { if (!swMovies.some((x) => x.id === m.id)) swMovies.push(m); }); } catch {}
+    swLoading = false;
+  }
+  async function openSwiper() {
+    let el = document.getElementById('swiper');
+    if (!el) { el = document.createElement('div'); el.id = 'swiper'; el.className = 'swiper'; document.body.appendChild(el); }
+    el.hidden = false; document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onSwiperKey);
+    if (!swMovies.length) {
+      el.innerHTML = `<button class="swiper__close" data-swclose>${icon('close')}</button><div class="swiper__loading">${icon('bolt')} Cargando pelis…</div>`;
+      el.querySelector('[data-swclose]').addEventListener('click', closeSwiper);
+      await loadMoreSw();
+    }
+    swIndex = Math.min(swIndex, Math.max(0, swMovies.length - 1));
+    renderSwiper();
+  }
+  function renderSwiper() {
+    const el = document.getElementById('swiper'); if (!el) return;
+    const m = swMovies[swIndex];
+    if (!m) { el.innerHTML = `<button class="swiper__close" data-swclose>${icon('close')}</button><div class="swiper__loading">No pude cargar pelis. Probá de nuevo.</div>`; el.querySelector('[data-swclose]').addEventListener('click', closeSwiper); return; }
+    const u = currentUser(); const v = verdictOf(m.id, u.id);
+    const meta = [(m.genres && m.genres[0]) || 'Película', m.year].filter(Boolean).map((x, i) => (i === 0 ? `<span class="eyebrow" style="color:var(--lime)">${x}</span>` : `<span>${x}</span>`)).join('<span class="dot-sep">·</span>');
+    el.innerHTML =
+      `<button class="swiper__close" data-swclose aria-label="Salir">${icon('close')}</button>` +
+      `<button class="swiper__arrow swiper__arrow--prev" data-swprev ${swIndex <= 0 ? 'disabled' : ''} aria-label="Anterior">${icon('chevron_left')}</button>` +
+      `<button class="swiper__arrow swiper__arrow--next" data-swnext aria-label="Siguiente">${icon('chevron_right')}</button>` +
+      `<div class="swiper__main"><div class="swiper__card"><div class="swiper__poster" style="background:${posterArt(m)}"></div>` +
+      `<div class="swiper__meta">${meta}<div class="swiper__t">${escapeHtml(m.title)}</div></div></div>` +
+      `<div class="swiper__rate"><div class="swiper__stars" id="sw-stars"></div>` +
+      `<button class="swiper__heart ${v.liked ? 'is-liked' : ''}" data-swlike aria-label="Me gusta">${icon('favorite')}</button></div></div>` +
+      `<div class="swiper__bar"><button class="swiper__barbtn" data-swprev ${swIndex <= 0 ? 'disabled' : ''} aria-label="Anterior">${icon('arrow_back')}</button>` +
+      `<button class="swiper__barbtn swiper__barbtn--heart ${v.liked ? 'is-liked' : ''}" data-swlike aria-label="Me gusta">${icon('favorite')}</button>` +
+      `<button class="swiper__barbtn" data-swnext aria-label="Siguiente">${icon('arrow_forward')}</button></div>` +
+      `<div class="swiper__hint">Puntuala y seguí → · ✕ para salir</div>`;
+    el.querySelectorAll('[data-swclose]').forEach((b) => b.addEventListener('click', closeSwiper));
+    el.querySelectorAll('[data-swprev]').forEach((b) => b.addEventListener('click', () => swGo(-1)));
+    el.querySelectorAll('[data-swnext]').forEach((b) => b.addEventListener('click', () => swGo(1)));
+    el.querySelectorAll('[data-swlike]').forEach((b) => b.addEventListener('click', () => swLike(m)));
+    mountSwiperStars($('#sw-stars', el), m, u, v.rating);
+    const card = el.querySelector('.swiper__card'); let x0 = null;
+    card.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    card.addEventListener('touchend', (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) swGo(dx < 0 ? 1 : -1); x0 = null; });
+  }
+  async function swGo(dir) {
+    const next = swIndex + dir; if (next < 0) return;
+    if (next >= swMovies.length) { await loadMoreSw(); if (next >= swMovies.length) return; }
+    swIndex = next;
+    if (swMovies.length - swIndex < 4) loadMoreSw();
+    renderSwiper();
+  }
+  function swLike(m) {
+    const u = currentUser();
+    if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m });
+    store.toggleLike(m.id, u.id);
+    const liked = store.get(m.id, u.id).liked;
+    document.querySelectorAll('#swiper [data-swlike]').forEach((b) => b.classList.toggle('is-liked', liked));
+  }
+  function mountSwiperStars(container, m, u, initial) {
+    let value = typeof initial === 'number' ? initial : 0;
+    container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="sw-num">${value ? value.toFixed(1) : '—'}</span>`;
+    const widget = container.querySelector('.stars'), fill = container.querySelector('.stars__fill'), num = container.querySelector('#sw-num');
+    widget.classList.add('stars--interactive'); widget.tabIndex = 0; widget.setAttribute('role', 'slider');
+    const setV = (val) => { fill.style.width = (val / 5) * 100 + '%'; num.textContent = val ? val.toFixed(1) : '—'; };
+    const fromX = (x) => { const r = widget.getBoundingClientRect(); return Math.max(0.5, Math.ceil(Math.min(1, Math.max(0, (x - r.left) / r.width)) * 10) / 2); };
+    widget.addEventListener('pointermove', (e) => setV(fromX(e.clientX)));
+    widget.addEventListener('pointerleave', () => setV(value));
+    widget.addEventListener('pointerdown', (e) => { value = fromX(e.clientX); commit(); });
+    widget.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp') { value = Math.min(5, value + 0.5); commit(); e.preventDefault(); e.stopPropagation(); } if (e.key === 'ArrowDown') { value = Math.max(0, value - 0.5); commit(); e.preventDefault(); e.stopPropagation(); } });
+    function commit() { setV(value); if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m }); store.setRating(m.id, u.id, value || null); }
+  }
+  function onSwiperKey(e) { if (e.key === 'Escape') closeSwiper(); else if (e.key === 'ArrowLeft') swGo(-1); else if (e.key === 'ArrowRight') swGo(1); }
+  function closeSwiper() {
+    const el = document.getElementById('swiper'); if (el) { el.hidden = true; el.innerHTML = ''; }
+    document.body.style.overflow = ''; document.removeEventListener('keydown', onSwiperKey);
+    if (route === 'home') renderHome($('#app'));
+  }
+
   /* ============================================================= SHEET */
   const sheet = $('#sheet');
   let sheetFilm = null;
@@ -1111,7 +1205,7 @@
   }
 
   (async () => {
-    await store.init(); // load shared state from Supabase (falls back to local cache)
+    await store.init(); mergeExtras(); // load shared state from Supabase (falls back to local cache)
     const uid = store.getUser();
     if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
     // Re-sync with the other user when the tab regains focus.
@@ -1119,9 +1213,9 @@
     window.addEventListener('focus', async () => {
       if (refreshing || !store.getUser()) return;
       refreshing = true;
-      await store.refresh();
+      await store.refresh(); mergeExtras();
       refreshing = false;
-      if ($('#sheet').hidden) renderRoute();
+      if ($('#sheet').hidden && document.getElementById('swiper')?.hidden !== false) renderRoute();
     });
   })();
 })();

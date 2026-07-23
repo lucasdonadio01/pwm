@@ -90,5 +90,27 @@ WM.api = (function () {
     };
   }
 
-  return { search, addDetails, available: !!T };
+  // Random movie pool for the "secret" swiper — all eras/genres, shuffled.
+  let genreMap = null;
+  async function ensureGenres() {
+    if (genreMap) return;
+    genreMap = {};
+    try { const g = await tmdb('/genre/movie/list', { language: 'es-ES' }); (g.genres || []).forEach((x) => (genreMap[x.id] = x.name)); } catch {}
+  }
+  async function randomMovies() {
+    await ensureGenres();
+    const page = 1 + Math.floor(Math.random() * 450);
+    const d = await tmdb('/discover/movie', { sort_by: 'popularity.desc', page, 'vote_count.gte': 60, include_adult: false, language: 'es-ES' });
+    const list = (d.results || []).filter((m) => m.poster_path).map((m) => ({
+      id: `x-movie-${m.id}`, tmdb: m.id, title: m.title, year: (m.release_date || '').slice(0, 4) ? +(m.release_date).slice(0, 4) : null,
+      kind: 'movie', owner: 'extra', extra: true,
+      genres: (m.genre_ids || []).map((id) => genreMap[id]).filter(Boolean),
+      synopsis: m.overview || '', imdb: m.vote_average ? +m.vote_average.toFixed(1) : null,
+      poster: poster(m.poster_path), backdrop: backdrop(m.backdrop_path),
+    }));
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+    return list;
+  }
+
+  return { search, addDetails, randomMovies, available: !!T };
 })();

@@ -873,3 +873,59 @@ a { color: inherit; text-decoration: none; }
   .hero__slide.is-active .hero__bg { animation: none; transform: scale(1); }
   .hero__dot.is-active::after { animation: none; width: 100%; }
 }
+
+/* ============================================================================
+   Secret CTA + swiper (rate random movies, TikTok-style)
+   ========================================================================== */
+.secret-wrap { padding-top: clamp(1.6rem, 4vw, 2.6rem); padding-bottom: clamp(1.6rem, 4vw, 2.6rem); }
+.secret-cta { width: 100%; display: flex; align-items: center; gap: 1.1rem; text-align: left; padding: clamp(1.1rem, 3vw, 1.6rem) clamp(1.2rem, 3vw, 1.8rem); border-radius: 20px; color: var(--ink); background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 18%, var(--surface)), var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--hairline)); box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 14%, transparent); position: relative; overflow: hidden; transition: transform 0.18s var(--ease), box-shadow 0.2s; }
+.secret-cta::before { content: ''; position: absolute; inset: 0; background: radial-gradient(60% 120% at 100% 50%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); pointer-events: none; }
+.secret-cta:hover { transform: translateY(-3px); box-shadow: 0 0 44px color-mix(in srgb, var(--accent) 30%, transparent); }
+.secret-cta__ic { flex: none; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 55%, transparent); }
+.secret-cta__ic .material-symbols-rounded { font-size: 30px; font-variation-settings: 'FILL' 1; }
+.secret-cta__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.secret-cta__txt b { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+.secret-cta__txt small { color: var(--ink-dim); font-size: 0.9rem; }
+.secret-cta__go { flex: none; color: var(--accent); }
+.secret-cta__go .material-symbols-rounded { font-size: 26px; }
+@media (max-width: 620px) { .secret-cta__go { display: none; } }
+
+.swiper { position: fixed; inset: 0; z-index: 140; display: grid; place-items: center; padding: clamp(14px, 4vw, 40px); background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(22px) saturate(1.1); -webkit-backdrop-filter: blur(22px) saturate(1.1); animation: fade 0.25s var(--ease); }
+.swiper__loading { color: var(--ink-dim); font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 0.5rem; }
+.swiper__close { position: absolute; top: clamp(14px, 3vw, 26px); right: clamp(14px, 3vw, 26px); z-index: 3; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); background: rgba(23, 16, 17, 0.5); border: 1px solid var(--hairline-2); backdrop-filter: blur(8px); transition: background 0.2s; }
+.swiper__close:hover { background: rgba(23, 16, 17, 0.9); }
+.swiper__arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); background: rgba(23, 16, 17, 0.5); border: 1px solid var(--hairline-2); backdrop-filter: blur(8px); transition: background 0.2s, transform 0.15s; }
+.swiper__arrow:hover { background: rgba(23, 16, 17, 0.9); }
+.swiper__arrow:active { transform: translateY(-50%) scale(0.92); }
+.swiper__arrow[disabled] { opacity: 0.3; pointer-events: none; }
+.swiper__arrow--prev { left: clamp(10px, 3vw, 40px); }
+.swiper__arrow--next { right: clamp(10px, 3vw, 40px); }
+.swiper__arrow .material-symbols-rounded { font-size: 32px; }
+.swiper__main { display: flex; align-items: center; gap: clamp(1.5rem, 4vw, 3rem); animation: pop 0.3s var(--ease); }
+.swiper__poster { width: clamp(240px, 42vh, 360px); aspect-ratio: 2 / 3; border-radius: 18px; background-size: cover; background-position: center; border: 1px solid var(--hairline-2); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7); }
+.swiper__meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: center; margin-top: 1rem; max-width: clamp(240px, 42vh, 360px); }
+.swiper__t { width: 100%; text-align: center; font-weight: 900; font-size: 1.4rem; line-height: 1.05; letter-spacing: -0.02em; margin-top: 0.3rem; }
+.swiper__rate { display: flex; flex-direction: column; align-items: center; gap: 1.4rem; }
+.swiper__stars .material-symbols-rounded { font-size: 40px; }
+.swiper__heart { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-dim); background: var(--surface); border: 1px solid var(--hairline-2); transition: transform 0.2s, color 0.2s, background 0.2s; }
+.swiper__heart .material-symbols-rounded { font-size: 32px; }
+.swiper__heart.is-liked { color: var(--hot); background: color-mix(in srgb, var(--hot) 16%, var(--surface)); border-color: color-mix(in srgb, var(--hot) 45%, transparent); }
+.swiper__heart.is-liked .material-symbols-rounded { font-variation-settings: 'FILL' 1; }
+.swiper__heart:active { transform: scale(0.9); }
+.swiper__bar { display: none; }
+.swiper__hint { position: absolute; bottom: clamp(12px, 3vw, 22px); left: 50%; transform: translateX(-50%); color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; }
+@media (max-width: 780px) {
+  .swiper__arrow { display: none; }
+  .swiper__main { flex-direction: column; gap: 1.1rem; }
+  .swiper__rate { flex-direction: row; gap: 0; }
+  .swiper__heart { display: none; }
+  .swiper__stars .material-symbols-rounded { font-size: 34px; }
+  .swiper__bar { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 0.3rem; }
+  .swiper__barbtn { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline-2); transition: transform 0.15s, background 0.2s; }
+  .swiper__barbtn:active { transform: scale(0.9); }
+  .swiper__barbtn[disabled] { opacity: 0.3; pointer-events: none; }
+  .swiper__barbtn .material-symbols-rounded { font-size: 28px; }
+  .swiper__barbtn--heart.is-liked { color: var(--hot); background: color-mix(in srgb, var(--hot) 16%, var(--surface)); border-color: color-mix(in srgb, var(--hot) 45%, transparent); }
+  .swiper__barbtn--heart.is-liked .material-symbols-rounded { font-variation-settings: 'FILL' 1; }
+  .swiper__hint { display: none; }
+}
