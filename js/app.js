@@ -166,6 +166,7 @@
       `<a class="logo" href="#home" aria-label="PWM — Project Watch Movies, inicio"><b>PWM</b><span class="dot">.</span></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}<a class="nav__x" href="prb/index.html">${icon('menu_book')} Libritos</a></nav>` +
       `<div class="header__right">` +
+      `<button class="icon-btn hdr-bolt" id="hdr-bolt" title="Modo relámpago" aria-label="Modo relámpago">${icon('bolt')}</button>` +
       `<button class="user-chip" id="user-chip" title="Cambiar de usuario">` +
       `<span class="user-chip__name">${u ? u.name : ''}</span>` +
       (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
@@ -176,6 +177,7 @@
     );
     $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
     $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
+    $('#hdr-bolt', header).addEventListener('click', openSwiper);
     $('#user-chip', header).addEventListener('click', openConfirm);
     header.hidden = false;
   }
@@ -666,6 +668,16 @@
     { id: 'meh', label: 'Meh', sub: '', color: '#FF8A3D' },
     { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF2D2D' },
   ];
+  let tierFilter = 'all';
+  const TIER_FILTERS = [{ id: 'all', label: 'Todas' }, { id: 'r3', label: '3★ o más' }, { id: 'r4', label: '4★ o más' }, { id: 'likes', label: 'Solo ❤' }];
+  function passesTierFilter(f, u) {
+    if (tierFilter === 'all') return true;
+    const vv = verdictOf(f.id, u.id);
+    if (tierFilter === 'r3') return vv.rating != null && vv.rating >= 3;
+    if (tierFilter === 'r4') return vv.rating != null && vv.rating >= 4;
+    if (tierFilter === 'likes') return vv.liked;
+    return true;
+  }
 
   function renderTier(app, viewId) {
     const me = currentUser();
@@ -682,6 +694,7 @@
       `<p class="section__sub">${isMine ? `El ranking de <b style="color:${viewU.color}">vos (${viewU.name})</b>` : `Mirando el tier de <b style="color:${viewU.color}">${viewU.name}</b> · solo lectura`}</p></div>` +
       `<button class="btn btn--soft" id="tier-view">${icon('swap_horiz')} ${isMine ? `Ver tier de ${other.name}` : 'Volver al mío'}</button></div>` +
       (isMine ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
+      `<div class="genrebar tier-filter" id="tier-filter">${TIER_FILTERS.map((f) => `<button class="genre${tierFilter === f.id ? ' is-on' : ''}" data-tf="${f.id}">${f.label}</button>`).join('')}</div>` +
       `<div class="tier-board" id="tier-board">` +
       TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('') +
       `</div>` +
@@ -690,6 +703,7 @@
     app.appendChild(s);
     app.appendChild(buildFooter());
     s.querySelector('#tier-view').addEventListener('click', () => renderTier(app, isMine ? other.id : me.id));
+    s.querySelector('#tier-filter').addEventListener('click', (e) => { const b = e.target.closest('[data-tf]'); if (!b) return; tierFilter = b.dataset.tf; s.querySelectorAll('#tier-filter .genre').forEach((x) => x.classList.toggle('is-on', x.dataset.tf === tierFilter)); fillTier(viewU); });
     if (isMine) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm(() => { closeAddFilm(); fillTier(viewU); }));
     if (isMine && isTouch()) {
       // Mobile: tap a tier to pick films into it; tap a placed chip to move it.
@@ -721,7 +735,7 @@
   function fillTier(u) {
     const draggable = currentUser().id === u.id;
     document.querySelectorAll('.tier__drop, #tier-pool').forEach((d) => (d.innerHTML = ''));
-    tierEligible(u).forEach((f) => {
+    tierEligible(u).filter((f) => passesTierFilter(f, u)).forEach((f) => {
       const t = store.getTier(f.id, u.id);
       const target = t ? document.querySelector(`.tier__drop[data-tier="${t}"]`) : document.querySelector('#tier-pool');
       if (target) target.appendChild(tierChip(f, draggable));
@@ -818,20 +832,22 @@
     const meta = [(m.genres && m.genres[0]) || 'Película', m.year].filter(Boolean).map((x, i) => (i === 0 ? `<span class="eyebrow" style="color:var(--lime)">${x}</span>` : `<span>${x}</span>`)).join('<span class="dot-sep">·</span>');
     el.innerHTML =
       `<button class="swiper__close" data-swclose aria-label="Salir">${icon('close')}</button>` +
-      `<button class="swiper__arrow swiper__arrow--prev" data-swprev ${swIndex <= 0 ? 'disabled' : ''} aria-label="Anterior">${icon('chevron_left')}</button>` +
-      `<button class="swiper__arrow swiper__arrow--next" data-swnext aria-label="Siguiente">${icon('chevron_right')}</button>` +
-      `<div class="swiper__main"><div class="swiper__card"><div class="swiper__poster" style="background:${posterArt(m)}"></div>` +
+      `<div class="swiper__main">` +
+      `<div class="swiper__card"><div class="swiper__poster" style="background:${posterArt(m)}"></div>` +
       `<div class="swiper__meta">${meta}<div class="swiper__t">${escapeHtml(m.title)}</div></div></div>` +
-      `<div class="swiper__rate"><div class="swiper__stars" id="sw-stars"></div>` +
-      `<button class="swiper__heart ${v.liked ? 'is-liked' : ''}" data-swlike aria-label="Me gusta">${icon('favorite')}</button></div></div>` +
-      `<div class="swiper__bar"><button class="swiper__barbtn" data-swprev ${swIndex <= 0 ? 'disabled' : ''} aria-label="Anterior">${icon('arrow_back')}</button>` +
-      `<button class="swiper__barbtn swiper__barbtn--heart ${v.liked ? 'is-liked' : ''}" data-swlike aria-label="Me gusta">${icon('favorite')}</button>` +
-      `<button class="swiper__barbtn" data-swnext aria-label="Siguiente">${icon('arrow_forward')}</button></div>` +
-      `<div class="swiper__hint">Puntuala y seguí → · ✕ para salir</div>`;
+      `<div class="swiper__actions"><div class="swiper__stars" id="sw-stars"></div>` +
+      `<div class="swiper__btns">` +
+      `<button class="swbtn swbtn--nav" data-swprev ${swIndex <= 0 ? 'disabled' : ''} aria-label="Anterior">${icon('arrow_back')}</button>` +
+      `<button class="swbtn swbtn--clock ${inWatchlist(m.id) ? 'is-on' : ''}" data-swclock aria-label="Agregar a la watchlist" title="Agregar a la watchlist">${icon('schedule')}</button>` +
+      `<button class="swbtn swbtn--heart ${v.liked ? 'is-liked' : ''}" data-swlike aria-label="Me gusta">${icon('favorite')}</button>` +
+      `<button class="swbtn swbtn--nav" data-swnext aria-label="Siguiente">${icon('arrow_forward')}</button>` +
+      `</div></div></div>` +
+      `<div class="swiper__hint">Puntuala · ⏰ watchlist · ❤ like · ← → seguí · ✕ salir</div>`;
     el.querySelectorAll('[data-swclose]').forEach((b) => b.addEventListener('click', closeSwiper));
     el.querySelectorAll('[data-swprev]').forEach((b) => b.addEventListener('click', () => swGo(-1)));
     el.querySelectorAll('[data-swnext]').forEach((b) => b.addEventListener('click', () => swGo(1)));
     el.querySelectorAll('[data-swlike]').forEach((b) => b.addEventListener('click', () => swLike(m)));
+    el.querySelectorAll('[data-swclock]').forEach((b) => b.addEventListener('click', () => swClock(m, b)));
     mountSwiperStars($('#sw-stars', el), m, u, v.rating);
     const card = el.querySelector('.swiper__card'); let x0 = null;
     card.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
@@ -850,6 +866,27 @@
     store.toggleLike(m.id, u.id);
     const liked = store.get(m.id, u.id).liked;
     document.querySelectorAll('#swiper [data-swlike]').forEach((b) => b.classList.toggle('is-liked', liked));
+  }
+  const inWatchlist = (id) => { const f = movies.find((x) => x.id === id); return !!(f && f.extra && isWatchlist(f)); };
+  function swClock(m) {
+    const u = currentUser();
+    const ex = store.getSetting('extra_films') || [];
+    const existing = movies.find((x) => x.id === m.id);
+    let on;
+    if (existing && existing.extra && isWatchlist(existing)) {
+      existing.owner = 'extra'; // remove from watchlist (keep as extra so a rating still shows in "Ya vimos")
+      const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) ex[i].owner = 'extra';
+      on = false;
+    } else if (existing) {
+      existing.owner = u.id;
+      const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) ex[i].owner = u.id; else ex.push({ ...existing });
+      on = true;
+    } else {
+      const film = { ...m, owner: u.id, extra: true };
+      movies.push(film); ex.push(film); on = true;
+    }
+    store.setSetting('extra_films', ex);
+    document.querySelectorAll('#swiper [data-swclock]').forEach((b) => b.classList.toggle('is-on', on));
   }
   function mountSwiperStars(container, m, u, initial) {
     let value = typeof initial === 'number' ? initial : 0;

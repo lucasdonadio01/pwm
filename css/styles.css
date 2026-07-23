@@ -929,3 +929,34 @@ a { color: inherit; text-decoration: none; }
   .swiper__barbtn--heart.is-liked .material-symbols-rounded { font-variation-settings: 'FILL' 1; }
   .swiper__hint { display: none; }
 }
+
+/* header "modo relámpago" bolt */
+.hdr-bolt { color: var(--accent); }
+.hdr-bolt:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent); }
+.hdr-bolt .material-symbols-rounded { font-variation-settings: 'FILL' 1; }
+.tier-filter { margin-top: -0.3rem; margin-bottom: 1.2rem; }
+
+/* swiper v2 — unified actions panel (stars, then [clock heart], then [prev next] on desktop) */
+.swiper__actions { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; }
+.swiper__btns { display: grid; grid-template-columns: repeat(2, 64px); gap: 0.9rem; justify-content: center; }
+.swbtn[data-swprev] { order: 3; }
+.swbtn[data-swclock] { order: 1; }
+.swbtn[data-swlike] { order: 2; }
+.swbtn[data-swnext] { order: 4; }
+.swbtn { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline-2); transition: transform 0.15s, background 0.2s, color 0.2s, border-color 0.2s; }
+.swbtn:hover { background: var(--surface-2); }
+.swbtn:active { transform: scale(0.92); }
+.swbtn[disabled] { opacity: 0.3; pointer-events: none; }
+.swbtn .material-symbols-rounded { font-size: 30px; }
+.swbtn--heart.is-liked { color: var(--hot); background: color-mix(in srgb, var(--hot) 16%, var(--surface)); border-color: color-mix(in srgb, var(--hot) 45%, transparent); }
+.swbtn--heart.is-liked .material-symbols-rounded { font-variation-settings: 'FILL' 1; }
+.swbtn--clock.is-on { color: var(--lime); background: color-mix(in srgb, var(--lime) 16%, var(--surface)); border-color: color-mix(in srgb, var(--lime) 45%, transparent); }
+.swbtn--clock.is-on .material-symbols-rounded { font-variation-settings: 'FILL' 1; }
+
+@media (max-width: 780px) {
+  .swiper__actions { gap: 1rem; }
+  .swiper__btns { display: flex; gap: 1rem; }
+  .swbtn[data-swprev], .swbtn[data-swclock], .swbtn[data-swlike], .swbtn[data-swnext] { order: 0; }
+  .swbtn { width: 56px; height: 56px; }
+  .swbtn .material-symbols-rounded { font-size: 27px; }
+}
