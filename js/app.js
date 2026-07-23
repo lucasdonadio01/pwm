@@ -272,7 +272,18 @@
     return s + (f.imdb || 0) * 0.1;
   }
   function recommend(a) {
-    return watchlistFilms().map((f) => ({ f, s: scoreFilm(f, a) })).sort((x, y) => y.s - x.s).slice(0, 15).map((o) => o.f);
+    const uid = currentUser().id;
+    const seen = (f) => verdictOf(f.id, uid).rating != null;
+    const base = watchlistFilms().filter((f) => !seen(f)); // don't recommend what you already watched
+    const src = base.length >= 8 ? base : watchlistFilms();
+    const scored = src.map((f) => ({ f, s: scoreFilm(f, a) }));
+    const anyFilter = (a.genres && a.genres.length) || a.era !== 'any' || a.dur !== 'any' || a.style !== 'any' || a.imdbmin !== 'any';
+    // with filters on, keep only films that actually fit; otherwise everything is fair game
+    let pool = anyFilter ? scored.filter((o) => o.s > 0) : scored.slice();
+    if (pool.length < 15) pool = scored.slice().sort((x, y) => y.s - x.s).slice(0, Math.max(15, pool.length));
+    // rank by score + random jitter so repeated taps surface fresh (still relevant) picks
+    pool.forEach((o) => (o.r = o.s + Math.random() * 4));
+    return pool.sort((x, y) => y.r - x.r).slice(0, 15).map((o) => o.f);
   }
 
   function buildRecommender() {
@@ -474,7 +485,7 @@
         return (
           `<div class="verdict">` +
           avatarHTML(u, 'avatar verdict__avatar') +
-          `<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${u.name}</span>${stars}${heart}</div>${review}</div>` +
+          `<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${u.name}</span>${stars}${heart}</div>${review}${watchMetaLine(f, u.id)}</div>` +
           `</div>`
         );
       })
@@ -554,6 +565,7 @@
   }
 
   let wlQuery = '';
+  let watchlistView = 'list';   // 'list' | 'grid'
   function renderWatchlist(app) {
     app.innerHTML = '';
     const s = document.createElement('section');
@@ -563,14 +575,19 @@
       `<div class="section__head section__head--search"><div>` +
       `<h3 class="section__title">Watchlist</h3>` +
       `<p class="section__sub">Ordenada por prioridad · ${watchlistFilms().length} títulos</p></div>` +
+      `<div class="section__tools">` +
+      `<div class="viewtoggle" id="view-toggle" role="group" aria-label="Cómo verlo">` +
+      `<button class="vtbtn${watchlistView === 'list' ? ' is-on' : ''}" data-view="list" title="Lista">${icon('view_list')}</button>` +
+      `<button class="vtbtn${watchlistView === 'grid' ? ' is-on' : ''}" data-view="grid" title="Grilla">${icon('grid_view')}</button></div>` +
       `<label class="search"><span class="material-symbols-rounded">search</span>` +
-      `<input id="wl-search" type="search" placeholder="Buscar en la watchlist…" value="${escapeHtml(wlQuery)}"></label></div>` +
-      `<p class="plist__hint">${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición. El orden lo comparten Bian & Luke.</p>` +
+      `<input id="wl-search" type="search" placeholder="Buscar en la watchlist…" value="${escapeHtml(wlQuery)}"></label></div></div>` +
+      `<p class="plist__hint" id="pl-hint"></p>` +
       `<div class="plist" id="plist"></div>`;
     app.appendChild(s);
     app.appendChild(buildFooter());
     const input = s.querySelector('#wl-search');
     input.addEventListener('input', () => { wlQuery = input.value; fillPlist(); });
+    s.querySelector('#view-toggle').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; watchlistView = b.dataset.view; s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.view === watchlistView)); fillPlist(); });
     enableReorder(s.querySelector('#plist'));
     fillPlist();
   }
@@ -578,12 +595,25 @@
   function fillPlist() {
     const plist = document.getElementById('plist'); if (!plist) return;
     plist.innerHTML = '';
+    const hint = document.getElementById('pl-hint');
     const full = orderedWatchlist();
     const rankOf = new Map(full.map((f, i) => [f.id, i + 1]));
     const q = wlQuery.trim().toLowerCase();
     const list = q ? full.filter((f) => f.title.toLowerCase().includes(q)) : full;
+    plist.classList.toggle('plist--grid', watchlistView === 'grid');
+    if (hint) hint.innerHTML = watchlistView === 'grid'
+      ? `${icon('grid_view')} En orden de prioridad. Para reordenar, cambiá a vista lista.`
+      : `${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición. El orden lo comparten Bian & Luke.`;
     if (!list.length) { plist.innerHTML = `<div class="empty">${icon('search_off')}<p>Nada con “${escapeHtml(wlQuery)}”.</p></div>`; return; }
+    if (watchlistView === 'grid') { list.forEach((f) => plist.appendChild(plGridCell(f, rankOf.get(f.id)))); return; }
     list.forEach((f) => plist.appendChild(plRow(f, rankOf.get(f.id), full.length)));
+  }
+  function plGridCell(f, rank) {
+    const cell = document.createElement('button'); cell.className = 'plcell'; cell.dataset.id = f.id; cell.title = `${rank}. ${f.title}`;
+    cell.innerHTML = `<span class="plcell__rank">${rank}</span><div class="plcell__img" style="background:${posterArt(f)}"></div>` +
+      ownerBadge(f, 'plcell__owner') + `<span class="plcell__t">${escapeHtml(f.title)}</span>`;
+    cell.addEventListener('click', () => openSheet(f));
+    return cell;
   }
 
   function setPriority(filmId, newPos, total) {
@@ -664,63 +694,114 @@
   const TIERS = [
     { id: 'prime', label: 'PRIME', sub: 'lo mejor', color: '#BBEF1F' },
     { id: 'buena', label: 'Muy buena', sub: '', color: '#8BE04A' },
-    { id: 'nifu', label: 'Ni fu ni fa', sub: 'del montón', color: '#F5C518' },
-    { id: 'meh', label: 'Meh', sub: '', color: '#FF8A3D' },
+    { id: 'nifu', label: 'Buena', sub: '', color: '#F5C518' },
+    { id: 'meh', label: 'Ni fu ni fa', sub: 'del montón', color: '#FF8A3D' },
     { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF2D2D' },
   ];
   let tierFilter = 'all';
   const TIER_FILTERS = [{ id: 'all', label: 'Todas' }, { id: 'r3', label: '3★ o más' }, { id: 'r4', label: '4★ o más' }, { id: 'likes', label: 'Solo ❤' }];
-  function passesTierFilter(f, u) {
+  function passesTierFilter(f, B) {
     if (tierFilter === 'all') return true;
-    const vv = verdictOf(f.id, u.id);
-    if (tierFilter === 'r3') return vv.rating != null && vv.rating >= 3;
-    if (tierFilter === 'r4') return vv.rating != null && vv.rating >= 4;
-    if (tierFilter === 'likes') return vv.liked;
-    return true;
+    const ids = B.kind === 'shared' ? Object.values(users).map((u) => u.id) : [B.owner];
+    return ids.some((uid) => {
+      const vv = verdictOf(f.id, uid);
+      if (tierFilter === 'r3') return vv.rating != null && vv.rating >= 3;
+      if (tierFilter === 'r4') return vv.rating != null && vv.rating >= 4;
+      if (tierFilter === 'likes') return vv.liked;
+      return true;
+    });
   }
 
-  function renderTier(app, viewId) {
+  /* ---------- tier boards (default per-user + custom/shared lists) ---------- */
+  let tierBoardId = null;
+  const ownerName = (uid) => (users[uid] || {}).name || '';
+  function currentBoards() {
     const me = currentUser();
-    const viewU = users[viewId] || me;
-    const isMine = viewU.id === me.id;
     const other = Object.values(users).find((x) => x.id !== me.id);
+    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, name: 'Mi tier', editable: true }];
+    if (other) list.push({ id: 'def:' + other.id, type: 'default', kind: 'personal', owner: other.id, name: 'Tier de ' + other.name, editable: false });
+    store.getTierlists().forEach((l) => list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, name: l.name, editable: l.kind === 'shared' ? true : l.owner === me.id }));
+    return list;
+  }
+  function boardGet(B, id) { return B.type === 'default' ? store.getTier(id, B.owner) : store.getListTier(B.id, id); }
+  function boardSet(B, id, tier) { if (B.type === 'default') store.setTier(id, B.owner, tier); else store.setListTier(B.id, id, tier); }
+  function boardEligible(B) {
+    const placed = (f) => boardGet(B, f.id);
+    if (B.kind === 'shared') return movies.filter((f) => Object.values(users).some((u) => verdictOf(f.id, u.id).rating != null) || f.extra || placed(f));
+    return movies.filter((f) => verdictOf(f.id, B.owner).rating != null || (B.type === 'default' && store.getTier(f.id, B.owner)) || f.extra || placed(f));
+  }
+
+  function renderTier(app) {
+    const me = currentUser();
+    const boards = currentBoards();
+    let B = boards.find((b) => b.id === tierBoardId) || boards[0];
+    tierBoardId = B.id;
     app.innerHTML = '';
     const s = document.createElement('section');
     s.className = 'section';
     s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    const sub = B.type === 'default'
+      ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
+      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la armamos entre los dos, con las pelis de ambos` : `Tier <b>personal</b>: ${escapeHtml(B.name)}${B.editable ? '' : ' · de ' + ownerName(B.owner) + ' · solo lectura'}`);
     s.innerHTML =
-      `<div class="section__head section__head--search"><div>` +
-      `<h3 class="section__title">Tier list</h3>` +
-      `<p class="section__sub">${isMine ? `El ranking de <b style="color:${viewU.color}">vos (${viewU.name})</b>` : `Mirando el tier de <b style="color:${viewU.color}">${viewU.name}</b> · solo lectura`}</p></div>` +
-      `<button class="btn btn--soft" id="tier-view">${icon('swap_horiz')} ${isMine ? `Ver tier de ${other.name}` : 'Volver al mío'}</button></div>` +
-      (isMine ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
+      `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
+      `<div class="tier-switch" id="tier-switch">` +
+      boards.map((b) => `<button class="tswitch${b.id === B.id ? ' is-on' : ''}" data-board="${b.id}">${b.kind === 'shared' ? icon('group') : ''}${escapeHtml(b.name)}</button>`).join('') +
+      `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button></div>` +
+      (B.type === 'custom' && B.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button></div>` : '') +
+      (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
       `<div class="genrebar tier-filter" id="tier-filter">${TIER_FILTERS.map((f) => `<button class="genre${tierFilter === f.id ? ' is-on' : ''}" data-tf="${f.id}">${f.label}</button>`).join('')}</div>` +
       `<div class="tier-board" id="tier-board">` +
       TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('') +
       `</div>` +
-      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${isMine ? 'las que ya viste (Letterboxd o app) o agregaste' : `las que ${viewU.name} vio`}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
-      (isMine ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar peli</button></div>` : '');
+      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${B.kind === 'shared' ? 'las que vio cualquiera de los dos' : (B.editable ? 'las que ya viste (Letterboxd o app) o agregaste' : `las que ${ownerName(B.owner)} vio`)}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
+      (B.editable ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar peli</button></div>` : '');
     app.appendChild(s);
     app.appendChild(buildFooter());
-    s.querySelector('#tier-view').addEventListener('click', () => renderTier(app, isMine ? other.id : me.id));
-    s.querySelector('#tier-filter').addEventListener('click', (e) => { const b = e.target.closest('[data-tf]'); if (!b) return; tierFilter = b.dataset.tf; s.querySelectorAll('#tier-filter .genre').forEach((x) => x.classList.toggle('is-on', x.dataset.tf === tierFilter)); fillTier(viewU); });
-    if (isMine) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm(() => { closeAddFilm(); fillTier(viewU); }));
-    if (isMine && isTouch()) {
-      // Mobile: tap a tier to pick films into it; tap a placed chip to move it.
-      s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => {
-        if (e.target.closest('.chip')) return;
-        openTierPicker(drop.dataset.tier, viewU);
-      }));
-      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, viewU); });
+    s.querySelector('#tier-switch').addEventListener('click', (e) => { const btn = e.target.closest('[data-board]'); if (!btn) return; tierBoardId = btn.dataset.board; renderTier(app); });
+    s.querySelector('#tier-new').addEventListener('click', () => openTierlistModal(app, null));
+    const rn = s.querySelector('#tl-rename'); if (rn) rn.addEventListener('click', () => openTierlistModal(app, B));
+    const dl = s.querySelector('#tl-del'); if (dl) dl.addEventListener('click', () => deleteTierlist(app, B));
+    s.querySelector('#tier-filter').addEventListener('click', (e) => { const b = e.target.closest('[data-tf]'); if (!b) return; tierFilter = b.dataset.tf; s.querySelectorAll('#tier-filter .genre').forEach((x) => x.classList.toggle('is-on', x.dataset.tf === tierFilter)); fillTier(B); });
+    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm(() => { closeAddFilm(); fillTier(B); }));
+    if (B.editable && isTouch()) {
+      s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, B); }));
+      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, B); });
     } else {
       s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip && !chip.classList.contains('dragging')) { const f = byId(chip.dataset.id); if (f) openSheet(f); } });
     }
-    fillTier(viewU);
-    if (isMine && !isTouch()) enableTierDnD(viewU);
+    fillTier(B);
+    if (B.editable && !isTouch()) enableTierDnD(B);
   }
-
-  function tierEligible(u) {
-    return movies.filter((f) => verdictOf(f.id, u.id).rating != null || store.getTier(f.id, u.id) || f.extra);
+  /* ---------- tier list create / rename / delete ---------- */
+  function openTierlistModal(app, B) {
+    const editing = !!B; const me = currentUser();
+    let kind = editing ? B.kind : 'personal';
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+      `<div class="confirm__title">${editing ? 'Renombrar tier list' : 'Nueva tier list'}</div>` +
+      `<label class="tl-field"><span>Nombre</span><input id="tl-name" type="text" maxlength="40" placeholder="Ej: Comedias, Favoritas…" value="${editing ? escapeHtml(B.name) : ''}"></label>` +
+      (editing ? '' : `<div class="tl-kind"><button class="tl-kopt is-on" data-kind="personal">${icon('person')} Personal<small>solo la armás vos</small></button><button class="tl-kopt" data-kind="shared">${icon('group')} Compartida<small>la arman los dos, con pelis de ambos</small></button></div>`) +
+      `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="tl-ok">${icon('check')} ${editing ? 'Guardar' : 'Crear'}</button></div></div>`;
+    el.hidden = false;
+    const nameInput = el.querySelector('#tl-name'); setTimeout(() => nameInput.focus(), 40);
+    el.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.kind; el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); }));
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    const commit = () => {
+      const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; }
+      if (editing) { store.saveTierlists(store.getTierlists().map((l) => (l.id === B.id ? { ...l, name } : l))); }
+      else { const id = 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); store.saveTierlists([...store.getTierlists(), { id, name, kind, owner: me.id }]); tierBoardId = id; }
+      el.hidden = true; renderTier(app);
+    };
+    el.querySelector('#tl-ok').addEventListener('click', commit);
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+  }
+  function deleteTierlist(app, B) {
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card"><div class="confirm__title">¿Borrar “${escapeHtml(B.name)}”?</div><p class="confirm__text">Se pierde el armado de esta tier list. Los puntajes de las pelis no se tocan.</p><div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="tl-delok">${icon('delete')} Borrar</button></div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#tl-delok').addEventListener('click', () => { store.saveTierlists(store.getTierlists().filter((l) => l.id !== B.id)); store.clearListData(B.id); tierBoardId = null; el.hidden = true; renderTier(app); });
   }
 
   function tierChip(f, draggable) {
@@ -732,18 +813,18 @@
     c.innerHTML = `<div class="chip__img" style="background:${posterArt(f)}"></div><div class="chip__t">${f.title}</div>`;
     return c;
   }
-  function fillTier(u) {
-    const draggable = currentUser().id === u.id;
+  function fillTier(B) {
+    const draggable = B.editable;
     document.querySelectorAll('.tier__drop, #tier-pool').forEach((d) => (d.innerHTML = ''));
-    tierEligible(u).filter((f) => passesTierFilter(f, u)).forEach((f) => {
-      const t = store.getTier(f.id, u.id);
+    boardEligible(B).filter((f) => passesTierFilter(f, B)).forEach((f) => {
+      const t = boardGet(B, f.id);
       const target = t ? document.querySelector(`.tier__drop[data-tier="${t}"]`) : document.querySelector('#tier-pool');
       if (target) target.appendChild(tierChip(f, draggable));
     });
     const pool = document.querySelector('#tier-pool');
     if (pool && !pool.children.length) pool.innerHTML = `<p class="tier-pool__empty">${draggable ? 'Todavía no hay pelis para ubicar. Puntuá una peli (queda como “vista”) o tocá <b>Agregar peli</b>.' : 'Sin pelis para mostrar.'}</p>`;
   }
-  function enableTierDnD(u) {
+  function enableTierDnD(B) {
     let dragId = null;
     const section = document.querySelector('#tier-board').closest('.section');
     section.addEventListener('dragstart', (e) => {
@@ -764,8 +845,8 @@
         e.preventDefault(); drop.classList.remove('drag-over');
         const id = dragId || (e.dataTransfer && e.dataTransfer.getData('text/plain'));
         if (!id) return;
-        store.setTier(id, u.id, drop.dataset.tier || null);
-        fillTier(u);
+        boardSet(B, id, drop.dataset.tier || null);
+        fillTier(B);
       });
     });
   }
@@ -805,10 +886,18 @@
   }
 
   let swMovies = [], swIndex = 0, swLoading = false;
+  // Skip films the active user already rated (viste) or placed in a tier (rankeaste).
+  function swAlreadyKnown(m) { const u = currentUser(); return verdictOf(m.id, u.id).rating != null || !!store.getTier(m.id, u.id); }
   async function loadMoreSw() {
     if (swLoading || !(WM.api && WM.api.available)) return;
     swLoading = true;
-    try { (await WM.api.randomMovies()).forEach((m) => { if (!swMovies.some((x) => x.id === m.id)) swMovies.push(m); }); } catch {}
+    try {
+      for (let tries = 0; tries < 3; tries++) {
+        const before = swMovies.length;
+        (await WM.api.randomMovies()).forEach((m) => { if (!swMovies.some((x) => x.id === m.id) && !swAlreadyKnown(m)) swMovies.push(m); });
+        if (swMovies.length > before) break; // got at least one fresh title
+      }
+    } catch {}
     swLoading = false;
   }
   async function openSwiper() {
@@ -908,6 +997,41 @@
     if (route === 'home') renderHome($('#app'));
   }
 
+  /* ---------- watch metadata: year seen + where (IMAX/cine/casa/celu) ---------- */
+  const WHERE = [
+    { v: 'imax', label: 'IMAX', icon: 'theaters' },
+    { v: 'cine', label: 'Cine', icon: 'local_movies' },
+    { v: 'casa', label: 'Casa', icon: 'home' },
+    { v: 'celu', label: 'Celu', icon: 'smartphone' },
+  ];
+  function watchMetaHTML(f, u) {
+    const m = store.getWatchMeta(f.id, u.id);
+    const nowY = new Date().getFullYear();
+    let opts = '<option value="">—</option>';
+    for (let y = nowY; y >= 1950; y--) opts += `<option value="${y}"${m.year == y ? ' selected' : ''}>${y}</option>`;
+    return `<div class="watchmeta">` +
+      `<label class="fieldlet fieldlet--wm">Año en que la vi<select data-wm="year">${opts}</select></label>` +
+      `<div class="watchmeta__where"><span class="watchmeta__lbl">¿Dónde?</span>${WHERE.map((w) => `<button class="wchip${m.where === w.v ? ' is-on' : ''}" data-where="${w.v}">${icon(w.icon)} ${w.label}</button>`).join('')}</div>` +
+      `</div>`;
+  }
+  function wireWatchMeta(scope, f, u) {
+    const sel = scope.querySelector('[data-wm="year"]');
+    if (sel) sel.addEventListener('change', () => store.setWatchMeta(f.id, u.id, { year: sel.value ? +sel.value : null }));
+    scope.querySelectorAll('[data-where]').forEach((b) => b.addEventListener('click', () => {
+      const cur = store.getWatchMeta(f.id, u.id).where; const val = cur === b.dataset.where ? null : b.dataset.where;
+      store.setWatchMeta(f.id, u.id, { where: val });
+      scope.querySelectorAll('[data-where]').forEach((x) => x.classList.toggle('is-on', x.dataset.where === val));
+    }));
+  }
+  function watchMetaLine(f, uid) {
+    const m = store.getWatchMeta(f.id, uid);
+    const w = (WHERE.find((x) => x.v === m.where) || {}).label;
+    const parts = [];
+    if (m.year) parts.push(`vista en ${m.year}`);
+    if (w) parts.push(w);
+    return parts.length ? `<p class="verdict__dates">${icon('event')} ${parts.join(' · ')}</p>` : '';
+  }
+
   /* ============================================================= SHEET */
   const sheet = $('#sheet');
   let sheetFilm = null;
@@ -938,6 +1062,7 @@
       `<div class="rate-box__head">${avatarHTML(u)}<span class="rate-box__you">Tu puntaje, ${u.name}</span></div>` +
       `<div class="rate-box__row"><div class="rate-box__stars" id="rate-stars"></div>` +
       `<button class="rate-clear" id="rate-clear" ${typeof me.rating === 'number' ? '' : 'hidden'}>borrar</button></div>` +
+      watchMetaHTML(f, u) +
       `<div class="review-field"><label for="review">Tu reseña</label>` +
       `<textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
       `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} Guardar reseña</button>` +
@@ -951,13 +1076,14 @@
           `<div class="verdict__main"><div class="verdict__row">` +
           (typeof otherE.rating === 'number' ? `${starsMarkup(otherE.rating, 'sm')}<span class="stars-value">${otherE.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
           (otherE.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
-          `</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}</div></div></div>`
+          `</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}${watchMetaLine(f, other.id)}</div></div></div>`
         : '') +
 
       `</div></div>`;
 
     // interactive stars
     mountInteractiveStars($('#rate-stars', sheet), f, u, me.rating);
+    wireWatchMeta(sheet, f, u);
     $('#rate-clear', sheet).addEventListener('click', () => {
       store.setRating(f.id, u.id, null);
       openSheet(f); // re-render
@@ -1176,23 +1302,23 @@
     document.removeEventListener('keydown', onPickKey);
   }
 
-  function openTierPicker(tierId, u) {
+  function openTierPicker(tierId, B) {
     const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
     openPickSheet(`Poné en ${label}`, () =>
-      tierEligible(u)
-        .filter((f) => (store.getTier(f.id, u.id) || null) !== tierId)
+      boardEligible(B)
+        .filter((f) => (boardGet(B, f.id) || null) !== tierId)
         .map((f) => ({
-          thumb: posterArt(f), label: f.title, sub: store.getTier(f.id, u.id) ? '(mover)' : '',
-          onClick: (render) => { store.setTier(f.id, u.id, tierId); fillTier(u); render(); },
+          thumb: posterArt(f), label: f.title, sub: boardGet(B, f.id) ? '(mover)' : '',
+          onClick: (render) => { boardSet(B, f.id, tierId); fillTier(B); render(); },
         })));
   }
-  function openChipMenu(filmId, u) {
+  function openChipMenu(filmId, B) {
     const f = byId(filmId); if (!f) return;
     openPickSheet(f.title, () => {
-      const cur = store.getTier(filmId, u.id);
+      const cur = boardGet(B, filmId);
       return [
-        ...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { store.setTier(filmId, u.id, t.id); fillTier(u); closePickSheet(); } })),
-        { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { store.setTier(filmId, u.id, null); fillTier(u); closePickSheet(); } },
+        ...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { boardSet(B, filmId, t.id); fillTier(B); closePickSheet(); } })),
+        { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { boardSet(B, filmId, null); fillTier(B); closePickSheet(); } },
         { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(f); } },
       ];
     });

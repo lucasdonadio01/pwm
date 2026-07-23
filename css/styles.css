@@ -960,3 +960,59 @@ a { color: inherit; text-decoration: none; }
   .swbtn { width: 56px; height: 56px; }
   .swbtn .material-symbols-rounded { font-size: 27px; }
 }
+
+/* ============================================================================
+   PWM additions — view toggle, watch metadata, multi/shared tier lists
+   ========================================================================== */
+.section__tools { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+/* list / grid view toggle */
+.viewtoggle { display: inline-flex; background: var(--surface-2); border: 1px solid var(--hairline-2); border-radius: var(--r-pill); padding: 3px; gap: 2px; }
+.vtbtn { width: 38px; height: 34px; display: grid; place-items: center; border-radius: var(--r-pill); color: var(--ink-faint); transition: color 0.15s, background 0.15s; }
+.vtbtn .material-symbols-rounded { font-size: 20px; }
+.vtbtn:hover { color: var(--ink); }
+.vtbtn.is-on { background: var(--accent); color: var(--accent-ink); }
+
+/* watchlist grid view */
+.plist--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 0.7rem; }
+.plcell { position: relative; text-align: left; }
+.plcell__img { aspect-ratio: 2/3; border-radius: var(--r-chip); background-size: cover; background-position: center; border: 1px solid var(--hairline); transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s; }
+.plcell:hover .plcell__img { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.55); }
+.plcell__rank { position: absolute; top: 5px; left: 5px; z-index: 2; min-width: 22px; height: 22px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.72rem; color: var(--accent-ink); background: var(--accent); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+.plcell__owner { position: absolute; top: 5px; right: 5px; z-index: 2; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 0.62rem; font-weight: 800; color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+.plcell__t { display: block; margin-top: 0.35rem; font-size: 0.72rem; font-weight: 600; color: var(--ink-dim); line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* watch metadata (year + where) inside the sheet */
+.watchmeta { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem 1.4rem; background: var(--ground-deep); border: 1px solid var(--hairline); border-radius: var(--r-input); padding: 0.9rem 1rem; margin-top: 1rem; }
+.fieldlet { display: flex; flex-direction: column; gap: 0.3rem; font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+.fieldlet select, .fieldlet input { background: var(--surface-2); border: 1px solid var(--hairline-2); border-radius: 10px; padding: 0.45rem 0.6rem; color: var(--ink); font-family: 'Archivo', sans-serif; font-size: 0.9rem; text-transform: none; letter-spacing: 0; color-scheme: dark; }
+.fieldlet select:focus, .fieldlet input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.fieldlet--wm select { min-width: 96px; }
+.watchmeta__where { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.watchmeta__lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); margin-right: 0.15rem; }
+.wchip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.7rem; border-radius: var(--r-pill); border: 1px solid var(--hairline-2); color: var(--ink-dim); font-weight: 600; font-size: 0.82rem; transition: all 0.15s; }
+.wchip .material-symbols-rounded { font-size: 17px; }
+.wchip:hover { color: var(--ink); border-color: var(--ink-faint); }
+.wchip.is-on { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 38%, transparent); }
+
+.verdict__dates { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.25rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--ink-faint); }
+.verdict__dates .material-symbols-rounded { font-size: 15px; }
+
+/* multi / shared tier lists */
+.tier-switch { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.tswitch { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.9rem; border-radius: var(--r-pill); border: 1px solid var(--hairline-2); color: var(--ink-dim); font-weight: 600; font-size: 0.86rem; transition: all 0.15s; }
+.tswitch .material-symbols-rounded { font-size: 17px; }
+.tswitch:hover { color: var(--ink); border-color: var(--ink-faint); }
+.tswitch.is-on { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 40%, transparent); }
+.tswitch--add { border-style: dashed; color: var(--ink-faint); }
+.tier-toolbar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.btn--xs { padding: 0.4rem 0.7rem; font-size: 0.8rem; }
+.btn--xs .material-symbols-rounded { font-size: 17px; }
+.tl-field { display: flex; flex-direction: column; gap: 0.4rem; text-align: left; margin: 0.4rem 0 0.9rem; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+.tl-field input { background: var(--surface-2); border: 1px solid var(--hairline-2); border-radius: 10px; padding: 0.6rem 0.7rem; color: var(--ink); font-family: 'Archivo', sans-serif; font-size: 1rem; text-transform: none; letter-spacing: 0; }
+.tl-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.tl-kind { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+.tl-kopt { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; text-align: left; padding: 0.7rem 0.9rem; border-radius: 12px; border: 1px solid var(--hairline-2); color: var(--ink); font-weight: 700; transition: all 0.15s; }
+.tl-kopt small { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; font-weight: 500; text-transform: none; color: var(--ink-faint); }
+.tl-kopt .material-symbols-rounded { font-size: 18px; vertical-align: -3px; margin-right: 0.3rem; }
+.tl-kopt.is-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }

@@ -106,6 +106,7 @@
   const NAV = [
     { id: 'home', label: 'Home' },
     { id: 'selectos', label: 'Selectos' },
+    { id: 'leyendo', label: 'Leyendo' },
     { id: 'leidos', label: 'Leídos' },
     { id: 'tier', label: 'Tier' },
   ];
@@ -142,8 +143,27 @@
     const app = $('#app'); app.hidden = false;
     if (route === 'home') return renderHome(app);
     if (route === 'selectos') return renderSelectos(app);
+    if (route === 'leyendo') return renderLeyendo(app);
     if (route === 'leidos') return renderLeidos(app);
     if (route === 'tier') return renderTier(app);
+  }
+
+  /* ---------- reading helpers ---------- */
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+    if (isNaN(d)) return '';
+    return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function readingPercent(r) {
+    if (r.status === 'read') return 100;
+    if (typeof r.page === 'number' && typeof r.pageTotal === 'number' && r.pageTotal > 0) return Math.max(0, Math.min(100, Math.round((r.page / r.pageTotal) * 100)));
+    return null;
+  }
+  // Books that at least one user is currently reading.
+  function readingBooks() {
+    return books.filter((b) => Object.values(users).some((u) => store.getReading(b.id, u.id).status === 'reading'));
   }
 
   /* ============================================================= HOME */
@@ -227,7 +247,16 @@
     if (a.vibe === 'oscuro') s += g.some((x) => DARK.includes(x)) ? 3 : -1; else if (a.vibe === 'pensar') s += g.some((x) => THINK.includes(x)) ? 3 : -1;
     return s;
   }
-  function recommend(a) { return books.map((b) => ({ b, s: scoreBook(b, a) })).sort((x, y) => y.s - x.s).slice(0, 12).map((o) => o.b); }
+  function recommend(a) {
+    const scored = books.map((b) => ({ b, s: scoreBook(b, a) }));
+    const anyFilter = a.genres.length || a.era !== 'any' || a.vibe !== 'any';
+    // with filters on, keep only books that actually fit; otherwise everything is fair game
+    let pool = anyFilter ? scored.filter((o) => o.s > 0) : scored.slice();
+    if (pool.length < 12) pool = scored.slice().sort((x, y) => y.s - x.s).slice(0, Math.max(12, pool.length));
+    // rank by score + a random jitter so repeated taps surface fresh (still relevant) picks
+    pool.forEach((o) => (o.r = o.s + Math.random() * 4));
+    return pool.sort((x, y) => y.r - x.r).slice(0, 12).map((o) => o.b);
+  }
   function buildRecommender() {
     const s = document.createElement('section'); s.className = 'section recommender';
     s.innerHTML =
@@ -271,7 +300,7 @@
       const stars = rated ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`;
       const heart = e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '';
       const review = e.review ? `<p class="verdict__review">“${escapeHtml(e.review)}”</p>` : '';
-      return `<div class="verdict">${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${u.name}</span>${stars}${heart}</div>${review}</div></div>`;
+      return `<div class="verdict">${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${u.name}</span>${stars}${heart}</div>${review}${readingLine(b, u.id)}</div></div>`;
     }).join('');
     card.innerHTML = `<div class="watched__poster"><div class="poster__img" style="background:${coverArt(b)}"></div></div><div class="watched__body"><div class="watched__title">${escapeHtml(b.title)}</div><div class="watched__year">${[b.year, b.author].filter(Boolean).join(' · ')}</div><div class="verdicts">${verdicts}</div></div>`;
     card.addEventListener('click', () => openSheet(b));
@@ -280,25 +309,44 @@
 
   /* ---------- Selectos (priority list) ---------- */
   let wlQuery = '';
+  let selectosView = 'list';   // 'list' | 'grid'
   function orderedBooks() { const pos = new Map(store.getOrder().map((id, i) => [id, i])); return books.slice().sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : Infinity) - (pos.has(b.id) ? pos.get(b.id) : Infinity)); }
+  function viewToggleHTML() {
+    return `<div class="viewtoggle" id="view-toggle" role="group" aria-label="Cómo verlo">` +
+      `<button class="vtbtn${selectosView === 'list' ? ' is-on' : ''}" data-view="list" title="Lista">${icon('view_list')}</button>` +
+      `<button class="vtbtn${selectosView === 'grid' ? ' is-on' : ''}" data-view="grid" title="Grilla">${icon('grid_view')}</button></div>`;
+  }
   function renderSelectos(app) {
     app.innerHTML = '';
     const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     s.innerHTML =
       `<div class="section__head section__head--search"><div><h3 class="section__title">Selectos</h3><p class="section__sub">Nuestra selección · ${books.length} libros · ordenala por prioridad</p></div>` +
-      `<label class="search"><span class="material-symbols-rounded">search</span><input id="wl-search" type="search" placeholder="Buscar libro o autor…" value="${escapeHtml(wlQuery)}"></label></div>` +
-      `<p class="plist__hint">${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición.</p><div class="plist" id="plist"></div>`;
+      `<div class="section__tools">${viewToggleHTML()}<label class="search"><span class="material-symbols-rounded">search</span><input id="wl-search" type="search" placeholder="Buscar libro o autor…" value="${escapeHtml(wlQuery)}"></label></div></div>` +
+      `<p class="plist__hint" id="pl-hint"></p><div class="plist" id="plist"></div>`;
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#wl-search').addEventListener('input', (e) => { wlQuery = e.target.value; fillPlist(); });
+    s.querySelector('#view-toggle').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; selectosView = b.dataset.view; s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.view === selectosView)); fillPlist(); });
     enableReorder(s.querySelector('#plist')); fillPlist();
   }
   function fillPlist() {
     const plist = document.getElementById('plist'); if (!plist) return; plist.innerHTML = '';
+    const hint = document.getElementById('pl-hint');
     const full = orderedBooks(); const rankOf = new Map(full.map((b, i) => [b.id, i + 1]));
     const q = wlQuery.trim().toLowerCase();
     const list = q ? full.filter((b) => b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)) : full;
+    plist.classList.toggle('plist--grid', selectosView === 'grid');
+    if (hint) hint.innerHTML = selectosView === 'grid'
+      ? `${icon('grid_view')} En orden de prioridad. Para reordenar, cambiá a vista lista.`
+      : `${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición.`;
     if (!list.length) { plist.innerHTML = `<div class="empty">${icon('search_off')}<p>Nada con “${escapeHtml(wlQuery)}”.</p></div>`; return; }
+    if (selectosView === 'grid') { list.forEach((b) => plist.appendChild(plGridCell(b, rankOf.get(b.id)))); return; }
     list.forEach((b) => plist.appendChild(plRow(b, rankOf.get(b.id), full.length)));
+  }
+  function plGridCell(b, rank) {
+    const cell = document.createElement('button'); cell.className = 'plcell'; cell.dataset.id = b.id; cell.title = `${rank}. ${b.title}`;
+    cell.innerHTML = `<span class="plcell__rank">${rank}</span><div class="plcell__img" style="background:${coverArt(b)}"></div><span class="plcell__t">${escapeHtml(b.title)}</span>`;
+    cell.addEventListener('click', () => openSheet(b));
+    return cell;
   }
   function setPriority(id, newPos) {
     const cur = orderedBooks().map((b) => b.id); const from = cur.indexOf(id); if (from < 0) return;
@@ -328,6 +376,58 @@
 
   function renderLeidos(app) { app.innerHTML = ''; const s = buildRead('Leídos'); s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)'; app.appendChild(s); app.appendChild(buildFooter()); }
 
+  /* ---------- Leyendo (in progress) ---------- */
+  function renderLeyendo(app) {
+    app.innerHTML = '';
+    const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    const list = readingBooks();
+    s.innerHTML = `<div class="section__head section__head--search"><div><h3 class="section__title">Leyendo</h3><p class="section__sub">Lo que tenemos en curso · marcá por dónde vas</p></div><button class="btn btn--soft" id="ly-add">${icon('add_circle')} Agregar libro</button></div>`;
+    if (!list.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.innerHTML = `${icon('auto_stories')}<p>No hay libros en curso.<br>Abrí un libro y tocá <b>Empecé a leer</b>, o agregá uno.</p>`;
+      s.appendChild(e);
+    } else {
+      const grid = document.createElement('div'); grid.className = 'reading-grid';
+      list.forEach((b) => grid.appendChild(readingCard(b)));
+      s.appendChild(grid);
+    }
+    app.appendChild(s); app.appendChild(buildFooter());
+    s.querySelector('#ly-add').addEventListener('click', () => openAddBook((b) => { closeAddBook(); openSheet(b); }));
+  }
+  function readingCard(b) {
+    const u = currentUser();
+    const r = store.getReading(b.id, u.id);
+    const card = document.createElement('article'); card.className = 'reading';
+    const statLine = (rr) => { const p = readingPercent(rr); return `${p != null ? `<b>${p}%</b>` : '<b>—</b>'}${rr.chapter ? ` · cap. ${escapeHtml(rr.chapter)}` : ''}<span class="reading__since">${rr.startedAt ? `desde ${fmtDate(rr.startedAt)}` : 'sin fecha de inicio'}</span>`; };
+    card.innerHTML =
+      `<div class="reading__poster" data-open><div class="poster__img" style="background:${coverArt(b)}"></div></div>` +
+      `<div class="reading__body">` +
+      `<div class="reading__title" data-open>${escapeHtml(b.title)}</div>` +
+      `<div class="reading__meta">${[b.author, b.year].filter(Boolean).join(' · ')}</div>` +
+      `<div class="reading__bar"><span class="reading__fill" style="width:${readingPercent(r) != null ? readingPercent(r) : 0}%"></span></div>` +
+      `<div class="reading__stat" data-rc-stat>${statLine(r)}</div>` +
+      `<div class="reading__ctrls">` +
+      `<label class="reading__in">pág.<input type="number" min="0" data-rc="page" value="${r.page != null ? r.page : ''}" placeholder="—"></label>` +
+      `<span class="reading__of">de</span>` +
+      `<label class="reading__in"><input type="number" min="1" data-rc="pageTotal" value="${r.pageTotal != null ? r.pageTotal : ''}" placeholder="—"></label>` +
+      `<label class="reading__in reading__in--cap">cap.<input type="text" data-rc="chapter" value="${r.chapter ? escapeHtml(r.chapter) : ''}" placeholder="—"></label>` +
+      `<button class="btn btn--accent reading__done" data-rc-done>${icon('task_alt')} Lo terminé</button>` +
+      `</div></div>`;
+    const save = () => {
+      const page = card.querySelector('[data-rc="page"]').value;
+      const total = card.querySelector('[data-rc="pageTotal"]').value;
+      const chap = card.querySelector('[data-rc="chapter"]').value.trim();
+      store.setReading(b.id, u.id, { page: page === '' ? null : +page, pageTotal: total === '' ? null : +total, chapter: chap || null });
+      const r2 = store.getReading(b.id, u.id);
+      card.querySelector('.reading__fill').style.width = (readingPercent(r2) != null ? readingPercent(r2) : 0) + '%';
+      card.querySelector('[data-rc-stat]').innerHTML = statLine(r2);
+    };
+    card.querySelectorAll('[data-rc]').forEach((i) => i.addEventListener('change', save));
+    card.querySelector('[data-rc-done]').addEventListener('click', () => { store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
+    card.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => openSheet(b)));
+    return card;
+  }
+
   /* ---------- book card ---------- */
   function bookCard(b) {
     const card = document.createElement('button'); card.className = 'card';
@@ -340,48 +440,106 @@
   const TIERS = [
     { id: 'prime', label: 'PRIME', sub: 'lo mejor', color: '#22D3EE' },
     { id: 'buena', label: 'Muy bueno', sub: '', color: '#3D7BFF' },
-    { id: 'nifu', label: 'Ni fu ni fa', sub: 'del montón', color: '#8B7BFF' },
-    { id: 'meh', label: 'Meh', sub: '', color: '#B06BE0' },
+    { id: 'nifu', label: 'Buena', sub: '', color: '#8B7BFF' },
+    { id: 'meh', label: 'Ni fu ni fa', sub: 'del montón', color: '#B06BE0' },
     { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF4D6D' },
   ];
-  function tierEligible(u) { return books.filter((b) => verdictOf(b.id, u.id).rating != null || store.getTier(b.id, u.id) || b.extra); }
-  function renderTier(app, viewId) {
-    const me = currentUser(); const viewU = users[viewId] || me; const isMine = viewU.id === me.id; const other = Object.values(users).find((x) => x.id !== me.id);
+  /* ---------- tier boards (default per-user + custom/shared lists) ---------- */
+  let tierBoardId = null;
+  function currentBoards() {
+    const me = currentUser();
+    const other = Object.values(users).find((x) => x.id !== me.id);
+    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, name: 'Mi tier', editable: true }];
+    if (other) list.push({ id: 'def:' + other.id, type: 'default', kind: 'personal', owner: other.id, name: 'Tier de ' + other.name, editable: false });
+    store.getTierlists().forEach((l) => list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, name: l.name, editable: l.kind === 'shared' ? true : l.owner === me.id }));
+    return list;
+  }
+  function boardGet(B, id) { return B.type === 'default' ? store.getTier(id, B.owner) : store.getListTier(B.id, id); }
+  function boardSet(B, id, tier) { if (B.type === 'default') store.setTier(id, B.owner, tier); else store.setListTier(B.id, id, tier); }
+  function boardEligible(B) {
+    const placed = (b) => boardGet(B, b.id);
+    if (B.kind === 'shared') return books.filter((b) => Object.values(users).some((u) => verdictOf(b.id, u.id).rating != null) || b.extra || placed(b));
+    return books.filter((b) => verdictOf(b.id, B.owner).rating != null || (B.type === 'default' && store.getTier(b.id, B.owner)) || b.extra || placed(b));
+  }
+  const ownerName = (uid) => (users[uid] || {}).name || '';
+  function renderTier(app) {
+    const me = currentUser();
+    const boards = currentBoards();
+    let B = boards.find((b) => b.id === tierBoardId) || boards[0];
+    tierBoardId = B.id;
     app.innerHTML = '';
     const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    const sub = B.type === 'default'
+      ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
+      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la armamos entre los dos, con los libros de ambos` : `Tier <b>personal</b>: ${escapeHtml(B.name)}${B.editable ? '' : ' · de ' + ownerName(B.owner) + ' · solo lectura'}`);
     s.innerHTML =
-      `<div class="section__head section__head--search"><div><h3 class="section__title">Tier list</h3>` +
-      `<p class="section__sub">${isMine ? `El ranking de <b style="color:${viewU.color}">vos (${viewU.name})</b>` : `Mirando el tier de <b style="color:${viewU.color}">${viewU.name}</b> · solo lectura`}</p></div>` +
-      `<button class="btn btn--soft" id="tier-view">${icon('swap_horiz')} ${isMine ? `Ver tier de ${other.name}` : 'Volver al mío'}</button></div>` +
-      (isMine ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué libro poner; tocá uno puesto para moverlo.' : 'Arrastrá los libros al tier que merezcan (o tocá uno para moverlo).'}</p>` : '') +
+      `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
+      `<div class="tier-switch" id="tier-switch">` +
+      boards.map((b) => `<button class="tswitch${b.id === B.id ? ' is-on' : ''}" data-board="${b.id}">${b.kind === 'shared' ? icon('group') : ''}${escapeHtml(b.name)}</button>`).join('') +
+      `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button></div>` +
+      (B.type === 'custom' && B.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button></div>` : '') +
+      (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué libro poner; tocá uno puesto para moverlo.' : 'Arrastrá los libros al tier que merezcan (o tocá uno para moverlo).'}</p>` : '') +
       `<div class="tier-board" id="tier-board">${TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('')}</div>` +
-      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${isMine ? 'los que ya puntuaste o agregaste' : `los que ${viewU.name} leyó`}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
-      (isMine ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar libro</button></div>` : '');
+      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${B.kind === 'shared' ? 'lo que leyó cualquiera de los dos' : (B.editable ? 'los que ya puntuaste o agregaste' : `los que ${ownerName(B.owner)} leyó`)}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
+      (B.editable ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar libro</button></div>` : '');
     app.appendChild(s); app.appendChild(buildFooter());
-    s.querySelector('#tier-view').addEventListener('click', () => renderTier(app, isMine ? other.id : me.id));
-    if (isMine) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddBook(() => { closeAddBook(); fillTier(viewU); }));
-    if (isMine && isTouch()) {
-      s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, viewU); }));
-      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, viewU); });
+    s.querySelector('#tier-switch').addEventListener('click', (e) => { const btn = e.target.closest('[data-board]'); if (!btn) return; tierBoardId = btn.dataset.board; renderTier(app); });
+    s.querySelector('#tier-new').addEventListener('click', () => openTierlistModal(app, null));
+    const rn = s.querySelector('#tl-rename'); if (rn) rn.addEventListener('click', () => openTierlistModal(app, B));
+    const dl = s.querySelector('#tl-del'); if (dl) dl.addEventListener('click', () => deleteTierlist(app, B));
+    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddBook(() => { closeAddBook(); fillTier(B); }));
+    if (B.editable && isTouch()) {
+      s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, B); }));
+      s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, B); });
     } else { s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip && !chip.classList.contains('dragging')) { const b = byId(chip.dataset.id); if (b) openSheet(b); } }); }
-    fillTier(viewU);
-    if (isMine && !isTouch()) enableTierDnD(viewU);
+    fillTier(B);
+    if (B.editable && !isTouch()) enableTierDnD(B);
+  }
+  /* ---------- tier list create / rename / delete ---------- */
+  function openTierlistModal(app, B) {
+    const editing = !!B; const me = currentUser();
+    let kind = editing ? B.kind : 'personal';
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+      `<div class="confirm__title">${editing ? 'Renombrar tier list' : 'Nueva tier list'}</div>` +
+      `<label class="tl-field"><span>Nombre</span><input id="tl-name" type="text" maxlength="40" placeholder="Ej: Ciencia ficción, Favoritos…" value="${editing ? escapeHtml(B.name) : ''}"></label>` +
+      (editing ? '' : `<div class="tl-kind"><button class="tl-kopt is-on" data-kind="personal">${icon('person')} Personal<small>solo la armás vos</small></button><button class="tl-kopt" data-kind="shared">${icon('group')} Compartida<small>la arman los dos, con libros de ambos</small></button></div>`) +
+      `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="tl-ok">${icon('check')} ${editing ? 'Guardar' : 'Crear'}</button></div></div>`;
+    el.hidden = false;
+    const nameInput = el.querySelector('#tl-name'); setTimeout(() => nameInput.focus(), 40);
+    el.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.kind; el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); }));
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    const commit = () => {
+      const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; }
+      if (editing) { store.saveTierlists(store.getTierlists().map((l) => (l.id === B.id ? { ...l, name } : l))); }
+      else { const id = 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); store.saveTierlists([...store.getTierlists(), { id, name, kind, owner: me.id }]); tierBoardId = id; }
+      el.hidden = true; renderTier(app);
+    };
+    el.querySelector('#tl-ok').addEventListener('click', commit);
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+  }
+  function deleteTierlist(app, B) {
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card"><div class="confirm__title">¿Borrar “${escapeHtml(B.name)}”?</div><p class="confirm__text">Se pierde el armado de esta tier list. Los puntajes de los libros no se tocan.</p><div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="tl-delok">${icon('delete')} Borrar</button></div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#tl-delok').addEventListener('click', () => { store.saveTierlists(store.getTierlists().filter((l) => l.id !== B.id)); store.clearListData(B.id); tierBoardId = null; el.hidden = true; renderTier(app); });
   }
   function tierChip(b, draggable) { const c = document.createElement('div'); c.className = 'chip' + (draggable ? '' : ' chip--ro'); c.draggable = !!draggable; c.dataset.id = b.id; c.title = b.title; c.innerHTML = `<div class="chip__img" style="background:${coverArt(b)}"></div><div class="chip__t">${escapeHtml(b.title)}</div>`; return c; }
-  function fillTier(u) {
-    const draggable = currentUser().id === u.id;
+  function fillTier(B) {
+    const draggable = B.editable;
     document.querySelectorAll('.tier__drop, #tier-pool').forEach((d) => (d.innerHTML = ''));
-    tierEligible(u).forEach((b) => { const t = store.getTier(b.id, u.id); const target = t ? document.querySelector(`.tier__drop[data-tier="${t}"]`) : document.querySelector('#tier-pool'); if (target) target.appendChild(tierChip(b, draggable)); });
+    boardEligible(B).forEach((b) => { const t = boardGet(B, b.id); const target = t ? document.querySelector(`.tier__drop[data-tier="${t}"]`) : document.querySelector('#tier-pool'); if (target) target.appendChild(tierChip(b, draggable)); });
     const pool = document.querySelector('#tier-pool'); if (pool && !pool.children.length) pool.innerHTML = `<p class="tier-pool__empty">${draggable ? 'Puntuá un libro y va a aparecer acá para ubicarlo.' : 'Sin libros para mostrar.'}</p>`;
   }
-  function enableTierDnD(u) {
+  function enableTierDnD(B) {
     let dragId = null; const section = document.querySelector('#tier-board').closest('.section');
     section.addEventListener('dragstart', (e) => { const chip = e.target.closest('.chip'); if (!chip) return; dragId = chip.dataset.id; chip.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', dragId); } catch {} });
     section.addEventListener('dragend', (e) => { const chip = e.target.closest('.chip'); if (chip) chip.classList.remove('dragging'); dragId = null; document.querySelectorAll('.drag-over').forEach((d) => d.classList.remove('drag-over')); });
     [...document.querySelectorAll('.tier__drop'), document.querySelector('#tier-pool')].forEach((drop) => {
       drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag-over'); });
       drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
-      drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('drag-over'); const id = dragId || (e.dataTransfer && e.dataTransfer.getData('text/plain')); if (!id) return; store.setTier(id, u.id, drop.dataset.tier || null); fillTier(u); });
+      drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('drag-over'); const id = dragId || (e.dataTransfer && e.dataTransfer.getData('text/plain')); if (!id) return; boardSet(B, id, drop.dataset.tier || null); fillTier(B); });
     });
   }
 
@@ -436,13 +594,62 @@
   }
   function onAddBookKey(e) { if (e.key === 'Escape') closeAddBook(); }
   function closeAddBook() { const el = document.getElementById('addbook'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onAddBookKey); }
-  function openTierPicker(tierId, u) {
+  function openTierPicker(tierId, B) {
     const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
-    openPickSheet(`Poné en ${label}`, () => tierEligible(u).filter((b) => (store.getTier(b.id, u.id) || null) !== tierId).map((b) => ({ thumb: coverArt(b), label: b.title, onClick: (render) => { store.setTier(b.id, u.id, tierId); fillTier(u); render(); } })));
+    openPickSheet(`Poné en ${label}`, () => boardEligible(B).filter((b) => (boardGet(B, b.id) || null) !== tierId).map((b) => ({ thumb: coverArt(b), label: b.title, onClick: (render) => { boardSet(B, b.id, tierId); fillTier(B); render(); } })));
   }
-  function openChipMenu(id, u) {
+  function openChipMenu(id, B) {
     const b = byId(id); if (!b) return;
-    openPickSheet(b.title, () => { const cur = store.getTier(id, u.id); return [...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { store.setTier(id, u.id, t.id); fillTier(u); closePickSheet(); } })), { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { store.setTier(id, u.id, null); fillTier(u); closePickSheet(); } }, { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(b); } }]; });
+    openPickSheet(b.title, () => { const cur = boardGet(B, id); return [...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { boardSet(B, id, t.id); fillTier(B); closePickSheet(); } })), { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { boardSet(B, id, null); fillTier(B); closePickSheet(); } }, { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(b); } }]; });
+  }
+
+  /* ---------- reading block (used inside the sheet) ---------- */
+  function readingLine(b, uid) {
+    const r = store.getReading(b.id, uid);
+    const parts = [];
+    if (r.startedAt) parts.push(`empezó ${fmtDate(r.startedAt)}`);
+    if (r.finishedAt) parts.push(`terminó ${fmtDate(r.finishedAt)}`);
+    else if (r.status === 'reading' && readingPercent(r) != null) parts.push(`va ${readingPercent(r)}%`);
+    return parts.length ? `<p class="verdict__dates">${icon('event')} ${parts.join(' · ')}</p>` : '';
+  }
+  function readingBlockHTML(b, u) {
+    const r = store.getReading(b.id, u.id);
+    const pct = readingPercent(r);
+    return `<div class="readblock">` +
+      `<div class="readblock__head">${icon('menu_book')} Lectura</div>` +
+      `<div class="readblock__status">` +
+      `<button class="rbtn ${r.status === 'reading' ? 'is-on' : ''}" data-rb-set="reading">${icon('auto_stories')} Leyendo</button>` +
+      `<button class="rbtn ${r.status === 'read' ? 'is-on' : ''}" data-rb-set="read">${icon('task_alt')} Terminado</button>` +
+      (r.status ? `<button class="rbtn rbtn--x" data-rb-set="none" title="Sin marcar">${icon('close')}</button>` : '') +
+      `</div>` +
+      `<div class="readblock__dates">` +
+      `<label class="fieldlet">Empecé<input type="date" data-rb="startedAt" value="${r.startedAt || ''}"></label>` +
+      `<label class="fieldlet">Terminé<input type="date" data-rb="finishedAt" value="${r.finishedAt || ''}"></label>` +
+      `</div>` +
+      `<div class="readblock__prog">` +
+      `<label class="fieldlet fieldlet--sm">Página<input type="number" min="0" data-rb="page" value="${r.page != null ? r.page : ''}" placeholder="—"></label>` +
+      `<label class="fieldlet fieldlet--sm">de<input type="number" min="1" data-rb="pageTotal" value="${r.pageTotal != null ? r.pageTotal : ''}" placeholder="—"></label>` +
+      `<label class="fieldlet fieldlet--sm readblock__cap">Capítulo<input type="text" data-rb="chapter" value="${r.chapter ? escapeHtml(r.chapter) : ''}" placeholder="—"></label>` +
+      `<span class="readblock__pct" data-rb-pct>${pct != null ? pct + '%' : ''}</span>` +
+      `</div></div>`;
+  }
+  function wireReadingBlock(scope, b, u) {
+    scope.querySelectorAll('[data-rb-set]').forEach((btn) => btn.addEventListener('click', () => {
+      const v = btn.dataset.rbSet;
+      if (v === 'reading') store.setReading(b.id, u.id, { status: 'reading', startedAt: store.getReading(b.id, u.id).startedAt || todayISO() });
+      else if (v === 'read') store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() });
+      else store.setReading(b.id, u.id, { status: null });
+      openSheet(b); // re-render so buttons/labels reflect the new status
+    }));
+    scope.querySelectorAll('[data-rb]').forEach((inp) => inp.addEventListener('change', () => {
+      const k = inp.dataset.rb;
+      let val;
+      if (k === 'page' || k === 'pageTotal') val = inp.value === '' ? null : +inp.value;
+      else if (k === 'chapter') val = inp.value.trim() || null;
+      else val = inp.value || null; // dates
+      store.setReading(b.id, u.id, { [k]: val });
+      const pctEl = scope.querySelector('[data-rb-pct]'); if (pctEl) { const p = readingPercent(store.getReading(b.id, u.id)); pctEl.textContent = p != null ? p + '%' : ''; }
+    }));
   }
 
   /* ============================================================= SHEET */
@@ -461,11 +668,13 @@
       `<p class="sheet__synopsis">${escapeHtml(b.synopsis || '')}</p>` +
       `<div class="rate-box"><div class="rate-box__head">${avatarHTML(u)}<span class="rate-box__you">Tu puntaje, ${u.name}</span></div>` +
       `<div class="rate-box__row"><div class="rate-box__stars" id="rate-stars"></div><button class="rate-clear" id="rate-clear" ${typeof me.rating === 'number' ? '' : 'hidden'}>borrar</button></div>` +
+      readingBlockHTML(b, u) +
       `<div class="review-field"><label for="review">Tu reseña</label><textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
       `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} Guardar reseña</button><button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button><span class="saved-flag" id="saved-flag">guardado ✓</span></div></div></div>` +
-      (otherHas ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijo ${other.name}</div><div class="verdict">${avatarHTML(other, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${typeof otherE.rating === 'number' ? `${starsMarkup(otherE.rating, 'sm')}<span class="stars-value">${otherE.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>'}${otherE.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : ''}</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}</div></div></div>` : '') +
+      (otherHas ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijo ${other.name}</div><div class="verdict">${avatarHTML(other, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${typeof otherE.rating === 'number' ? `${starsMarkup(otherE.rating, 'sm')}<span class="stars-value">${otherE.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>'}${otherE.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : ''}</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}${readingLine(b, other.id)}</div></div></div>` : '') +
       `</div></div>`;
     mountStars($('#rate-stars', sheet), b, u, me.rating);
+    wireReadingBlock(sheet, b, u);
     $('#rate-clear', sheet).addEventListener('click', () => { store.setRating(b.id, u.id, null); openSheet(b); });
     $('#save-review', sheet).addEventListener('click', () => { store.setReview(b.id, u.id, $('#review', sheet).value.trim()); const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600); });
     $('#review', sheet).addEventListener('blur', (e) => store.setReview(b.id, u.id, e.target.value.trim()));

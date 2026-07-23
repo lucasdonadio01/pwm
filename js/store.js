@@ -95,6 +95,30 @@ WM.store = (function () {
     getOrder() { return Array.isArray(settings.order) ? settings.order.slice() : []; },
     setOrder(ids) { settings.order = ids.slice(); saveLocal(); notify(); pushSetting('order'); },
 
+    // extra review metadata (per film, per user): what year you saw it + where — synced via 'watchmeta' blob
+    getWatchMeta(filmId, userId) {
+      const m = (settings.watchmeta && settings.watchmeta[filmId] && settings.watchmeta[filmId][userId]) || {};
+      return { year: m.year || null, where: m.where || null };   // where: 'imax' | 'cine' | 'casa' | 'celu'
+    },
+    setWatchMeta(filmId, userId, patch) {
+      const all = settings.watchmeta || (settings.watchmeta = {});
+      all[filmId] = all[filmId] || {};
+      all[filmId][userId] = { ...this.getWatchMeta(filmId, userId), ...patch };
+      settings.watchmeta = all; saveLocal(); notify(); pushSetting('watchmeta');
+    },
+
+    // custom & shared tier lists (beyond the per-user default) — synced via settings
+    getTierlists() { return Array.isArray(settings.tierlists) ? settings.tierlists.slice() : []; },
+    saveTierlists(list) { settings.tierlists = list.slice(); saveLocal(); notify(); pushSetting('tierlists'); },
+    getListTier(listId, itemId) { const d = settings.tierdata || {}; return (d[listId] && d[listId][itemId]) || null; },
+    setListTier(listId, itemId, tier) {
+      const d = settings.tierdata || (settings.tierdata = {});
+      d[listId] = d[listId] || {};
+      if (tier) d[listId][itemId] = tier; else delete d[listId][itemId];
+      settings.tierdata = d; saveLocal(); notify(); pushSetting('tierdata');
+    },
+    clearListData(listId) { const d = settings.tierdata || {}; delete d[listId]; settings.tierdata = d; saveLocal(); notify(); pushSetting('tierdata'); },
+
     isWatched(filmId) { const f = state[filmId]; return !!(f && Object.values(f).some((e) => typeof e.rating === 'number')); },
     watchedFilmIds() { return Object.keys(state).filter((id) => this.isWatched(id)); },
     likeCount(filmId) { const f = state[filmId]; return f ? Object.values(f).filter((e) => e.liked).length : 0; },

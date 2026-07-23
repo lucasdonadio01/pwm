@@ -95,6 +95,37 @@ PRB.store = (function () {
     getOrder() { return Array.isArray(settings.order) ? settings.order.slice() : []; },
     setOrder(ids) { settings.order = ids.slice(); saveLocal(); notify(); pushSetting('order'); },
 
+    // reading progress (per book, per user) — synced via the 'reading' settings blob
+    getReading(bookId, userId) {
+      const r = (settings.reading && settings.reading[bookId] && settings.reading[bookId][userId]) || {};
+      return {
+        status: r.status || null,                 // 'reading' | 'read' | null
+        startedAt: r.startedAt || null,           // 'YYYY-MM-DD'
+        finishedAt: r.finishedAt || null,         // 'YYYY-MM-DD'
+        page: typeof r.page === 'number' ? r.page : null,
+        pageTotal: typeof r.pageTotal === 'number' ? r.pageTotal : null,
+        chapter: r.chapter || null,
+      };
+    },
+    setReading(bookId, userId, patch) {
+      const all = settings.reading || (settings.reading = {});
+      all[bookId] = all[bookId] || {};
+      all[bookId][userId] = { ...this.getReading(bookId, userId), ...patch };
+      settings.reading = all; saveLocal(); notify(); pushSetting('reading');
+    },
+
+    // custom & shared tier lists (beyond the per-user default) — synced via settings
+    getTierlists() { return Array.isArray(settings.tierlists) ? settings.tierlists.slice() : []; },
+    saveTierlists(list) { settings.tierlists = list.slice(); saveLocal(); notify(); pushSetting('tierlists'); },
+    getListTier(listId, itemId) { const d = settings.tierdata || {}; return (d[listId] && d[listId][itemId]) || null; },
+    setListTier(listId, itemId, tier) {
+      const d = settings.tierdata || (settings.tierdata = {});
+      d[listId] = d[listId] || {};
+      if (tier) d[listId][itemId] = tier; else delete d[listId][itemId];
+      settings.tierdata = d; saveLocal(); notify(); pushSetting('tierdata');
+    },
+    clearListData(listId) { const d = settings.tierdata || {}; delete d[listId]; settings.tierdata = d; saveLocal(); notify(); pushSetting('tierdata'); },
+
     isWatched(filmId) { const f = state[filmId]; return !!(f && Object.values(f).some((e) => typeof e.rating === 'number')); },
     watchedFilmIds() { return Object.keys(state).filter((id) => this.isWatched(id)); },
     likeCount(filmId) { const f = state[filmId]; return f ? Object.values(f).filter((e) => e.liked).length : 0; },
