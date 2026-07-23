@@ -194,8 +194,9 @@ a { color: inherit; text-decoration: none; }
   background: var(--hot);
   box-shadow: 0 0 12px var(--hot);
 }
-.nav__x { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.6rem; padding: 0.5rem 0.9rem; border-radius: var(--r-chip); color: var(--ink-faint); font-weight: 600; font-size: 0.9rem; border: 1px solid var(--hairline); transition: color 0.2s, border-color 0.2s; }
-.nav__x:hover { color: var(--ink); border-color: var(--hairline-2); }
+.nav__x { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.6rem; padding: 0.5rem 0.9rem; border-radius: var(--r-chip); color: var(--ink-faint); font-weight: 600; font-size: 0.9rem; border: 1px solid var(--hairline); transition: color 0.2s, border-color 0.2s, box-shadow 0.2s; }
+.nav__x:hover { color: #45a6ff; border-color: rgba(46, 123, 255, 0.5); box-shadow: 0 0 16px rgba(46, 123, 255, 0.22); }
+.nav__x:hover .material-symbols-rounded { color: #45a6ff; }
 .nav__x .material-symbols-rounded { font-size: 18px; }
 
 .header__right { display: flex; align-items: center; gap: 0.75rem; }
@@ -600,8 +601,17 @@ a { color: inherit; text-decoration: none; }
 .trailer__frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .trailer__bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; flex-wrap: wrap; }
 .trailer__title { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; letter-spacing: 0.06em; color: var(--ink-dim); }
-.trailer__ctrls { display: flex; gap: 0.6rem; }
+.trailer__ctrls { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .trailer__ctrls .btn { padding: 0.62rem 1.1rem; }
+@media (max-width: 620px) {
+  .trailer { place-items: center; padding: 58px 10px 14px; overflow-y: auto; }
+  .trailer__box { width: 100%; }
+  .trailer__bar { flex-direction: column; align-items: stretch; gap: 0.7rem; margin-top: 0.8rem; }
+  .trailer__title { text-align: center; }
+  .trailer__ctrls { justify-content: center; }
+  .trailer__ctrls .btn { flex: 1 1 42%; justify-content: center; padding: 0.6rem 0.7rem; }
+  .trailer__back { top: 10px; left: 10px; }
+}
 
 /* ============================================================================
    Confirm popover (change user)
