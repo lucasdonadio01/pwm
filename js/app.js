@@ -3180,7 +3180,7 @@
           `<span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
         c.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: id }));
         return K.motion.tag(c, `pwm-profile-review-${id}-${f.id}`);
-      }, 'Todavía sin reseñas.', { desktopRows: 1 });
+      }, 'Todavía sin reseñas.', { desktopRows: 3 });
 
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');

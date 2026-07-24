@@ -2871,4 +2871,4 @@ WM.letterboxd = {
 
 WM.importStatus = {};
 
-WM.build = {"version":"1.16","built":"2026-07-24T03:00:00-03:00"};
+WM.build = {"version":"1.17","built":"2026-07-24T03:30:00-03:00"};

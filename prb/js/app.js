@@ -1691,7 +1691,7 @@
       c.innerHTML = `<span class="prev__poster" style="background:${coverArt(b)}"></span><span class="prev__b"><b>${escapeHtml(b.title)}</b><span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span><span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
       c.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: id }));
       return K.motion.tag(c, `prb-profile-review-${id}-${b.id}`);
-    }, 'Todavía sin reseñas.', { desktopRows: 1 });
+    }, 'Todavía sin reseñas.', { desktopRows: 3 });
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
     profileContentPreview(sec.querySelector('#p-best-preview'), bw, sec.querySelector('#p-best-more'), sec.querySelector('#p-best-peek'), best, (b) =>
