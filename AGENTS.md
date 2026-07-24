@@ -32,6 +32,12 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
+### 2026-07-24 · Claude — v32 / PWM+PRB 1.20
+- **"Seen" is now one rule** (`hasSeen` in PWM): a title counts as seen when it has a score, a written review, a like **or** a watch date — clearing all four takes it out again. `boardEligible` no longer keeps every `f.extra`, which was pinning films added by the swiper / calendar / "Agregar peli" in the tier pool forever with nothing on them (Lucas hit this after typing a date by accident and clearing it). Pool went 46 → 39 on his data, and every remaining chip is justified (`seen by nobody: 0`).
+- Adding from the tier screen now parks the film in the pool explicitly (`boardSet(B, id, 'pool')`, which `fillTier` already renders as unplaced), because eligibility is "seen" and adding ≠ having watched. Same parity fix for PRB's "Agregar libro" — PRB's `userHasRead` was already correct, so it needed no eligibility change.
+- Build stamp had the UTC hour with a `-03:00` offset (read 3h ahead). Local time is `Argentina Standard Time`; use `(Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")`.
+- ⚠️ Verifying in the pane: `WM.movies` does NOT include extras, and `verdictOf` merges the Letterboxd baseline — a naive localStorage-only check reports false positives. Evaluate against the **board's owner** (`def:<uid>`), not whoever you're logged in as. Three of my checks were wrong before I caught this.
+
 ### 2026-07-24 · Claude — v31 / PWM+PRB 1.19
 - PWM home: dropped "Ya vimos"; "Últimas reseñas" now renders **one card per film** with a compact chip strip (avatar + score + review mark) per user, tapping opens the read-only review sheet. Removed the orphaned `buildWatched` / `watchedCard` / `latestTs`.
 - New `mobileRows` option in `profileContentPreview` (both apps): reviews reveal **3 rows + half** on mobile instead of 1.

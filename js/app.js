@@ -54,6 +54,13 @@
       liked: e.liked || !!(lb && lb.liked),
     };
   }
+  /* A title counts as SEEN when there is actually something on it: a score, a written review, a
+   * like, or a watch date. Clearing all four takes it back out everywhere — undoing a mistake
+   * (a date typed by accident, a stray rating) has to leave no trace. */
+  function hasSeen(fid, uid) {
+    const v = verdictOf(fid, uid);
+    return v.rating != null || !!(v.review || '').trim() || !!v.liked || !!watchMetaOf(fid, uid).date;
+  }
   const root = document.documentElement;
 
   const $ = (s, r = document) => r.querySelector(s);
@@ -1230,10 +1237,13 @@
   }
   function boardGet(B, id) { return B.type === 'default' ? store.getTier(id, B.owner) : store.getListTier(B.id, id); }
   function boardSet(B, id, tier) { if (B.type === 'default') store.setTier(id, B.owner, tier); else store.setListTier(B.id, id, tier); }
+  /* What can sit on this board: what the owner has actually seen, plus whatever is already parked
+   * on it. NOT every `f.extra` — a film added by the swiper, the calendar or "Agregar peli" used to
+   * stay in the pool forever even with no score, review, like or date on it. */
   function boardEligible(B) {
     const placed = (f) => boardGet(B, f.id);
-    if (B.kind === 'shared') { const mem = B.members || Object.values(users).map((u) => u.id); return movies.filter((f) => mem.some((uid) => verdictOf(f.id, uid).rating != null) || f.extra || placed(f)); }
-    return movies.filter((f) => verdictOf(f.id, B.owner).rating != null || (B.type === 'default' && store.getTier(f.id, B.owner)) || f.extra || placed(f));
+    if (B.kind === 'shared') { const mem = B.members || Object.values(users).map((u) => u.id); return movies.filter((f) => mem.some((uid) => hasSeen(f.id, uid)) || placed(f)); }
+    return movies.filter((f) => hasSeen(f.id, B.owner) || placed(f));
   }
 
   function renderTier(app) {
@@ -1287,7 +1297,9 @@
     }
     s.querySelector('#tl-share').addEventListener('click', () => shareTier(B));
     s.querySelector('#tier-filter').addEventListener('click', (e) => { const b = e.target.closest('[data-tf]'); if (!b) return; tierFilter = b.dataset.tf; s.querySelectorAll('#tier-filter .genre').forEach((x) => x.classList.toggle('is-on', x.dataset.tf === tierFilter)); fillTier(B); });
-    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm(() => { closeAddFilm(); fillTier(B); }));
+    // Adding from the tier screen parks the film in the pool on purpose (eligibility is "seen"
+    // now, and adding a film is not the same as having watched it).
+    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm((film) => { closeAddFilm(); if (film) boardSet(B, film.id, 'pool'); fillTier(B); }));
     if (B.editable && isTouch()) {
       s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, B); }));
       s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, B); });

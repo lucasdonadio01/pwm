@@ -1029,7 +1029,8 @@
       s.querySelectorAll('[data-tier-insert]').forEach((btn) => btn.addEventListener('click', () => insertTierRow(app, B, +btn.dataset.tierInsert)));
     }
     s.querySelector('#tl-share').addEventListener('click', () => shareTier(B));
-    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => { if (!guestBlock()) openAddBook(() => { closeAddBook(); fillTier(B); }); });
+    // Parked in the pool on purpose: eligibility is "read", and adding a book isn't reading it.
+    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => { if (!guestBlock()) openAddBook((book) => { closeAddBook(); if (book) boardSet(B, book.id, 'pool'); fillTier(B); }); });
     if (B.editable && isTouch()) {
       s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, B); }));
       s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, B); });
