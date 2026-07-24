@@ -1,48 +1,119 @@
-# PRODUCT.md — WatchMovies
+# Product
 
-> Private movie companion for two people. Not a public product; no growth, no signup, no funnel.
-> Sources of truth: the two owners' Letterboxd watchlists + their own ratings/reviews.
+<!-- impeccable:product-schema 1 -->
 
-## What it is
-A shared, two-person "private Letterboxd" for **Bian** (`bianvepelis`) and **Luke** (`LukeLookMovies`)
-to decide what to watch together, rate what they've seen (half-star precision), leave reviews, and like.
+## Platform
 
-## Users (exactly two, no auth)
-- On entry, a Netflix/Disney+-style profile picker asks **"¿Quién sos?"** → Bian or Luke.
-- Choice is remembered locally; the header shows the active user's avatar; tapping it asks "¿Cambiar de usuario?".
-- Bian's identity color = **neon pink**; Luke's = **neon red**. Circular avatars.
-- Every rating / review / like is attributed to whichever profile is active.
+web
 
-## Core jobs
-1. **Discover** — Home opens on a full-viewport cinematic carousel of films pulled from BOTH watchlists,
-   auto-advancing every 7s, with left/right arrows to step back/forward, big bold title, synopsis,
-   and IMDb + Rotten Tomatoes scores over an HD backdrop.
-2. **Rate** — Letterboxd-style rating, **0.5 → 5.0 in half steps**.
-3. **Review** — free-text review per user per film.
-4. **Like** — heart toggle per user per film.
-5. **Track watched** — films the two have rated appear in a "Ya vimos" list with each person's stars + review.
+## Users
 
-## Sections (header nav)
-- **Home** — hero carousel (watchlist) → Trending (movies/series of the moment + scores) → Ya vimos (watched, with our ratings/reviews).
-- **Watchlist** — the combined watchlists.
-- **Movies** — films.
-- **Series** — trending TV (TMDB), since Letterboxd is film-only. *(assumption — confirm)*
+- Los usuarios principales son Lucas (Luke) y Bian, que usan la aplicación juntos para organizar, descubrir y registrar películas, series y libros.
+- Cualquier persona que reciba el enlace puede crear su propio perfil. No se busca difusión pública masiva: Lucas comparte el enlace con un grupo reducido.
+- También existe un modo Invitado de solo lectura para recorrer el contenido sin crear una cuenta.
+- Cada perfil conserva su nombre, foto, color, contraseña, usuario de Letterboxd y actividad propia.
 
-## Data pipeline (free stack)
-- **Letterboxd watchlists** → the two URLs; refreshed **weekly** by a GitHub Action that regenerates the movie data file.
-- **TMDB** → HD backdrops/posters (Full HD minimum) + synopsis.
-- **OMDb** → IMDb rating + Rotten Tomatoes score.
-- **Shared state** (ratings/reviews/likes) → **Supabase** (free tier, no end-user login).
-  Prototype phase uses `localStorage` behind the same interface; flip to Supabase when keys land.
-- **Hosting** → GitHub Pages; **auto-update** → GitHub Actions (weekly cron).
+## Product Purpose
 
-## Hard constraints
-- 100% free tooling. No end-user login.
-- **All imagery Full HD (≥1920px) or high quality** — no thumbnail-grade posters in hero/cards.
-- Icons: **Google Material Symbols**.
-- Language: Spanish (Rioplatense) UI.
+PWM y PRB forman una aplicación compartida para descubrir contenido, decidir qué ver o leer, registrar actividad y comparar gustos.
 
-## Prototype status (labeled assumptions)
-- Seeded with REAL titles scraped from both watchlists (2026-07).
-- Until TMDB/OMDb keys arrive: backdrops/posters are styled placeholders and scores are sample values — clearly swappable.
-- Until Supabase creds arrive: ratings/reviews/likes persist in `localStorage` on each device.
+Aunque el producto puede ser usado por más personas, su centro sigue siendo el uso cotidiano de Lucas y Bian: elegir juntos, compartir listas y calendarios, y conservar un historial personal y compartido.
+
+El producto tiene dos áreas conectadas:
+
+- **PWM — Project Watch Movies:** películas y series.
+- **PRB — Project Read Books:** libros y seguimiento de lectura.
+
+El éxito significa que los usuarios puedan encontrar qué consumir, organizarlo y registrar su experiencia sin depender de varias aplicaciones separadas.
+
+## Positioning
+
+Una biblioteca privada y colaborativa para un grupo pequeño, que combina películas, series y libros bajo los mismos perfiles.
+
+Su mecanismo distintivo es conectar en un mismo espacio:
+
+- importación de actividad de Letterboxd;
+- puntuaciones, reseñas, likes y fechas;
+- watchlists y prioridades;
+- tier lists personales o compartidas;
+- calendarios con invitaciones;
+- seguimiento de lectura;
+- identidad y sesión compartidas entre PWM y PRB.
+
+## Operating Context
+
+- Lucas comparte manualmente el enlace de GitHub Pages con las personas que quiere invitar.
+- Al entrar, una persona puede elegir un perfil existente, usar el modo Invitado o crear un usuario nuevo.
+- PWM y PRB comparten las mismas cuentas, fotos, contraseñas y sesión activa.
+- Los usuarios alternan entre teléfono y computadora, por lo que la interfaz debe seguir funcionando de forma responsive y táctil.
+- La actividad se sincroniza entre dispositivos mediante Supabase y mantiene una copia local para tolerar problemas de conexión.
+- Un proceso automático actualiza los datos públicos de Letterboxd y los metadatos externos.
+
+## Capabilities and Constraints
+
+### Identidad y acceso
+
+- Creación de perfiles desde la aplicación.
+- Contraseña numérica por perfil.
+- Perfil configurable con nombre, foto, color, descripción y usuario de Letterboxd.
+- Modo Invitado de solo lectura.
+- No existe un registro público tradicional por correo electrónico.
+
+### PWM
+
+- Home cinematográfico con destacados y tendencias.
+- Watchlist combinada y ordenable.
+- Catálogos de películas y series con filtros y descubrimiento mediante TMDB.
+- Puntuaciones de 0.5 a 5 estrellas, reseñas, likes, fecha y lugar de visualización.
+- Modo relámpago para puntuar títulos rápidamente.
+- Tier lists personales y compartidas con filas configurables.
+- Calendarios personales y compartidos, funciones programadas, invitaciones y notificaciones.
+- Perfiles con estadísticas, actividad y medallas.
+
+### PRB
+
+- Cuentas compartidas con PWM.
+- Biblioteca y prioridades de lectura.
+- Seguimiento de libros en curso.
+- Puntuaciones, reseñas, likes y fechas.
+- Tier lists personales y compartidas.
+
+### Datos e infraestructura
+
+- GitHub Pages para alojamiento.
+- Supabase para cuentas y estado compartido, con `localStorage` como respaldo local.
+- Letterboxd como fuente de watchlists, películas vistas, puntuaciones, likes, fechas y reseñas.
+- TMDB para búsqueda, películas, series, imágenes y metadatos.
+- OMDb para puntuaciones IMDb y Rotten Tomatoes.
+- GitHub Actions para actualizar los datos automáticamente.
+
+### Restricciones confirmadas
+
+- El proyecto debe mantenerse con herramientas y servicios gratuitos.
+- La interfaz y los textos están en español rioplatense.
+- PWM y PRB deben conservar usuarios y sesión compartidos.
+- El sitio es accesible mediante enlace; la privacidad depende de compartirlo solo con personas elegidas, no de ocultarlo de Internet.
+
+## Brand Commitments
+
+- Nombres del producto: **PWM — Project Watch Movies** y **PRB — Project Read Books**.
+- Voz cercana, informal y rioplatense.
+- La aplicación habla directamente al usuario con expresiones como “vos”, “mirá”, “elegí” y “probá”.
+- Las identidades personales se distinguen mediante foto, inicial y color elegido por cada usuario.
+
+## Evidence on Hand
+
+- Watchlists y actividad real de Letterboxd de los usuarios conectados.
+- Catálogo generado en `js/data.js`.
+- Datos de películas y series obtenidos de TMDB y OMDb.
+- Cuentas, puntuaciones, reseñas, likes, tiers, calendarios y configuraciones almacenadas en Supabase.
+- Código funcional de PWM y PRB dentro del mismo repositorio.
+- No hay testimonios públicos, métricas comerciales ni afirmaciones de crecimiento; futuras páginas no deben inventarlos.
+
+## Product Principles
+
+1. **Primero el uso compartido:** las funciones deben ayudar a elegir, organizar y comentar contenido con otras personas.
+2. **Una identidad en todo el producto:** el mismo perfil debe funcionar de manera coherente en PWM y PRB.
+3. **Privado por intención, sencillo por acceso:** cualquier persona con el enlace puede crear un perfil, sin convertir la experiencia en una plataforma pública compleja.
+4. **Los datos personales siguen siendo editables:** los usuarios controlan sus listas, puntuaciones, reseñas, fechas, tiers y calendarios.
+5. **Mantenerlo gratuito y sostenible:** cada función debe respetar la infraestructura gratuita existente y funcionar con degradación razonable cuando un servicio externo falla.

@@ -32,9 +32,9 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-23 · Claude
-- Caught up with `522e4e8` (ChatGPT): all 11 items in `correcciones.md` are implemented and verified in code.
-- New shared module `js/shared.js` (`APPKIT`). Tier export is a **hand-drawn canvas**, not html2canvas. Live sync uses **Supabase Realtime** with a 20s polling fallback. The data Action moved to **daily**.
-- Lucas ran `alter publication supabase_realtime add table settings, reviews;` ✅
-- Added `AGENTS.md` + `CLAUDE.md`; marked lote 3 as closed in `correcciones.md`.
-- Uncommitted at that moment (another session's work, left untouched): `PRODUCT.md`, `css/styles.css`, `js/app.js`, `js/shared.js`, `prb/js/app.js`.
+### 2026-07-23 · Codex
+- Updated `PRODUCT.md` to reflect link-shared signup and shared PWM/PRB identities; kept the approved movie-sheet button correction.
+- Reorganized both profiles: compact identity/stats hero, 70/30 reviews/content + calendar/analytics layout, expandable explanations, responsive single-column fallback.
+- Fixed tier canvas poster loading with a CORS-safe fallback and made the exported title match the tier name in both apps.
+- Verified JS syntax, desktop 70/30 geometry, mobile overflow, expandable panels, and a real canvas render with remote TMDB posters.
+- Local work is complete and committed; **not pushed yet**, pending Lucas's visual approval.

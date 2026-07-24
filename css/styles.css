@@ -979,8 +979,8 @@ a { color: inherit; text-decoration: none; }
    PWM additions — view toggle, watch metadata, multi/shared tier lists
    ========================================================================== */
 .section__tools { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-.sheet__cta { display: flex; flex-wrap: wrap; gap: .75rem; margin: .95rem 0 1.15rem; }
-.sheet__cta .btn { min-height: 44px; }
+.sheet__cta { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin: .95rem 0 1.15rem; }
+.sheet__cta .sheet__trailer { margin-bottom: 0; }
 
 /* list / grid view toggle */
 .viewtoggle { display: inline-flex; background: var(--surface-2); border: 1px solid var(--hairline-2); border-radius: var(--r-pill); padding: 3px; gap: 2px; }
@@ -1315,16 +1315,51 @@ a { color: inherit; text-decoration: none; }
 .phero__bio { max-width: 65ch; margin-top: .7rem; color: var(--ink-dim); font-size: .9rem; }
 .phero__bio i { color: var(--ink-faint); }
 .phero .linklike { margin-top: .38rem; }
+.phero--overview { align-items: stretch; flex-direction: column; gap: 1rem; }
+.phero__identity { display: flex; align-items: center; gap: clamp(1rem, 3vw, 1.5rem); min-width: 0; }
+.phero--overview .phero__body { flex: 1; }
 .ptiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin: 1.1rem 0 1.5rem; }
 .ptile { min-height: 82px; padding: .8rem; border: 1px solid var(--hairline); border-radius: 13px; background: var(--surface); }
 .ptile b { display: block; color: var(--accent); font-size: 1.35rem; line-height: 1; letter-spacing: -.03em; }
 .ptile span { display: block; margin-top: .38rem; color: var(--ink-dim); font-size: .78rem; font-weight: 700; }
 .ptile small { display: block; margin-top: .1rem; color: var(--ink-faint); font-size: .66rem; }
+.ptiles--overview { grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 0; width: 100%; margin: 0; padding-top: .9rem; border-top: 1px solid var(--hairline); }
+.ptiles--overview .ptile { min-height: 0; padding: .1rem .75rem; border: 0; border-right: 1px solid var(--hairline); border-radius: 0; background: transparent; }
+.ptiles--overview .ptile:first-child { padding-left: 0; }
+.ptiles--overview .ptile:last-child { padding-right: 0; border-right: 0; }
+.ptiles--overview .ptile b { font-size: 1.12rem; }
+.ptiles--overview .ptile span { margin-top: .24rem; font-size: .7rem; }
+.ptiles--overview .ptile small { font-size: .59rem; }
+.profile-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(250px, 3fr); align-items: start; gap: clamp(.85rem, 2vw, 1.2rem); margin-top: clamp(1.2rem, 3vw, 1.7rem); }
+.profile-main, .profile-rail, .profile-block { min-width: 0; }
+.profile-main { display: grid; gap: clamp(2rem, 4vw, 3rem); }
+.profile-rail { display: grid; gap: .75rem; }
+.profile-block .psub { margin: 0 0 .85rem; }
+.profile-block .section__title { font-size: clamp(1.25rem, 2.4vw, 1.65rem); }
+.profile-calendar { padding: .9rem; }
+.profile-calendar h4 { margin-bottom: .72rem; }
 .pgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; }
 .pgrid--wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pcard { min-width: 0; padding: 1rem; border: 1px solid var(--hairline); border-radius: 14px; background: var(--surface); }
 .pcard h4 { display: flex; align-items: center; gap: .38rem; margin-bottom: .9rem; font-size: .88rem; }
 .pcard h4 .material-symbols-rounded { color: var(--accent); font-size: 19px; }
+.pdetail { padding: 0; overflow: hidden; }
+.pdetail__summary { display: flex; align-items: center; justify-content: space-between; gap: .7rem; min-height: 58px; padding: .72rem .85rem; cursor: pointer; list-style: none; }
+.pdetail__summary::-webkit-details-marker { display: none; }
+.pdetail__summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 12px; }
+.pdetail__title { display: flex; align-items: center; gap: .55rem; min-width: 0; }
+.pdetail__title > .material-symbols-rounded { flex: none; color: var(--accent); font-size: 20px; }
+.pdetail__title b, .pdetail__title small { display: block; }
+.pdetail__title b { font-size: .82rem; }
+.pdetail__title small { max-width: 20ch; margin-top: .08rem; overflow: hidden; color: var(--ink-faint); font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.pdetail__toggle { display: grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: var(--ink-faint); background: var(--surface-2); transition: transform .2s var(--ease), color .2s; }
+.pdetail__toggle .material-symbols-rounded { font-size: 19px; }
+.pdetail[open] .pdetail__toggle { color: var(--ink); transform: rotate(180deg); }
+.pdetail__body { padding: .85rem; border-top: 1px solid var(--hairline); }
+.pdetail__explain { margin-top: .72rem; color: var(--ink-faint); font-size: .68rem; line-height: 1.4; }
+.profile-calendar .pdetail__explain { margin-bottom: 0; }
+.pdetail .pmedals { grid-template-columns: 1fr; }
+.pdetail .pmedal { padding: .62rem; }
 .pmc__title { margin-bottom: .55rem; color: var(--ink-dim); text-align: center; font: .62rem 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
 .pmc__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
 .pmc__h { color: var(--ink-faint); text-align: center; font: .55rem 'JetBrains Mono', monospace; }
@@ -1408,6 +1443,8 @@ a { color: inherit; text-decoration: none; }
   .srcbtn { flex: 1; justify-content: center; }
   .phero { align-items: flex-start; }
   .ptiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ptiles--overview { grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); }
+  .profile-layout { grid-template-columns: 1fr; }
   .pgrid, .pgrid--wide { grid-template-columns: 1fr; }
   .cfg__row { align-items: flex-start; flex-direction: column; }
   .cfg__r { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
@@ -1425,7 +1462,11 @@ a { color: inherit; text-decoration: none; }
   .invite__actions, .cfg__actions { flex-direction: column; align-items: stretch; }
   .invite__actions .btn { width: 100%; }
   .phero { flex-direction: column; }
+  .phero__identity { align-items: flex-start; width: 100%; }
   .phero__av { width: 78px; height: 78px; }
   .phero__avatar { width: 72px; height: 72px; }
+  .ptiles--overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ptiles--overview .ptile { padding: .45rem .6rem; border-bottom: 1px solid var(--hairline); }
+  .ptiles--overview .ptile:nth-child(even) { border-right: 0; }
   .pmedals { grid-template-columns: 1fr; }
 }

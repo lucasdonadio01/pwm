@@ -818,8 +818,7 @@
   }
   function shareTier(B) {
     const rows = rowsOf(B);
-    const me = currentUser();
-    const title = B.type === 'default' ? (B.editable ? `Tier de ${me.name}` : `Tier de ${ownerName(B.owner)}`) : B.name;
+    const title = B.name;
     const subtitle = B.type === 'default' ? 'Ranking personal' : (B.kind === 'shared' ? `Compartida · ${B.members.map(ownerName).join(' y ')}` : `Personal · ${ownerName(B.owner)}`);
     K.openShareBoard($('#confirm'), () => {
       const byRow = {};
@@ -1142,6 +1141,11 @@
     const max = top[0][1];
     return `<div class="prows">${top.map(([g, n]) => `<div class="prow"><span class="prow__l">${escapeHtml(g)}</span><span class="prow__t"><span class="prow__f" style="width:${Math.round((n / max) * 100)}%;--c:${color}"></span></span><b>${n}</b></div>`).join('')}</div>`;
   }
+  function profileDetail(iconName, title, insight, body, explanation, open = false) {
+    return `<details class="pcard pdetail"${open ? ' open' : ''}>` +
+      `<summary class="pdetail__summary"><span class="pdetail__title">${icon(iconName)}<span><b>${title}</b><small>${escapeHtml(insight)}</small></span></span><span class="pdetail__toggle">${icon('expand_more')}</span></summary>` +
+      `<div class="pdetail__body">${body}<p class="pdetail__explain">${explanation}</p></div></details>`;
+  }
   function profileBookCard(b, uid) {
     const v = verdictOf(b.id, uid);
     const c = document.createElement('button'); c.className = 'pbook';
@@ -1155,22 +1159,32 @@
     if (me.guest) { store.clearUser(); return showGate(); }
     const id = uid || me.id, u = users[id] || me, mine = id === me.id;
     const s = profileStats(id), acc = store.getAccounts()[id] || {}, bio = acc.bio || '';
+    const year = String(new Date().getFullYear());
+    const topGenre = (Object.entries(s.genres).sort((a, b) => b[1] - a[1])[0] || ['Sin datos'])[0];
+    let medalsDone = 0;
+    const medals = BOOK_MEDALS.map((md) => {
+      const have = md.get(s), done = have >= md.goal, pct = Math.min(100, Math.round((have / md.goal) * 100));
+      if (done) medalsDone++;
+      return `<div class="pmedal${done ? ' is-done' : ''}" style="--c:${u.color}"><span class="pmedal__ic">${icon(md.icon)}</span><div class="pmedal__b"><b>${md.name}</b><small>${md.desc}</small><span class="pmedal__bar"><span style="width:${pct}%"></span></span><span class="pmedal__n">${Math.min(have, md.goal)} / ${md.goal}</span></div>${done ? `<span class="pmedal__check">${icon('check_circle')}</span>` : ''}</div>`;
+    }).join('');
     app.innerHTML = '';
     const sec = document.createElement('section'); sec.className = 'section'; sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     sec.innerHTML =
-      `<div class="phero" style="--c:${u.color}"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'}>${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
+      `<div class="phero phero--overview" style="--c:${u.color}"><div class="phero__identity"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'}>${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
       `<div class="phero__body"><h2 class="phero__name">${escapeHtml(u.name)}</h2><p class="phero__handle">@${escapeHtml(u.lb || u.handle || u.id)}</p>` +
       `<p class="phero__bio">${bio ? escapeHtml(bio) : (mine ? '<i>Sin descripción — podés agregar una.</i>' : '<i>Sin descripción.</i>')}</p>` +
       (mine ? `<button class="linklike" id="p-editbio">${icon('edit')} Editar descripción</button>` : '') + `</div></div>` +
-      `<div class="ptiles">${statTile(s.read, 'libros leídos')}${statTile(s.thisYear, 'este año', String(new Date().getFullYear()))}${statTile(s.reading, 'leyendo ahora')}${statTile(s.reviews, 'reseñas')}${statTile(s.likes, 'me gusta')}${statTile(s.avg ? s.avg.toFixed(2) : '—', 'promedio', 'de 5')}</div>` +
-      `<div class="pgrid"><div class="pcard"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}</div>` +
-      `<div class="pcard"><h4>${icon('bar_chart')} Últimos 12 meses</h4>${yearStrip(s.byMonth, u.color)}</div>` +
-      `<div class="pcard"><h4>${icon('star')} Cómo puntuás</h4>${distChart(s.dist, u.color)}</div>` +
-      `<div class="pcard"><h4>${icon('category')} Tus géneros</h4>${genreChart(s.genres, u.color)}</div></div>` +
-      `<h3 class="section__title psub"><span class="accentbar">/</span> Medallas</h3>` +
-      `<div class="pmedals">${BOOK_MEDALS.map((md) => { const have = md.get(s), done = have >= md.goal, pct = Math.min(100, Math.round((have / md.goal) * 100)); return `<div class="pmedal${done ? ' is-done' : ''}" style="--c:${u.color}"><span class="pmedal__ic">${icon(md.icon)}</span><div class="pmedal__b"><b>${md.name}</b><small>${md.desc}</small><span class="pmedal__bar"><span style="width:${pct}%"></span></span><span class="pmedal__n">${Math.min(have, md.goal)} / ${md.goal}</span></div>${done ? `<span class="pmedal__check">${icon('check_circle')}</span>` : ''}</div>`; }).join('')}</div>` +
-      `<h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><div class="pgrid pgrid--wide" id="p-reviews"></div>` +
-      `<h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><div class="profile-books" id="p-best"></div>`;
+      `<div class="ptiles ptiles--overview">${statTile(s.read, 'libros leídos')}${statTile(s.thisYear, 'este año', year)}${statTile(s.reading, 'leyendo ahora')}${statTile(s.reviews, 'reseñas')}${statTile(s.likes, 'me gusta')}${statTile(s.avg ? s.avg.toFixed(2) : '—', 'promedio', 'de 5')}</div></div>` +
+      `<div class="profile-layout"><div class="profile-main">` +
+      `<section class="profile-block"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
+      `<section class="profile-block"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><div class="profile-books" id="p-best"></div></section>` +
+      `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
+      `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}<p class="pdetail__explain">Los días marcados muestran cuándo terminaste o puntuaste una lectura durante el mes.</p></div>` +
+      profileDetail('bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos libros registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
+      profileDetail('star', 'Cómo puntuás', s.avg ? `${s.avg.toFixed(2)} de promedio` : 'Sin promedio', distChart(s.dist, u.color), 'Agrupa tus puntuaciones de media en media estrella para mostrar si sos más exigente o generoso al puntuar.') +
+      profileDetail('category', 'Tus géneros', topGenre, genreChart(s.genres, u.color), 'Cuenta los géneros presentes en los libros que leíste. Un libro puede sumar en más de un género.') +
+      profileDetail('workspace_premium', 'Medallas', `${medalsDone} de ${BOOK_MEDALS.length} logradas`, `<div class="pmedals">${medals}</div>`, 'Se desbloquean automáticamente con tu actividad. La barra muestra cuánto te falta para cada objetivo.') +
+      `</aside></div>`;
     app.appendChild(sec); app.appendChild(buildFooter());
     const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t).slice(0, 4);
     const rw = sec.querySelector('#p-reviews');

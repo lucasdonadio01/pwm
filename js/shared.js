@@ -296,15 +296,33 @@ window.APPKIT = (function () {
    * social card (square or story), not a photo of the app's UI. No library, no network.
    * opts = { title, subtitle, brand, rows:[{label,color,items:[{title,img}]}], format, bg, ink, accent, fileName }
    */
+  const boardImageCache = new Map();
   function loadImg(src) {
-    return new Promise((res) => {
-      if (!src) return res(null);
-      const im = new Image();
-      im.crossOrigin = 'anonymous';
-      im.onload = () => res(im);
-      im.onerror = () => res(null);
-      im.src = src;
+    if (!src) return Promise.resolve(null);
+    if (boardImageCache.has(src)) return boardImageCache.get(src);
+    const pending = new Promise((res) => {
+      const sources = [src];
+      try {
+        const remote = new URL(src, window.location.href);
+        if (/^https?:$/.test(remote.protocol) && remote.origin !== window.location.origin) {
+          // Poster CDNs usually render fine in CSS but omit the CORS header canvas needs.
+          // wsrv returns the same public artwork with CORS enabled, so the PNG keeps its covers.
+          sources.push(`https://wsrv.nl/?url=${encodeURIComponent(remote.href)}&output=jpg&q=90`);
+        }
+      } catch {}
+      const tryNext = () => {
+        const next = sources.shift();
+        if (!next) return res(null);
+        const im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = () => res(im);
+        im.onerror = tryNext;
+        im.src = next;
+      };
+      tryNext();
     });
+    boardImageCache.set(src, pending);
+    return pending;
   }
   function roundRect(ctx, x, y, w, h, r) {
     const rr = Math.min(r, w / 2, h / 2);

@@ -80,3 +80,14 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 1. Rápidas primero (bajo riesgo): #1, #4, #9, #11, #6, #10, #7.
 2. Medias: #5, #2 (sin el screenshot), #3 (bug + buscador + póster, sin notis).
 3. Grandes/decisión: #8 (cuenta/perfil), #3 (notis), #2 (screenshot). Confirmar decisiones antes.
+
+---
+
+# Correcciones PWM + PRB — lote 4
+
+## 12. ✅ [Ambos · Perfil/Tier] Perfil 70/30 + export con portadas
+- Perfil: descripción y estadísticas compactas dentro del panel superior.
+- Debajo: últimas reseñas y mejores rankeadas en la columna principal (70%); calendario, gráficos explicados y medallas desplegables en la columna lateral (30%).
+- Adaptación móvil en una sola columna, sin desborde horizontal.
+- Tier: la imagen exportada conserva las portadas remotas y usa exactamente el nombre de la tier como título.
+- Estado: **implementado y probado localmente; pendiente de aprobación de Lucas y push**.
