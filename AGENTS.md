@@ -33,6 +33,6 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-24 · Codex
-- PRB profile parity (`8466cd6`) and PWM personal calendars/profile stats (`de0bf2c`) remain committed locally, awaiting approval.
-- PWM mobile profile previews now show one full row plus half of the next blurred row for reviews, best-ranked titles and Watchlist; top and inline expansion controls stay synchronized. Desktop behavior is unchanged.
-- Verified at 390×844 and 1280×720 without Supabase writes. Assets v24; PWM 1.12 / PRB 1.12. Current batch awaits Lucas approval before push.
+- PRB profile parity, PWM personal calendars/profile stats and mobile profile previews remain committed locally in `8466cd6`, `de0bf2c` and `05a1738`, awaiting approval.
+- PWM Watchlist now defaults to the active user's list on route entry. The picker orders Todos first, then every account (including empty lists), and guests default to Todos.
+- Verified locally as Bian: default Bian, switch to Todos/Luke, leave and re-enter resets to Bian. No Supabase writes. Assets v25; PWM 1.13 / PRB 1.13. Current batch awaits Lucas approval before push.

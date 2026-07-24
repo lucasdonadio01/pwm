@@ -149,3 +149,9 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Los calendarios compartidos usan invitación pendiente: la otra persona no obtiene acceso hasta aceptar desde Notificaciones. PRB también reconoce estas notificaciones y abre PWM.
 - Los eventos existentes de `cal-main` no se mueven ni se borran; quedan accesibles para sus participantes como **Calendario anterior**.
 - Estado: **✅ implementado y verificado localmente en PC y mobile, sin escribir datos de prueba en Supabase; pendiente de aprobación de Lucas para publicar**.
+
+## 20. ✅ [PWM · Watchlist] Lista propia como filtro inicial
+- Al entrar en Watchlist se muestra por defecto la lista del usuario activo.
+- El selector mantiene **Todos** como primera opción y después permite elegir cualquier usuario, incluso si todavía no tiene títulos.
+- Al salir y volver a entrar en Watchlist se recupera nuevamente la lista propia; el modo Invitado empieza en **Todos**.
+- Estado: **✅ implementado localmente; pendiente de aprobación de Lucas para publicar**.

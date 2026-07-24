@@ -458,6 +458,7 @@
   /* ============================================================= ROUTING */
   function setRoute(r, options = {}) {
     K.motion.run(() => {
+      if (r === 'watchlist' && route !== 'watchlist') wlOwner = defaultWatchlistOwner();
       route = r;
       profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
       updateNavActive();
@@ -1004,16 +1005,20 @@
   let wlQuery = '';
   let watchlistView = 'list';   // 'list' | 'grid'
   let wlOwner = 'all';          // 'all' | <user id> — 'both' films always show
-  /** Who can own a watchlist entry: the users that actually appear as owners, in user order. */
+  function defaultWatchlistOwner() {
+    const user = currentUser();
+    return user && !user.guest ? user.id : 'all';
+  }
+  /** Every account stays selectable, even when its watchlist is empty. */
   function watchlistOwners() {
-    const present = new Set(watchlistFilms().flatMap(ownersOf));
-    return Object.values(users).filter((u) => present.has(u.id));
+    return Object.values(users);
   }
   function ownerFilterHTML() {
     const owners = watchlistOwners();
-    if (owners.length < 2) return '';
+    if (!owners.length) return '';
+    if (wlOwner !== 'all' && !owners.some((u) => u.id === wlOwner)) wlOwner = defaultWatchlistOwner();
     return `<div class="genrebar ownerbar" id="wl-owner">` +
-      `<button class="genre${wlOwner === 'all' ? ' is-on' : ''}" data-own="all">Todas</button>` +
+      `<button class="genre${wlOwner === 'all' ? ' is-on' : ''}" data-own="all">Todos</button>` +
       owners.map((u) => `<button class="genre${wlOwner === u.id ? ' is-on' : ''}" data-own="${u.id}" style="--c:${u.color}">${escapeHtml(u.name)}</button>`).join('') +
       `</div>`;
   }
