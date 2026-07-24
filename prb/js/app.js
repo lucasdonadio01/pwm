@@ -1328,10 +1328,12 @@
     const editingReview = canEditReview && options.editing === true;
     const editorVisible = !reviewMode || editingReview;
     const me = verdictOf(b.id, u.id);
+    const meGif = store.getReviewGif(b.id, u.id);
     const selected = verdictOf(b.id, reviewOwner.id);
+    const selectedGif = store.getReviewGif(b.id, reviewOwner.id);
     const excludedUserId = reviewMode ? reviewOwner.id : u.id;
     const others = Object.values(users).filter((x) => x.id !== excludedUserId).map((x) => ({ u: x, e: verdictOf(b.id, x.id) }))
-      .filter(({ e }) => typeof e.rating === 'number' || e.review || e.liked);
+      .filter(({ u: ou, e }) => typeof e.rating === 'number' || e.review || e.liked || store.getReviewGif(b.id, ou.id));
     const readonlyReview =
       `<div class="rate-box rate-box--review"><div class="rate-box__head review-focus__head">${avatarHTML(reviewOwner)}` +
       `<span class="rate-box__you">Reseña de ${profileLink(reviewOwner.id, reviewOwner.name)}</span>` +
@@ -1340,7 +1342,8 @@
       (typeof selected.rating === 'number' ? `${starsMarkup(selected.rating, 'md')}<span class="stars-value">${selected.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
       (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
       `</div>` +
-      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`) +
+      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : (selectedGif ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`)) +
+      (selectedGif ? `<img class="review-focus__gif" src="${escapeHtml(selectedGif)}" alt="GIF de la reseña" loading="lazy">` : '') +
       readingLine(b, reviewOwner.id) + reviewLikeHTML(b, reviewOwner, u) + `</div>`;
     const editor =
       `<div class="rate-box${editingReview ? ' rate-box--editing' : ''}><div class="rate-box__head">${avatarHTML(u)}` +
@@ -1348,7 +1351,9 @@
       `<div class="rate-box__row"><div class="rate-box__stars" id="rate-stars"></div><button class="rate-clear" id="rate-clear" ${typeof me.rating === 'number' ? '' : 'hidden'}>borrar</button></div>` +
       readingBlockHTML(b, u) +
       `<div class="review-field"><label for="review">Tu reseña</label><textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
+      (meGif ? `<div class="review-gif"><img src="${escapeHtml(meGif)}" alt="GIF de tu reseña"><button type="button" class="review-gif__x" id="review-gif-remove" aria-label="Quitar GIF">${icon('close')}</button></div>` : '') +
       `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} ${editingReview ? 'Guardar cambios' : 'Guardar reseña'}</button>` +
+      `<button type="button" class="btn btn--soft" id="review-gif-btn">${icon('gif_box')} ${meGif ? 'Cambiar GIF' : 'GIF'}</button>` +
       (editingReview ? `<button class="btn btn--soft" id="cancel-review">Cancelar</button>` : '') +
       `<button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button>` +
       `<span class="saved-flag" id="saved-flag">guardado ✓</span></div></div></div>`;
@@ -1365,7 +1370,7 @@
         others.map(({ u: ou, e }) => `<div class="verdict">${avatarHTML(ou, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(ou.id, ou.name, 'verdict__name')}` +
           (typeof e.rating === 'number' ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
           (e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
-          `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${readingLine(b, ou.id)}</div></div>`).join('') +
+          `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${store.getReviewGif(b.id, ou.id) ? `<img class="verdict__gif" src="${escapeHtml(store.getReviewGif(b.id, ou.id))}" alt="GIF" loading="lazy" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">` : ''}${readingLine(b, ou.id)}</div></div>`).join('') +
         `</div>` : '') +
       `</div></div>`;
     if (editorVisible) {
@@ -1382,6 +1387,15 @@
         const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600);
       });
       if (!editingReview) $('#review', sheet).addEventListener('blur', (e) => { if (!isGuest()) store.setReview(b.id, u.id, e.target.value.trim()); });
+      const reopen = () => openSheet(b, editingReview ? { mode: 'review', reviewUserId: u.id, editing: true } : {});
+      const gifBtn = $('#review-gif-btn', sheet);
+      if (gifBtn) gifBtn.addEventListener('click', () => {
+        if (guestBlock()) return;
+        const rv = $('#review', sheet); if (rv) store.setReview(b.id, u.id, rv.value.trim());
+        K.pickGif((url) => { store.setReviewGif(b.id, u.id, url); reopen(); });
+      });
+      const gifRm = $('#review-gif-remove', sheet);
+      if (gifRm) gifRm.addEventListener('click', () => { if (guestBlock()) return; store.setReviewGif(b.id, u.id, null); reopen(); });
       $('#sheet-like', sheet).addEventListener('click', (e) => toggleLike(b, e.currentTarget, true));
       const cancel = $('#cancel-review', sheet);
       if (cancel) cancel.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id }));

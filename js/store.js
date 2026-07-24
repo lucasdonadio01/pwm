@@ -214,6 +214,15 @@ WM.store = (function () {
       settings.watchmeta = all; saveLocal(); notify(); pushSetting('watchmeta');
     },
 
+    // A GIF attached to a written review (external URL). Synced via the 'reviewgif' blob.
+    getReviewGif(filmId, userId) { return (settings.reviewgif && settings.reviewgif[filmId] && settings.reviewgif[filmId][userId]) || null; },
+    setReviewGif(filmId, userId, url) {
+      const all = settings.reviewgif || (settings.reviewgif = {});
+      all[filmId] = all[filmId] || {};
+      if (url) all[filmId][userId] = url; else delete all[filmId][userId];
+      settings.reviewgif = all; saveLocal(); notify(); pushSetting('reviewgif');
+    },
+
     // Likes on a specific user's written review (separate from liking the film itself).
     getReviewLikes(filmId, reviewUserId) {
       const row = (settings.reviewlikes && settings.reviewlikes[filmId] && settings.reviewlikes[filmId][reviewUserId]) || {};

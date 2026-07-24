@@ -1,6 +1,6 @@
 # AGENTS.md — read me before touching anything
 
-This repo is worked on by several assistants (Claude Code, ChatGPT/cowork) plus **Lucas**, the owner.
+This repo is worked on by several assistants (Claude Code, ChatGPT/cowork, Gemini 3.6 Flash) plus **Lucas**, the owner.
 **Keep this file short.** It's read every session — if it grows, it costs everyone tokens.
 These docs are in English for token efficiency. **This changes nothing about the app: all UI text stays in Rioplatense Spanish.** Lucas speaks Spanish — talk to him in Spanish.
 

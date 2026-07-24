@@ -3,7 +3,7 @@
 window.PRB = window.PRB || {};
 // GIF search keys (shared avatar/background picker in APPKIT). Keep in sync with WM.keys in js/config.js.
 // giphy: developers.giphy.com → Create App. tenor: Google Cloud → enable "Tenor API". Empty = Wikimedia fallback.
-PRB.keys = { giphy: '', tenor: '' };
+PRB.keys = { giphy: 'KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr', tenor: '' };
 PRB.supabase = {
   url: 'https://kcqrcyxzuskgnxnplbxb.supabase.co',
   key: 'sb_publishable_SGd6YSFMKYd_8t_uaXm-sQ_AXvawyJX',

@@ -649,6 +649,13 @@ a { color: inherit; text-decoration: none; }
 .review-field textarea::placeholder { color: var(--ink-faint); }
 .review-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .review-actions { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 0.8rem; }
+/* GIF attached to a review */
+.review-gif { position: relative; width: fit-content; max-width: 100%; margin-top: 0.7rem; }
+.review-gif img { display: block; max-width: min(260px, 100%); max-height: 200px; border-radius: 12px; border: 1px solid var(--hairline-2); }
+.review-gif__x { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); }
+.review-gif__x:hover { background: rgba(0,0,0,.85); }
+.review-focus__gif { display: block; max-width: min(320px, 100%); max-height: 240px; margin-top: 0.7rem; border-radius: 12px; border: 1px solid var(--hairline-2); }
+.verdict__gif { display: block; max-width: 160px; max-height: 110px; margin-top: 0.35rem; border-radius: 10px; border: 1px solid var(--hairline); cursor: pointer; }
 .saved-flag { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--lime); opacity: 0; transition: opacity 0.3s; }
 .saved-flag.show { opacity: 1; }
 

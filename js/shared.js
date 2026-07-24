@@ -442,8 +442,12 @@ window.APPKIT = (function () {
     });
     inp.click();
   }
-  // Avatar picker: upload a file (image → crop, gif → as-is) OR search Giphy/Tenor and pick one.
-  function pickPhoto(onReady) {
+  // Media picker: search Giphy/Tenor and pick a GIF, optionally with a "Subir" file button.
+  // pickPhoto = avatar (upload + search); pickGif = search only (for reviews).
+  function pickPhoto(onReady) { openMediaPicker(onReady, { title: 'Foto de perfil', upload: true, uploadLabel: 'Subir foto o GIF', hint: 'Buscá un GIF en Giphy y Tenor, o subí tu foto.' }); }
+  function pickGif(onReady) { openMediaPicker(onReady, { title: 'Elegí un GIF', upload: false, hint: 'Buscá un GIF en Giphy y Tenor para tu reseña.' }); }
+  function openMediaPicker(onReady, opts) {
+    opts = opts || {};
     let el = document.getElementById('avatar-picker');
     if (!el) { el = document.createElement('div'); el.id = 'avatar-picker'; el.className = 'avatarpick'; document.body.appendChild(el); }
     let results = [], cursor = null, activeQuery = '';
@@ -451,17 +455,17 @@ window.APPKIT = (function () {
     const close = () => { el.hidden = true; el.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onKey); };
     el.innerHTML =
       `<div class="avatarpick__scrim" data-ap-close></div>` +
-      `<div class="avatarpick__panel" role="dialog" aria-modal="true" aria-label="Elegí tu foto">` +
-      `<div class="avatarpick__head"><h3>Foto de perfil</h3><button class="icon-btn" data-ap-close aria-label="Cerrar">${icon('close')}</button></div>` +
-      `<button class="btn btn--soft avatarpick__upload" id="ap-upload">${icon('upload')} Subir foto o GIF</button>` +
+      `<div class="avatarpick__panel" role="dialog" aria-modal="true" aria-label="${esc(opts.title || 'Elegí un GIF')}">` +
+      `<div class="avatarpick__head"><h3>${esc(opts.title || 'Elegí un GIF')}</h3><button class="icon-btn" data-ap-close aria-label="Cerrar">${icon('close')}</button></div>` +
+      (opts.upload ? `<button class="btn btn--soft avatarpick__upload" id="ap-upload">${icon('upload')} ${esc(opts.uploadLabel || 'Subir')}</button>` : '') +
       `<div class="profile-gif-search"><label class="search"><span class="material-symbols-rounded">search</span><input id="ap-query" type="search" maxlength="60" placeholder="Buscar GIFs: gato, feliz, anime…"></label>` +
       `<button class="btn btn--soft" id="ap-search">${icon('gif_box')} Buscar</button></div>` +
-      `<div class="profile-gif-results avatarpick__results" id="ap-results"><p>Buscá un GIF en Giphy y Tenor, o subí tu foto.</p></div>` +
+      `<div class="profile-gif-results avatarpick__results" id="ap-results"><p>${esc(opts.hint || 'Buscá un GIF en Giphy y Tenor.')}</p></div>` +
       `<button class="btn btn--soft btn--xs profile-gif-more" id="ap-more" hidden>${icon('expand_more')} Ver más GIFs</button>` +
       `</div>`;
     el.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onKey);
     el.querySelectorAll('[data-ap-close]').forEach((b) => b.addEventListener('click', close));
-    el.querySelector('#ap-upload').addEventListener('click', () => chooseAvatarFile((data) => { close(); onReady(data); }));
+    const up = el.querySelector('#ap-upload'); if (up) up.addEventListener('click', () => chooseAvatarFile((data) => { close(); onReady(data); }));
     const host = el.querySelector('#ap-results'), more = el.querySelector('#ap-more');
     const draw = (busy, message) => {
       more.hidden = true;
@@ -1118,7 +1122,7 @@ window.APPKIT = (function () {
     motion,
     rampAt, autoColor, tierRows, normalizeRows, newRowId, openRowEditor,
     accounts, activity, sha256, pinPad, DEFAULT_PIN,
-    pickPhoto, pickBackground, openCropper, profileBackground, MAX_UPLOAD, MAX_GIF_UPLOAD,
+    pickPhoto, pickGif, pickBackground, openCropper, profileBackground, MAX_UPLOAD, MAX_GIF_UPLOAD,
     renderBoardImage, shareBoardImage, openShareBoard,
   };
 })();

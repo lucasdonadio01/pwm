@@ -220,6 +220,14 @@ PRB.store = (function () {
     },
 
     // Likes on a specific user's written review (separate from liking the book itself).
+    // A GIF attached to a written review (external URL). Synced via the 'reviewgif' blob.
+    getReviewGif(bookId, userId) { return (settings.reviewgif && settings.reviewgif[bookId] && settings.reviewgif[bookId][userId]) || null; },
+    setReviewGif(bookId, userId, url) {
+      const all = settings.reviewgif || (settings.reviewgif = {});
+      all[bookId] = all[bookId] || {};
+      if (url) all[bookId][userId] = url; else delete all[bookId][userId];
+      settings.reviewgif = all; saveLocal(); notify(); pushSetting('reviewgif');
+    },
     getReviewLikes(bookId, reviewUserId) {
       const row = (settings.reviewlikes && settings.reviewlikes[bookId] && settings.reviewlikes[bookId][reviewUserId]) || {};
       return JSON.parse(JSON.stringify(row));
