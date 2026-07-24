@@ -126,3 +126,8 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Perfil: la búsqueda de GIF permite cargar y scrollear más resultados. Los fondos GIF se renderizan como imagen animada tanto en portada como en toda la vista.
 - PWM: **Mejor rankeadas** y **Watchlist** crecen hacia abajo en una grilla responsive, sin carrusel lateral.
 - Estado: **✅ implementado y verificado localmente; pendiente de aprobación de Lucas para publicar**.
+
+## 17. ✅ [Ambos · Cuentas/Notificaciones] Aviso de usuario nuevo
+- Al crear un perfil desde PWM o PRB se genera una sola actividad compartida para todos los usuarios que ya existían.
+- El aviso dice **“¡[usuario] se ha unido!”**, no se envía al propio usuario nuevo y al tocarlo abre su perfil.
+- Estado: **✅ implementado y verificado sin crear cuentas reales; pendiente de aprobación de Lucas para publicar**.

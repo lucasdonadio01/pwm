@@ -238,7 +238,7 @@ window.APPKIT = (function () {
       return out;
     },
     guest: () => ({ ...GUEST }),
-    async create(store, { name, color, lb, photo, pin }) {
+    async create(store, { name, color, lb, photo, pin, notifyTargets = [] }) {
       const base = (name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user';
       const acc = store.getAccounts();
       let id = base, n = 2;
@@ -249,6 +249,16 @@ window.APPKIT = (function () {
         lb: (lb || '').trim(), pass: await sha256(id + ':' + (pin || DEFAULT_PIN)), createdAt: new Date().toISOString(), custom: true,
       };
       store.saveAccounts(acc);
+      const targets = [...new Set(notifyTargets)].filter((uid) => uid && uid !== id && uid !== 'guest');
+      if (targets.length) activity.push(store, {
+        id: `user-joined:${id}`,
+        type: 'user_joined',
+        app: 'shared',
+        actor: id,
+        actorName: acc[id].name,
+        targets,
+        createdAt: acc[id].createdAt,
+      });
       return acc[id];
     },
     patch(store, id, patch) {

@@ -33,7 +33,7 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-24 · Codex
-- Fixed PWM Relámpago for 320–390px mobile viewports and linked profile calendar days to the regular calendar.
-- Added progressive latest reviews and interactive rating breakdowns to PWM/PRB; PWM profile poster lists now expand vertically.
-- GIF search now paginates inside a scrollable picker; profile GIF backgrounds use real animated image layers in banner/full modes.
-- Browser-tested both apps without saving user data. Assets v20; PWM 1.9 / PRB 1.8. Commit created; waiting for Lucas approval before push.
+- New accounts now create one shared `user_joined` activity targeted at all pre-existing users, excluding the new account and guests.
+- PWM and PRB show “¡[usuario] se ha unido!” in notifications; opening it navigates to the new public profile.
+- Verified with an isolated in-memory store; no Supabase accounts or activity were created. Assets v21; PWM 1.10 / PRB 1.9.
+- Local branch also contains the previous unpushed mobile/profile batch. Waiting for Lucas approval before push.

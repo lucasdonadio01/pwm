@@ -219,7 +219,7 @@
         if (!name) { el.querySelector('#su-name').focus(); K.toast('Poné un nombre.', 'bad'); return; }
         el.hidden = true;
         choosePin(name, color, photo, async (pin) => {
-          const acc = await K.accounts.create(store, { name, color, lb, photo, pin });
+          const acc = await K.accounts.create(store, { name, color, lb, photo, pin, notifyTargets: Object.keys(users) });
           refreshUsers();
           K.toast(`¡Listo, ${K.esc(acc.name)}! Tu usuario ya está.`);
           if (onDone) onDone(acc); else enterAs(acc.id);
@@ -260,7 +260,7 @@
   let profileNavigationWired = false;
 
   function activityCopy(item) {
-    const actor = users[item.actor] || { name: 'Alguien' };
+    const actor = users[item.actor] || { name: item.actorName || 'Alguien' };
     if (item.type === 'review_like') return {
       icon: 'favorite',
       title: `${actor.name} le dio me gusta a tu reseña`,
@@ -281,6 +281,11 @@
       title: `${actor.name} confirmó que va`,
       detail: [item.title, item.iso ? fmtDay(item.iso) : ''].filter(Boolean).join(' · '),
     };
+    if (item.type === 'user_joined') return {
+      icon: 'waving_hand',
+      title: `¡${actor.name} se ha unido!`,
+      detail: 'Ya podés visitar su perfil y conocer sus gustos.',
+    };
     return { icon: 'notifications', title: 'Tenés una novedad', detail: item.title || '' };
   }
 
@@ -292,6 +297,10 @@
 
   function openActivityItem(item) {
     closeNotifications();
+    if (item.type === 'user_joined') {
+      goToProfile(item.actor);
+      return;
+    }
     if (item.type === 'calendar_invite' || item.type === 'calendar_accept') {
       calBoardId = item.calId || 'cal-main';
       if (item.iso) {
