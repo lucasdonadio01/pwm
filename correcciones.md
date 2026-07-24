@@ -137,7 +137,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - En PC, reseñas y libros rankeados ocupan la columna principal del 70%; calendario, gráficos y medallas quedan ordenados en una columna lateral del 30%.
 - Las tarjetas de estadísticas recuperaron jerarquía, espaciado, foco de teclado y animación al desplegarse.
 - En mobile, el perfil vuelve a una sola columna, las estadísticas se agrupan de a dos y los libros no generan desborde horizontal.
-- Estado: **✅ implementado y verificado localmente en PC y mobile; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
 
 ## 19. ✅ [PWM · Perfil/Calendario] Estadísticas persistentes + rankeadas + calendarios personales
 - Perfil: **Cómo puntuás** aparece antes de **Últimos 12 meses**. Cómo puntuás, Últimos 12 meses, Tus géneros y Medallas nacen desplegados.
@@ -148,15 +148,15 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Cada usuario recibe un **Mi calendario** personal. Las funciones nuevas se guardan ahí y las funciones ajenas aparecen solamente después de aceptar su invitación.
 - Los calendarios compartidos usan invitación pendiente: la otra persona no obtiene acceso hasta aceptar desde Notificaciones. PRB también reconoce estas notificaciones y abre PWM.
 - Los eventos existentes de `cal-main` no se mueven ni se borran; quedan accesibles para sus participantes como **Calendario anterior**.
-- Estado: **✅ implementado y verificado localmente en PC y mobile, sin escribir datos de prueba en Supabase; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
 
 ## 20. ✅ [PWM · Watchlist] Lista propia como filtro inicial
 - Al entrar en Watchlist se muestra por defecto la lista del usuario activo.
 - El selector mantiene **Todos** como primera opción y después permite elegir cualquier usuario, incluso si todavía no tiene títulos.
 - Al salir y volver a entrar en Watchlist se recupera nuevamente la lista propia; el modo Invitado empieza en **Todos**.
-- Estado: **✅ implementado localmente; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
 
 ## 21. ✅ [PWM · Modo relámpago] Portadas centradas en mobile
 - Las portadas permanecen centradas aunque el título o los metadatos ocupen más ancho que la imagen.
 - La corrección aplica a todos los tamaños sin cambiar las dimensiones ni el recorte de la portada.
-- Estado: **✅ implementado localmente; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.

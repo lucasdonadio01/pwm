@@ -33,6 +33,6 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-24 · Codex
-- Four prior corrections remain committed locally through `51e536a`, awaiting approval.
-- PWM Modo relámpago now centers its poster independently of title/meta width, fixing the left shift caused by long titles on mobile.
-- Verified across 12 short/long titles at 390×844 and at 320×568: poster/card center delta is 0 px, with no viewport overflow or Supabase writes. Assets v26; PWM 1.14 / PRB 1.14. Current batch awaits Lucas approval before push.
+- Lucas approved and published items 18–21: PRB desktop profile parity; PWM personal/shared calendars and persistent profile stats; compact mobile profile previews; own-user Watchlist default; centered Modo relámpago posters.
+- Final responsive verification covered 1280×720, 390×844 and 320×568 without Supabase test writes. Assets v26; PWM 1.14 / PRB 1.14.
+- Working tree is expected clean and synchronized with `origin/main`.
