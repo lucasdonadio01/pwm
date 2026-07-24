@@ -32,8 +32,8 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-23 · Codex
-- Added shared profile backgrounds: color, contrast, upload or free Wikimedia GIF search, with banner/full-profile scope in PWM and PRB.
-- PWM profiles now show that user's Watchlist; both apps expand all reviews and top-rated items.
-- Added shared View Transition/Web Animation/CSS motion for routes, filters and list-grid swaps; refined overlays and profile details with reduced-motion support.
-- Browser-tested PWM/PRB, GIF search, profile lists and motion; no test account data was saved. Assets v19; PWM 1.8 / PRB 1.7. Lucas approved the batch for publication.
+### 2026-07-24 · Codex
+- Fixed PWM Relámpago for 320–390px mobile viewports and linked profile calendar days to the regular calendar.
+- Added progressive latest reviews and interactive rating breakdowns to PWM/PRB; PWM profile poster lists now expand vertically.
+- GIF search now paginates inside a scrollable picker; profile GIF backgrounds use real animated image layers in banner/full modes.
+- Browser-tested both apps without saving user data. Assets v20; PWM 1.9 / PRB 1.8. Commit created; waiting for Lucas approval before push.

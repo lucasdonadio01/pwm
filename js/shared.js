@@ -556,7 +556,6 @@ window.APPKIT = (function () {
     function setVars(element, state) {
       if (!element) return;
       element.style.setProperty('--profile-bg-color', state.color);
-      element.style.setProperty('--profile-bg-image', state.image ? `url("${state.image.replace(/["\\]/g, '\\$&')}")` : 'none');
       element.style.setProperty('--profile-bg-shade', String(state.shade / 100));
     }
 
@@ -567,18 +566,28 @@ window.APPKIT = (function () {
       hero.classList.add('phero--personalized');
       setVars(section, state);
       setVars(hero, state);
+      if (state.image) {
+        const target = state.mode === 'full' ? section : hero;
+        const media = document.createElement('img');
+        media.className = `profile-bg-media profile-bg-media--${state.mode}`;
+        media.src = state.image;
+        media.alt = '';
+        media.setAttribute('aria-hidden', 'true');
+        target.prepend(media);
+      }
       return state;
     }
 
-    async function search(query) {
+    async function search(query, offset = 0) {
       const q = String(query || '').trim().slice(0, 50);
-      if (!q) return [];
+      if (!q) return { items: [], nextOffset: null };
       const params = new URLSearchParams({
         action: 'query',
         generator: 'search',
         gsrnamespace: '6',
         gsrsearch: `${q} filemime:image/gif`,
-        gsrlimit: '12',
+        gsrlimit: '16',
+        gsroffset: String(Math.max(0, Number(offset) || 0)),
         prop: 'imageinfo',
         iiprop: 'url|mime|size',
         iiurlwidth: '640',
@@ -588,7 +597,7 @@ window.APPKIT = (function () {
       const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
       if (!response.ok) throw new Error('gif-search');
       const payload = await response.json();
-      return Object.values((payload.query && payload.query.pages) || {})
+      const items = Object.values((payload.query && payload.query.pages) || {})
         .map((page) => {
           const info = page.imageinfo && page.imageinfo[0];
           return info && info.mime === 'image/gif' ? {
@@ -600,13 +609,21 @@ window.APPKIT = (function () {
           } : null;
         })
         .filter((item) => item && item.url)
-        .slice(0, 8);
+        .slice(0, 12);
+      return {
+        items,
+        nextOffset: payload.continue && Number.isFinite(Number(payload.continue.gsroffset))
+          ? Number(payload.continue.gsroffset)
+          : null,
+      };
     }
 
     function open(store, userId, options = {}) {
       const account = store.getAccounts()[userId] || {};
       const state = read(account, options.color);
       let results = [];
+      let searchOffset = null;
+      let activeQuery = '';
       let el = document.getElementById('profile-customizer');
       if (!el) {
         el = document.createElement('div');
@@ -619,7 +636,7 @@ window.APPKIT = (function () {
         `<div class="profile-customizer__panel" role="dialog" aria-modal="true" aria-labelledby="pb-title">` +
         `<div class="profile-customizer__head"><div><h3 id="pb-title">Personalizá tu perfil</h3><p>Elegí dónde vive el fondo y hacelo bien tuyo.</p></div>` +
         `<button class="icon-btn" data-pb-close aria-label="Cerrar">${icon('close')}</button></div>` +
-        `<div class="profile-bg-preview" id="pb-preview"><span>Vista previa</span></div>` +
+        `<div class="profile-bg-preview" id="pb-preview"><img class="profile-bg-preview__media" id="pb-preview-media" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" aria-hidden="true" hidden><span>Vista previa</span></div>` +
         `<div class="profile-customizer__grid">` +
         `<section class="profile-customizer__group"><h4>Alcance</h4><div class="profile-bg-modes" role="group" aria-label="Dónde aplicar el fondo">` +
         `<button class="profile-bg-mode" data-pb-mode="banner">${icon('panorama')}<span><b>Solo portada</b><small>Arriba, junto a tu descripción.</small></span></button>` +
@@ -635,6 +652,7 @@ window.APPKIT = (function () {
         `<div class="profile-gif-search"><label class="search"><span class="material-symbols-rounded">search</span><input id="pb-query" type="search" maxlength="50" placeholder="Buscar GIFs: cine, galaxia, lluvia…"></label>` +
         `<button class="btn btn--soft" id="pb-search">${icon('gif_box')} Buscar</button></div>` +
         `<div class="profile-gif-results" id="pb-results"><p>Buscá un GIF libre en Wikimedia Commons o subí el tuyo.</p></div>` +
+        `<button class="btn btn--soft btn--xs profile-gif-more" id="pb-more" hidden>${icon('expand_more')} Ver más GIFs</button>` +
         `</section></div>` +
         `<div class="profile-customizer__actions"><button class="btn btn--soft" data-pb-close>Cancelar</button>` +
         `<button class="btn btn--accent" id="pb-save">${icon('check')} Guardar fondo</button></div></div>`;
@@ -655,6 +673,14 @@ window.APPKIT = (function () {
 
       const refresh = () => {
         setVars(preview, state);
+        const media = el.querySelector('#pb-preview-media');
+        if (state.image) {
+          if (media.src !== state.image) media.src = state.image;
+          media.hidden = false;
+        } else {
+          media.hidden = true;
+          media.removeAttribute('src');
+        }
         preview.classList.toggle('is-full', state.mode === 'full');
         preview.classList.toggle('has-image', !!state.image);
         el.querySelectorAll('[data-pb-mode]').forEach((button) => button.classList.toggle('is-on', button.dataset.pbMode === state.mode));
@@ -687,9 +713,16 @@ window.APPKIT = (function () {
         refresh();
       });
 
-      const drawResults = (busy, message) => {
+      const drawResults = (busy, message, append = false) => {
         const host = el.querySelector('#pb-results');
-        if (busy) { host.innerHTML = `<p>${icon('hourglass_top')} Buscando GIFs…</p>`; return; }
+        const more = el.querySelector('#pb-more');
+        more.hidden = true;
+        if (busy) {
+          if (!append) host.innerHTML = `<p>${icon('hourglass_top')} Buscando GIFs…</p>`;
+          host.setAttribute('aria-busy', 'true');
+          return;
+        }
+        host.removeAttribute('aria-busy');
         if (message) { host.innerHTML = `<p>${esc(message)}</p>`; return; }
         host.innerHTML = results.map((item, index) =>
           `<button class="profile-gif-result" data-pb-gif="${index}" title="${esc(item.title)}">` +
@@ -702,21 +735,32 @@ window.APPKIT = (function () {
           host.querySelectorAll('.profile-gif-result').forEach((node) => node.classList.toggle('is-on', node === button));
           refresh();
         }));
+        more.hidden = searchOffset == null;
       };
-      const runSearch = async () => {
+      const runSearch = async (append = false) => {
         const query = el.querySelector('#pb-query').value.trim();
         if (!query) { el.querySelector('#pb-query').focus(); return; }
-        drawResults(true);
+        if (!append || query !== activeQuery) {
+          activeQuery = query;
+          searchOffset = 0;
+          results = [];
+        }
+        drawResults(true, '', append);
         try {
-          results = await search(query);
+          const page = await search(query, searchOffset || 0);
+          const seen = new Set(results.map((item) => item.url));
+          results = results.concat(page.items.filter((item) => !seen.has(item.url)));
+          searchOffset = page.nextOffset;
           drawResults(false, results.length ? '' : 'No encontré GIFs con esa búsqueda. Probá con otra palabra.');
+          if (append) el.querySelector('#pb-results').scrollTo({ top: el.querySelector('#pb-results').scrollHeight, behavior: 'smooth' });
         } catch {
           drawResults(false, 'No pude buscar ahora. Igual podés subir un GIF o pegar un enlace.');
         }
       };
-      el.querySelector('#pb-search').addEventListener('click', runSearch);
+      el.querySelector('#pb-search').addEventListener('click', () => runSearch(false));
+      el.querySelector('#pb-more').addEventListener('click', () => runSearch(true));
       el.querySelector('#pb-query').addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') { event.preventDefault(); runSearch(); }
+        if (event.key === 'Enter') { event.preventDefault(); runSearch(false); }
       });
       el.querySelector('#pb-save').addEventListener('click', () => {
         accounts.patch(store, userId, {

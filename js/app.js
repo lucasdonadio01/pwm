@@ -495,6 +495,7 @@
     app.appendChild(buildRecommender());
     app.appendChild(buildSecretCTA());
     app.appendChild(buildWatched());
+    app.appendChild(buildLatestReviews());
     app.appendChild(buildFooter());
     startHero();
   }
@@ -754,6 +755,63 @@
       const t = store.get(id, u.id).updatedAt;
       return t ? Math.max(mx, Date.parse(t)) : mx;
     }, 0);
+  }
+
+  function latestReviews() {
+    const out = [];
+    Object.values(users).forEach((u) => movies.forEach((f) => {
+      const v = verdictOf(f.id, u.id);
+      if (!(v.review || '').trim()) return;
+      const watchedAt = watchMetaOf(f.id, u.id).date || '';
+      const updatedAt = store.get(f.id, u.id).updatedAt || '';
+      const timestamp = Date.parse(watchedAt ? `${watchedAt}T23:59:59` : updatedAt) || 0;
+      out.push({ f, u, v, watchedAt, timestamp });
+    }));
+    return out.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  function buildLatestReviews() {
+    const section = document.createElement('section');
+    section.className = 'section home-reviews';
+    section.innerHTML =
+      `<div class="section__head"><div><h3 class="section__title"><span class="accentbar">/</span> Últimas reseñas</h3>` +
+      `<p class="section__sub">Lo último que estuvieron viendo y comentando.</p></div></div>` +
+      `<div class="home-reviews__grid"></div><div class="home-reviews__more"></div>`;
+    const reviews = latestReviews();
+    const grid = section.querySelector('.home-reviews__grid');
+    const more = section.querySelector('.home-reviews__more');
+    let visible = 4;
+    const draw = () => {
+      grid.innerHTML = '';
+      if (!reviews.length) {
+        grid.innerHTML = `<div class="empty home-reviews__empty">${icon('rate_review')}<p>Todavía no hay reseñas para mostrar.</p></div>`;
+        more.innerHTML = '';
+        return;
+      }
+      reviews.slice(0, visible).forEach(({ f, u, v, watchedAt }) => {
+        const card = document.createElement('article');
+        card.className = 'home-review';
+        card.innerHTML =
+          `<button class="home-review__poster" data-open-review aria-label="Abrir reseña de ${escapeHtml(f.title)}" style="background:${posterArt(f)}"></button>` +
+          `<div class="home-review__body"><div class="home-review__by">${avatarHTML(u, 'avatar home-review__avatar')}` +
+          `<span>${profileLink(u.id, u.name)}<small>${watchedAt ? fmtDay(watchedAt) : 'Sin fecha cargada'}</small></span></div>` +
+          `<button class="home-review__copy" data-open-review><b>${escapeHtml(f.title)}</b>` +
+          `<span class="home-review__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<strong>${v.rating.toFixed(1)}</strong>` : ''}</span>` +
+          `<q>${escapeHtml(v.review)}</q></button></div>`;
+        card.querySelectorAll('[data-open-review]').forEach((button) => button.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id })));
+        grid.appendChild(K.motion.tag(card, `pwm-home-review-${u.id}-${f.id}`));
+      });
+      more.innerHTML = visible < reviews.length
+        ? `<button class="btn btn--soft" data-more-reviews>${icon('expand_more')} Ver más reseñas</button>`
+        : '';
+      const button = more.querySelector('[data-more-reviews]');
+      if (button) button.addEventListener('click', () => K.motion.run(() => {
+        visible = Math.min(reviews.length, visible + 4);
+        draw();
+      }, { kind: 'shared', target: grid }));
+    };
+    draw();
+    return section;
   }
 
   function watchedCard(f) {
@@ -2605,6 +2663,19 @@
   function statTile(n, label, sub) {
     return `<div class="ptile"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
   }
+  function profileCalendarDays(uid, byDay) {
+    const merged = {};
+    Object.entries(byDay).forEach(([iso, items]) => (merged[iso] = items.slice()));
+    currentCalendars().forEach((C) => {
+      if (!C.members.includes(uid)) return;
+      const dates = calEventsMap(C.id);
+      Object.entries(dates).forEach(([iso, events]) => events.forEach((ev) => {
+        const involved = ev.by === uid || eventInvitees(C, ev).includes(uid) || !!(ev.accepted || {})[uid];
+        if (involved) (merged[iso] = merged[iso] || []).push({ calendar: C.id, event: ev.id });
+      }));
+    });
+    return merged;
+  }
   function miniCalendar(byDay, color) {
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
@@ -2616,7 +2687,8 @@
       const iso = isoDate(y, m, d);
       const n = (byDay[iso] || []).length;
       const today = d === now.getDate();
-      html += `<span class="pmc__d${n ? ' is-on' : ''}${today ? ' is-today' : ''}"${n ? ` style="--c:${color}" title="${n} el ${d}"` : ''}>${d}</span>`;
+      html += `<button class="pmc__d${n ? ' is-on' : ''}${today ? ' is-today' : ''}" data-profile-cal-date="${iso}"` +
+        ` style="--c:${color}" aria-label="${d} de ${MONTHS[m]}${n ? `, ${n} actividad${n === 1 ? '' : 'es'}` : ''}">${d}</button>`;
     }
     return `<div class="pmc"><div class="pmc__title">${MONTHS[m]} ${y}</div><div class="pmc__grid">${html}</div></div>`;
   }
@@ -2634,7 +2706,11 @@
   function distChart(dist, color) {
     const steps = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
     const max = Math.max(1, ...steps.map((s) => dist[s] || 0));
-    return `<div class="pbars pbars--dist">${steps.map((s) => `<div class="pbar" title="${dist[s] || 0} con ${s}★"><span class="pbar__fill" style="height:${Math.round(((dist[s] || 0) / max) * 100)}%;--c:${color}"></span><small>${s}</small></div>`).join('')}</div>`;
+    return `<div class="pbars pbars--dist">${steps.map((s) => {
+      const n = dist[s] || 0;
+      return `<button class="pbar pbar--interactive" data-profile-rating="${s}" ${n ? '' : 'disabled'} aria-label="${n} título${n === 1 ? '' : 's'} con ${s} estrellas">` +
+        `<span class="pbar__count">${n}</span><span class="pbar__fill" style="height:${Math.round((n / max) * 100)}%;--c:${color}"></span><small>${s}</small></button>`;
+    }).join('')}</div>`;
   }
   function genreChart(genres, color) {
     const top = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -2661,6 +2737,28 @@
     };
     button.addEventListener('click', () => K.motion.run(() => { expanded = !expanded; draw(); }, { kind: 'shared', target: host }));
     draw();
+  }
+
+  function openRatingBreakdown(uid, rating, items) {
+    const matches = items.filter((f) => verdictOf(f.id, uid).rating === rating);
+    const who = users[uid] || currentUser();
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-cancel></div><div class="confirm__card confirm__card--wide rating-breakdown">` +
+      `<div class="rating-breakdown__head"><div><div class="confirm__title">${rating} estrellas</div>` +
+      `<p class="confirm__text">${escapeHtml(who.name)} puntuó ${matches.length} ${matches.length === 1 ? 'título' : 'títulos'} así.</p></div>` +
+      `<button class="icon-btn" data-cancel aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<div class="rating-breakdown__grid">${matches.map((f) =>
+        `<button class="rating-breakdown__item" data-rating-film="${escapeHtml(f.id)}">` +
+        `<span style="background:${posterArt(f)}"></span><b>${escapeHtml(f.title)}</b><small>${f.year || ''}</small></button>`
+      ).join('')}</div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((button) => button.addEventListener('click', () => (el.hidden = true)));
+    el.querySelectorAll('[data-rating-film]').forEach((button) => button.addEventListener('click', () => {
+      const film = byId(button.dataset.ratingFilm);
+      el.hidden = true;
+      if (film) openSheet(film, { mode: verdictOf(film.id, uid).review ? 'review' : undefined, reviewUserId: uid });
+    }));
   }
 
   function renderPerfil(app, uid) {
@@ -2712,10 +2810,12 @@
 
       `<div class="profile-layout"><div class="profile-main">` +
       `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" hidden></button></div><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><button class="profile-more" id="p-best-more" hidden></button></div><div class="row" id="p-best"></div></section>` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Watchlist de ${escapeHtml(u.name)}</h3><button class="profile-more" id="p-watchlist-more" hidden></button></div><div class="row" id="p-watchlist"></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><button class="profile-more" id="p-best-more" hidden></button></div><div class="profile-poster-grid" id="p-best"></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Watchlist de ${escapeHtml(u.name)}</h3><button class="profile-more" id="p-watchlist-more" hidden></button></div><div class="profile-poster-grid" id="p-watchlist"></div></section>` +
       `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
-      `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}<p class="pdetail__explain">Los días marcados muestran cuándo viste o puntuaste algo durante el mes.</p></div>` +
+      `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(profileCalendarDays(id, s.byDay), u.color)}` +
+      `<p class="pdetail__explain">Los días marcados reúnen funciones agendadas y títulos vistos.</p>` +
+      `<button class="linklike profile-calendar__open" id="p-calendar-open">${icon('open_in_new')} Abrir calendario completo</button></div>` +
       profileDetail('bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos títulos registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
       profileDetail('star', 'Cómo puntuás', s.avg ? `${s.avg.toFixed(2)} de promedio` : 'Sin promedio', distChart(s.dist, u.color), 'Agrupa tus puntuaciones de media en media estrella para mostrar si sos más exigente o generoso al puntuar.') +
       profileDetail('category', 'Tus géneros', topGenre, genreChart(s.genres, u.color), 'Cuenta los géneros presentes en los títulos que puntuaste. Una película puede sumar en más de un género.') +
@@ -2724,6 +2824,26 @@
     app.appendChild(sec);
     app.appendChild(buildFooter());
     K.profileBackground.apply(sec, sec.querySelector('.phero'), acc, u.color);
+    const openProfileCalendar = (iso = '') => {
+      const cals = currentCalendars().filter((C) => C.members.includes(id));
+      let target = cals.find((C) => {
+        if (!iso) return false;
+        return (calEventsMap(C.id)[iso] || []).some((ev) => ev.by === id || eventInvitees(C, ev).includes(id) || !!(ev.accepted || {})[id]);
+      }) || cals.find((C) => C.id === 'cal-main') || cals[0] || currentCalendars()[0];
+      calBoardId = target.id;
+      if (iso) {
+        const date = new Date(`${iso}T00:00:00`);
+        calCursor = { y: date.getFullYear(), m: date.getMonth() };
+      }
+      setRoute('calendario');
+      if (iso) setTimeout(() => {
+        target = currentCalendars().find((C) => C.id === calBoardId) || currentCalendars()[0];
+        openCalDay(target, iso);
+      }, 60);
+    };
+    sec.querySelector('#p-calendar-open').addEventListener('click', () => openProfileCalendar());
+    sec.querySelectorAll('[data-profile-cal-date]').forEach((button) => button.addEventListener('click', () => openProfileCalendar(button.dataset.profileCalDate)));
+    sec.querySelectorAll('[data-profile-rating]').forEach((button) => button.addEventListener('click', () => openRatingBreakdown(id, Number(button.dataset.profileRating), s.ratedList)));
 
     const revs = s.reviewList
       .map((f) => ({ f, t: Date.parse(store.get(f.id, id).updatedAt || 0) || 0 }))

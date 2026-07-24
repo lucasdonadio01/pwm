@@ -430,6 +430,7 @@
     app.appendChild(buildHero());
     app.appendChild(buildRecommender());
     app.appendChild(buildRead('Leídos'));
+    app.appendChild(buildLatestReviews());
     app.appendChild(buildFooter());
     startHero();
   }
@@ -599,6 +600,63 @@
     s.querySelector('#read-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => { closeAddBook(); openSheet(b); }); });
     fill();
     return s;
+  }
+
+  function latestReviews() {
+    const out = [];
+    Object.values(users).forEach((u) => books.forEach((b) => {
+      const v = verdictOf(b.id, u.id);
+      if (!(v.review || '').trim()) return;
+      const finishedAt = store.getReading(b.id, u.id).finishedAt || '';
+      const updatedAt = store.get(b.id, u.id).updatedAt || '';
+      const timestamp = Date.parse(finishedAt ? `${finishedAt}T23:59:59` : updatedAt) || 0;
+      out.push({ b, u, v, finishedAt, timestamp });
+    }));
+    return out.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  function buildLatestReviews() {
+    const section = document.createElement('section');
+    section.className = 'section home-reviews';
+    section.innerHTML =
+      `<div class="section__head"><div><h3 class="section__title"><span class="accentbar">/</span> Últimas reseñas</h3>` +
+      `<p class="section__sub">Lo último que estuvieron leyendo y comentando.</p></div></div>` +
+      `<div class="home-reviews__grid"></div><div class="home-reviews__more"></div>`;
+    const reviews = latestReviews();
+    const grid = section.querySelector('.home-reviews__grid');
+    const more = section.querySelector('.home-reviews__more');
+    let visible = 4;
+    const draw = () => {
+      grid.innerHTML = '';
+      if (!reviews.length) {
+        grid.innerHTML = `<div class="empty home-reviews__empty">${icon('rate_review')}<p>Todavía no hay reseñas para mostrar.</p></div>`;
+        more.innerHTML = '';
+        return;
+      }
+      reviews.slice(0, visible).forEach(({ b, u, v, finishedAt }) => {
+        const card = document.createElement('article');
+        card.className = 'home-review';
+        card.innerHTML =
+          `<button class="home-review__poster" data-open-review aria-label="Abrir reseña de ${escapeHtml(b.title)}" style="background:${coverArt(b)}"></button>` +
+          `<div class="home-review__body"><div class="home-review__by">${avatarHTML(u, 'avatar home-review__avatar')}` +
+          `<span>${profileLink(u.id, u.name)}<small>${finishedAt ? fmtDate(finishedAt) : 'Sin fecha cargada'}</small></span></div>` +
+          `<button class="home-review__copy" data-open-review><b>${escapeHtml(b.title)}</b>` +
+          `<span class="home-review__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<strong>${v.rating.toFixed(1)}</strong>` : ''}</span>` +
+          `<q>${escapeHtml(v.review)}</q></button></div>`;
+        card.querySelectorAll('[data-open-review]').forEach((button) => button.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id })));
+        grid.appendChild(K.motion.tag(card, `prb-home-review-${u.id}-${b.id}`));
+      });
+      more.innerHTML = visible < reviews.length
+        ? `<button class="btn btn--soft" data-more-reviews>${icon('expand_more')} Ver más reseñas</button>`
+        : '';
+      const button = more.querySelector('[data-more-reviews]');
+      if (button) button.addEventListener('click', () => K.motion.run(() => {
+        visible = Math.min(reviews.length, visible + 4);
+        draw();
+      }, { kind: 'shared', target: grid }));
+    };
+    draw();
+    return section;
   }
   function readGridCell(b) {
     const card = document.createElement('button'); card.className = 'readcell';
@@ -1377,7 +1435,11 @@
   function distChart(dist, color) {
     const steps = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
     const max = Math.max(1, ...steps.map((s) => dist[s] || 0));
-    return `<div class="pbars pbars--dist">${steps.map((s) => `<div class="pbar" title="${dist[s] || 0} con ${s}★"><span class="pbar__fill" style="height:${Math.round(((dist[s] || 0) / max) * 100)}%;--c:${color}"></span><small>${s}</small></div>`).join('')}</div>`;
+    return `<div class="pbars pbars--dist">${steps.map((s) => {
+      const n = dist[s] || 0;
+      return `<button class="pbar pbar--interactive" data-profile-rating="${s}" ${n ? '' : 'disabled'} aria-label="${n} libro${n === 1 ? '' : 's'} con ${s} estrellas">` +
+        `<span class="pbar__count">${n}</span><span class="pbar__fill" style="height:${Math.round((n / max) * 100)}%;--c:${color}"></span><small>${s}</small></button>`;
+    }).join('')}</div>`;
   }
   function genreChart(genres, color) {
     const top = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -1412,6 +1474,27 @@
       `<small>${escapeHtml(b.author || '')}</small>${v.rating != null ? `<span>${starsMarkup(v.rating, 'sm')} <b>${v.rating.toFixed(1)}</b></span>` : ''}</span>`;
     c.addEventListener('click', () => openSheet(b));
     return c;
+  }
+  function openRatingBreakdown(uid, rating, items) {
+    const matches = items.filter((b) => verdictOf(b.id, uid).rating === rating);
+    const who = users[uid] || currentUser();
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-cancel></div><div class="confirm__card confirm__card--wide rating-breakdown">` +
+      `<div class="rating-breakdown__head"><div><div class="confirm__title">${rating} estrellas</div>` +
+      `<p class="confirm__text">${escapeHtml(who.name)} puntuó ${matches.length} ${matches.length === 1 ? 'libro' : 'libros'} así.</p></div>` +
+      `<button class="icon-btn" data-cancel aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<div class="rating-breakdown__grid">${matches.map((b) =>
+        `<button class="rating-breakdown__item" data-rating-book="${escapeHtml(b.id)}">` +
+        `<span style="background:${coverArt(b)}"></span><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.author || '')}</small></button>`
+      ).join('')}</div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((button) => button.addEventListener('click', () => (el.hidden = true)));
+    el.querySelectorAll('[data-rating-book]').forEach((button) => button.addEventListener('click', () => {
+      const book = books.find((b) => b.id === button.dataset.ratingBook);
+      el.hidden = true;
+      if (book) openSheet(book, { mode: verdictOf(book.id, uid).review ? 'review' : undefined, reviewUserId: uid });
+    }));
   }
   function renderPerfil(app, uid) {
     const me = currentUser();
@@ -1448,6 +1531,7 @@
       `</aside></div>`;
     app.appendChild(sec); app.appendChild(buildFooter());
     K.profileBackground.apply(sec, sec.querySelector('.phero'), acc, u.color);
+    sec.querySelectorAll('[data-profile-rating]').forEach((button) => button.addEventListener('click', () => openRatingBreakdown(id, Number(button.dataset.profileRating), s.ratedList)));
     const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t);
     const rw = sec.querySelector('#p-reviews');
     profileExpandable(rw, sec.querySelector('#p-reviews-more'), revs, 4, ({ b }) => {

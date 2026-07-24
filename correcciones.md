@@ -117,3 +117,12 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Rutas, filtros y cambios lista/grilla ahora mantienen continuidad visual. Se usan View Transitions cuando están disponibles y Web Animations como respaldo, con soporte para `prefers-reduced-motion`.
 - Los overlays rutinarios ya no aparecen desde escalas exageradas y las estadísticas desplegables del perfil tienen una apertura breve y legible.
 - Estado: **✅ aprobado por Lucas y publicado en `main`**.
+
+## 16. ✅ [Ambos · Inicio/Perfil + PWM · Relámpago/Calendario] Ajustes responsive e interacción
+- PWM: Modo relámpago se adapta a celulares chicos sin desborde horizontal; sus acciones se ordenan en dos filas y la altura se ajusta al viewport.
+- PWM: el calendario del perfil combina funciones agendadas con títulos vistos. Cada día abre esa fecha en el calendario normal y hay acceso al calendario completo.
+- PWM y PRB: el inicio termina con las últimas reseñas ordenadas por fecha disponible; **Ver más reseñas** despliega cuatro adicionales por vez.
+- PWM y PRB: las barras de **Cómo puntuás** muestran cantidades y abren un detalle táctil/clickeable con las obras exactas de cada puntaje.
+- Perfil: la búsqueda de GIF permite cargar y scrollear más resultados. Los fondos GIF se renderizan como imagen animada tanto en portada como en toda la vista.
+- PWM: **Mejor rankeadas** y **Watchlist** crecen hacia abajo en una grilla responsive, sin carrusel lateral.
+- Estado: **✅ implementado y verificado localmente; pendiente de aprobación de Lucas para publicar**.
