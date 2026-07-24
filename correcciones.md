@@ -90,4 +90,4 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Debajo: últimas reseñas y mejores rankeadas en la columna principal (70%); calendario, gráficos explicados y medallas desplegables en la columna lateral (30%).
 - Adaptación móvil en una sola columna, sin desborde horizontal.
 - Tier: la imagen exportada conserva las portadas remotas y usa exactamente el nombre de la tier como título.
-- Estado: **implementado y probado localmente; pendiente de aprobación de Lucas y push**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.

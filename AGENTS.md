@@ -37,4 +37,4 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 - Reorganized both profiles: compact identity/stats hero, 70/30 reviews/content + calendar/analytics layout, expandable explanations, responsive single-column fallback.
 - Fixed tier canvas poster loading with a CORS-safe fallback and made the exported title match the tier name in both apps.
 - Verified JS syntax, desktop 70/30 geometry, mobile overflow, expandable panels, and a real canvas render with remote TMDB posters.
-- Local work is complete and committed; **not pushed yet**, pending Lucas's visual approval.
+- Lucas approved the result. Commit `f3d6f44` plus this handoff update were published to `main`.
