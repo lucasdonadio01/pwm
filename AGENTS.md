@@ -28,13 +28,12 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- (nothing pending)
+- Review correction lote 4 #13 and approve the push to `main`.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-23 · Codex
-- Updated `PRODUCT.md` to reflect link-shared signup and shared PWM/PRB identities; kept the approved movie-sheet button correction.
-- Reorganized both profiles: compact identity/stats hero, 70/30 reviews/content + calendar/analytics layout, expandable explanations, responsive single-column fallback.
-- Fixed tier canvas poster loading with a CORS-safe fallback and made the exported title match the tier name in both apps.
-- Verified JS syntax, desktop 70/30 geometry, mobile overflow, expandable panels, and a real canvas render with remote TMDB posters.
-- Lucas approved the result. Commit `f3d6f44` plus this handoff update were published to `main`.
+- Added focused review sheets in PWM and PRB: read-only by default, own-review edit mode, no synopsis, and no PWM scheduling in review context.
+- Added profile navigation from visible user names while preserving the separate account menu on the header avatar.
+- Verified own/other permissions, optional metadata editing, cross-profile navigation, standard movie sheets, and both apps in the local browser.
+- Bumped cache assets to v16 and app stamps to PWM 1.6 / PRB 1.5. Awaiting Lucas approval before push.

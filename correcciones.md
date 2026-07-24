@@ -91,3 +91,10 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Adaptación móvil en una sola columna, sin desborde horizontal.
 - Tier: la imagen exportada conserva las portadas remotas y usa exactamente el nombre de la tier como título.
 - Estado: **✅ aprobado por Lucas y publicado en `main`**.
+
+## 13. ✅ [Ambos · Reseñas/Perfil] Vista enfocada + navegación entre usuarios
+- Al abrir una reseña desde un perfil se muestra la obra y la reseña, sin sinopsis ni campos de edición; en PWM tampoco aparece "Agendar".
+- Las reseñas propias muestran **Editar**. Recién al tocarlo aparecen puntaje, texto y los datos opcionales de fecha/lugar o lectura.
+- Las reseñas ajenas son de solo lectura y mantienen debajo las opiniones de los demás usuarios.
+- Los nombres de usuario visibles en reseñas, perfiles, tiers y calendario llevan al perfil público con sus estadísticas.
+- Estado: **✅ implementado y verificado localmente en PWM y PRB; pendiente de aprobación de Lucas para publicar**.

@@ -35,6 +35,11 @@
     const img = p ? `<img class="avatar__img" src="${p}" alt="" onerror="this.remove()">` : '';
     return `<span class="${cls}" style="--c:${u.color}">${u.initial}${img}</span>`;
   }
+  function profileLink(uid, label, cls = '') {
+    const u = users[uid];
+    if (!u) return escapeHtml(label || '');
+    return `<button type="button" class="profile-link${cls ? ` ${cls}` : ''}" data-profile-user="${escapeHtml(uid)}">${escapeHtml(label || u.name)}</button>`;
+  }
 
   function hash(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff; return Math.abs(h); }
   // cold-hue placeholder for books without a cover
@@ -215,6 +220,8 @@
     { id: 'tier', label: 'Tier' },
   ];
   let route = 'home';
+  let profileUserId = null;
+  let profileNavigationWired = false;
 
   function renderHeader() {
     const u = currentUser();
@@ -224,9 +231,11 @@
       `<a class="logo" href="#home" aria-label="PRB — Project Read Books"><b>PRB</b><span class="dot">.</span></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}` +
       `<a class="nav__x" href="../index.html">${icon('movie')} Pelis</a></nav>` +
-      `<div class="header__right"><button class="user-chip" id="user-chip" title="Tu cuenta" aria-haspopup="true">` +
-      `<span class="user-chip__name">${u ? u.name : ''}</span>` + (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
-      `</button></div>`;
+      `<div class="header__right"><div class="user-chip">` +
+      `<button type="button" class="user-chip__name profile-link"${u ? ` data-profile-user="${escapeHtml(u.id)}"` : ''} title="Ver mi perfil">${u ? escapeHtml(u.name) : ''}</button>` +
+      `<button type="button" class="user-chip__avatar" id="user-chip" title="Tu cuenta" aria-label="Abrir tu cuenta" aria-haspopup="true">` +
+      (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
+      `</button></div></div>`;
     header.querySelectorAll('[data-route]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setRoute(a.dataset.route); $('#nav', header).classList.remove('nav--open'); }));
     $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
     $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
@@ -258,8 +267,9 @@
   function onScroll() { $('#site-header').classList.toggle('header--solid', route !== 'home' || window.scrollY > 60); }
 
   /* ============================================================= ROUTING */
-  function setRoute(r) {
+  function setRoute(r, options = {}) {
     route = r;
+    profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
     window.scrollTo({ top: 0, behavior: 'auto' });
     renderRoute(); onScroll();
@@ -272,8 +282,37 @@
     if (route === 'leyendo') return renderLeyendo(app);
     if (route === 'leidos') return renderLeidos(app);
     if (route === 'tier') return renderTier(app);
-    if (route === 'perfil') return renderPerfil(app);
+    if (route === 'perfil') return renderPerfil(app, profileUserId);
     if (route === 'config') return renderConfig(app);
+  }
+
+  function goToProfile(uid) {
+    if (!users[uid] || currentUser().guest) return;
+    closeSheet(false);
+    const confirm = $('#confirm');
+    if (confirm) confirm.hidden = true;
+    setRoute('perfil', { uid });
+  }
+
+  function wireProfileNavigation() {
+    if (profileNavigationWired) return;
+    profileNavigationWired = true;
+    document.addEventListener('click', (e) => {
+      const review = e.target.closest('[data-review-book][data-review-user]');
+      if (review) {
+        const book = byId(review.dataset.reviewBook);
+        if (!book) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openSheet(book, { mode: 'review', reviewUserId: review.dataset.reviewUser });
+        return;
+      }
+      const target = e.target.closest('[data-profile-user]');
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      goToProfile(target.dataset.profileUser);
+    }, true);
   }
 
   /* ---------- reading helpers ---------- */
@@ -487,8 +526,8 @@
       const e = verdictOf(b.id, u.id); const rated = typeof e.rating === 'number'; const read = store.getReading(b.id, u.id).status === 'read'; if (!(rated || e.review || e.liked || read)) return '';
       const stars = rated ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`;
       const heart = e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '';
-      const review = e.review ? `<p class="verdict__review">“${escapeHtml(e.review)}”</p>` : '';
-      return `<div class="verdict">${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${u.name}</span>${stars}${heart}</div>${review}${readingLine(b, u.id)}</div></div>`;
+      const review = e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(u.id)}">“${escapeHtml(e.review)}”</button>` : '';
+      return `<div class="verdict">${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(u.id, u.name, 'verdict__name')}${stars}${heart}</div>${review}${readingLine(b, u.id)}</div></div>`;
     }).join('');
     card.innerHTML = `<div class="watched__poster"><div class="poster__img" style="background:${coverArt(b)}"></div></div><div class="watched__body"><div class="watched__title">${escapeHtml(b.title)}</div><div class="watched__year">${[b.year, b.author].filter(Boolean).join(' · ')}</div><div class="verdicts">${verdicts}</div></div>`;
     card.addEventListener('click', () => openSheet(b));
@@ -616,7 +655,7 @@
     } else {
       ctrls = `<button class="btn btn--soft reading__start" data-rc-start>${icon('auto_stories')} Lo estoy leyendo yo también</button>`;
     }
-    const otherChip = (ro && ro.status === 'reading') ? `<div class="reading__other">${avatarHTML(other, 'avatar reading__oavatar')}<span>${other.name} va ${readingPercent(ro) != null ? readingPercent(ro) + '%' : '—'}${ro.chapter ? ` · cap. ${escapeHtml(ro.chapter)}` : ''}</span></div>` : '';
+    const otherChip = (ro && ro.status === 'reading') ? `<div class="reading__other">${avatarHTML(other, 'avatar reading__oavatar')}<span>${profileLink(other.id, other.name)} va ${readingPercent(ro) != null ? readingPercent(ro) + '%' : '—'}${ro.chapter ? ` · cap. ${escapeHtml(ro.chapter)}` : ''}</span></div>` : '';
     card.innerHTML =
       `<div class="reading__poster" data-open><div class="poster__img" style="background:${coverArt(b)}"></div></div>` +
       `<div class="reading__body">` +
@@ -725,8 +764,8 @@
     const mine = boards.filter((b) => b.editable);
     const others = boards.filter((b) => !b.editable);
     const sub = B.type === 'default'
-      ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
-      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la editan ${B.members.map(ownerName).join(' y ')}${B.editable ? '' : ' · vos solo mirás'}` : `Tier <b>personal</b> de ${ownerName(B.owner)}${B.editable ? '' : ' · solo lectura'}`);
+      ? (B.editable ? `El ranking de ${profileLink(me.id, `vos (${me.name})`)}` : `Mirando el tier de ${profileLink(B.owner, ownerName(B.owner))} · solo lectura`)
+      : (B.kind === 'shared' ? `Tier <b>compartida</b> — la editan ${B.members.map((uid) => profileLink(uid, ownerName(uid))).join(' y ')}${B.editable ? '' : ' · vos solo mirás'}` : `Tier <b>personal</b> de ${profileLink(B.owner, ownerName(B.owner))}${B.editable ? '' : ' · solo lectura'}`);
     const rows = rowsOf(B);
     s.innerHTML =
       `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
@@ -975,14 +1014,14 @@
       `<span class="readblock__pct" data-rb-pct>${pct != null ? pct + '%' : ''}</span>` +
       `</div></div>`;
   }
-  function wireReadingBlock(scope, b, u) {
+  function wireReadingBlock(scope, b, u, rerender = () => openSheet(b)) {
     scope.querySelectorAll('[data-rb-set]').forEach((btn) => btn.addEventListener('click', () => {
       if (guestBlock()) return;
       const v = btn.dataset.rbSet;
       if (v === 'reading') store.setReading(b.id, u.id, { status: 'reading', startedAt: store.getReading(b.id, u.id).startedAt || todayISO() });
       else if (v === 'read') store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() });
       else store.setReading(b.id, u.id, { status: null });
-      openSheet(b); // re-render so buttons/labels reflect the new status
+      rerender(); // re-render so buttons/labels reflect the new status
     }));
     scope.querySelectorAll('[data-rb]').forEach((inp) => inp.addEventListener('change', () => {
       if (guestBlock()) return;
@@ -998,10 +1037,38 @@
 
   /* ============================================================= SHEET */
   const sheet = $('#sheet');
-  function openSheet(b) {
-    const u = currentUser(); const me = verdictOf(b.id, u.id);
-    const other = Object.values(users).find((x) => x.id !== u.id); const otherE = verdictOf(b.id, other.id);
-    const otherHas = typeof otherE.rating === 'number' || otherE.review || otherE.liked;
+  function openSheet(b, options = {}) {
+    const u = currentUser();
+    const reviewMode = options.mode === 'review';
+    const reviewOwner = users[options.reviewUserId] || u;
+    const canEditReview = reviewMode && reviewOwner.id === u.id && !u.guest;
+    const editingReview = canEditReview && options.editing === true;
+    const editorVisible = !reviewMode || editingReview;
+    const me = verdictOf(b.id, u.id);
+    const selected = verdictOf(b.id, reviewOwner.id);
+    const excludedUserId = reviewMode ? reviewOwner.id : u.id;
+    const others = Object.values(users).filter((x) => x.id !== excludedUserId).map((x) => ({ u: x, e: verdictOf(b.id, x.id) }))
+      .filter(({ e }) => typeof e.rating === 'number' || e.review || e.liked);
+    const readonlyReview =
+      `<div class="rate-box rate-box--review"><div class="rate-box__head review-focus__head">${avatarHTML(reviewOwner)}` +
+      `<span class="rate-box__you">Reseña de ${profileLink(reviewOwner.id, reviewOwner.name)}</span>` +
+      (canEditReview ? `<button type="button" class="btn btn--soft btn--xs review-focus__edit" id="edit-review">${icon('edit')} Editar</button>` : '') +
+      `</div><div class="review-focus__score">` +
+      (typeof selected.rating === 'number' ? `${starsMarkup(selected.rating, 'md')}<span class="stars-value">${selected.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
+      (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
+      `</div>` +
+      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`) +
+      readingLine(b, reviewOwner.id) + `</div>`;
+    const editor =
+      `<div class="rate-box${editingReview ? ' rate-box--editing' : ''}><div class="rate-box__head">${avatarHTML(u)}` +
+      `<span class="rate-box__you">${editingReview ? 'Editar reseña de' : 'Tu puntaje,'} ${profileLink(u.id, u.name)}</span></div>` +
+      `<div class="rate-box__row"><div class="rate-box__stars" id="rate-stars"></div><button class="rate-clear" id="rate-clear" ${typeof me.rating === 'number' ? '' : 'hidden'}>borrar</button></div>` +
+      readingBlockHTML(b, u) +
+      `<div class="review-field"><label for="review">Tu reseña</label><textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
+      `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} ${editingReview ? 'Guardar cambios' : 'Guardar reseña'}</button>` +
+      (editingReview ? `<button class="btn btn--soft" id="cancel-review">Cancelar</button>` : '') +
+      `<button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button>` +
+      `<span class="saved-flag" id="saved-flag">guardado ✓</span></div></div></div>`;
     sheet.innerHTML =
       `<div class="sheet__scrim" data-close></div><div class="sheet__panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(b.title)}">` +
       `<div class="sheet__hero"><div class="hero__bg hero__bg--book" style="background:${art(b)}"></div><button class="sheet__close" data-close>${icon('close')}</button></div>` +
@@ -1009,25 +1076,39 @@
       [b.author, b.year].filter(Boolean).map((x) => `<span class="dot-sep">·</span><span class="eyebrow">${escapeHtml(String(x))}</span>`).join('') + `</div>` +
       `<h2 class="sheet__title">${escapeHtml(b.title)}</h2>` +
       `<div class="sheet__genres">${(b.genres || []).map((g) => `<span class="gtag">${g}</span>`).join('')}</div>` +
-      `<p class="sheet__synopsis">${escapeHtml(b.synopsis || '')}</p>` +
-      `<div class="rate-box"><div class="rate-box__head">${avatarHTML(u)}<span class="rate-box__you">Tu puntaje, ${u.name}</span></div>` +
-      `<div class="rate-box__row"><div class="rate-box__stars" id="rate-stars"></div><button class="rate-clear" id="rate-clear" ${typeof me.rating === 'number' ? '' : 'hidden'}>borrar</button></div>` +
-      readingBlockHTML(b, u) +
-      `<div class="review-field"><label for="review">Tu reseña</label><textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
-      `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} Guardar reseña</button><button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button><span class="saved-flag" id="saved-flag">guardado ✓</span></div></div></div>` +
-      (otherHas ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijo ${other.name}</div><div class="verdict">${avatarHTML(other, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${typeof otherE.rating === 'number' ? `${starsMarkup(otherE.rating, 'sm')}<span class="stars-value">${otherE.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>'}${otherE.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : ''}</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}${readingLine(b, other.id)}</div></div></div>` : '') +
+      (!reviewMode ? `<p class="sheet__synopsis">${escapeHtml(b.synopsis || '')}</p>` : '') +
+      (editorVisible ? editor : readonlyReview) +
+      (others.length ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijeron los demás</div>` +
+        others.map(({ u: ou, e }) => `<div class="verdict">${avatarHTML(ou, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(ou.id, ou.name, 'verdict__name')}` +
+          (typeof e.rating === 'number' ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
+          (e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
+          `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${readingLine(b, ou.id)}</div></div>`).join('') +
+        `</div>` : '') +
       `</div></div>`;
-    mountStars($('#rate-stars', sheet), b, u, me.rating);
-    wireReadingBlock(sheet, b, u);
-    $('#rate-clear', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setRating(b.id, u.id, null); openSheet(b); });
-    $('#save-review', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setReview(b.id, u.id, $('#review', sheet).value.trim()); const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600); });
-    $('#review', sheet).addEventListener('blur', (e) => { if (!isGuest()) store.setReview(b.id, u.id, e.target.value.trim()); });
-    $('#sheet-like', sheet).addEventListener('click', (e) => toggleLike(b, e.currentTarget, true));
+    if (editorVisible) {
+      const editOptions = editingReview ? { mode: 'review', reviewUserId: u.id, editing: true } : {};
+      mountStars($('#rate-stars', sheet), b, u, me.rating);
+      wireReadingBlock(sheet, b, u, () => openSheet(b, editOptions));
+      $('#rate-clear', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setRating(b.id, u.id, null); openSheet(b, editOptions); });
+      $('#save-review', sheet).addEventListener('click', () => {
+        if (guestBlock()) return;
+        store.setReview(b.id, u.id, $('#review', sheet).value.trim());
+        if (editingReview) { openSheet(b, { mode: 'review', reviewUserId: u.id }); return; }
+        const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600);
+      });
+      if (!editingReview) $('#review', sheet).addEventListener('blur', (e) => { if (!isGuest()) store.setReview(b.id, u.id, e.target.value.trim()); });
+      $('#sheet-like', sheet).addEventListener('click', (e) => toggleLike(b, e.currentTarget, true));
+      const cancel = $('#cancel-review', sheet);
+      if (cancel) cancel.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id }));
+    } else {
+      const edit = $('#edit-review', sheet);
+      if (edit) edit.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id, editing: true }));
+    }
     sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
     sheet.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onSheetKey);
   }
   function onSheetKey(e) { if (e.key === 'Escape') closeSheet(); }
-  function closeSheet() { sheet.hidden = true; sheet.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKey); renderRoute(); }
+  function closeSheet(refresh = true) { sheet.hidden = true; sheet.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKey); if (refresh) renderRoute(); }
   function mountStars(container, b, u, initial) {
     let value = typeof initial === 'number' ? initial : 0;
     container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="rate-num" style="margin-left:.7rem">${value ? value.toFixed(1) : '—'}</span>`;
@@ -1192,7 +1273,7 @@
     revs.forEach(({ b }) => {
       const v = verdictOf(b.id, id), c = document.createElement('button'); c.className = 'prev';
       c.innerHTML = `<span class="prev__poster" style="background:${coverArt(b)}"></span><span class="prev__b"><b>${escapeHtml(b.title)}</b><span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span><span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
-      c.addEventListener('click', () => openSheet(b)); rw.appendChild(c);
+      c.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: id })); rw.appendChild(c);
     });
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating).slice(0, 12);
     const bw = sec.querySelector('#p-best');
@@ -1284,7 +1365,7 @@
   }
 
   /* ============================================================= BOOT */
-  function startApp() { applyAccent(); renderHeader(); setRoute('home'); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
+  function startApp() { applyAccent(); wireProfileNavigation(); renderHeader(); setRoute('home'); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
   (async () => {
     await store.init();
     mergeExtras();
