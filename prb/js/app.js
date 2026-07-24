@@ -100,18 +100,9 @@
     });
     wrap.appendChild(usersRow);
     const altRow = document.createElement('div'); altRow.className = 'gate__alt';
-    const guest = document.createElement('button');
-    guest.className = 'profile profile--alt';
-    guest.style.setProperty('--c', '#8A8A92');
-    guest.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:#8A8A92">${icon('visibility')}</span>` +
-      `<span class="profile__name">Invitado</span><span class="profile__handle">solo mirar</span>`;
-    guest.addEventListener('click', () => enterAs('guest'));
-    altRow.appendChild(guest);
     const create = document.createElement('button');
-    create.className = 'profile profile--alt profile--new';
-    create.style.setProperty('--c', 'var(--lime)');
-    create.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:var(--lime)">${icon('person_add')}</span>` +
-      `<span class="profile__name">Crear usuario</span><span class="profile__handle">nuevo perfil</span>`;
+    create.className = 'gate__create';
+    create.innerHTML = `${icon('person_add')} Crear usuario`;
     create.addEventListener('click', () => openSignup());
     altRow.appendChild(create);
     wrap.appendChild(altRow);
@@ -412,10 +403,12 @@
 
   /* ============================================================= ROUTING */
   function setRoute(r, options = {}) {
+    // State + hash are set synchronously (the motion wrapper can defer its callback via view
+    // transitions): reloading right after a tap must still land on the section you tapped.
+    route = r;
+    profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
+    syncHash(r);
     K.motion.run(() => {
-      route = r;
-      profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
-      syncHash(r);
       document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
       window.scrollTo({ top: 0, behavior: 'auto' });
       renderRoute(); onScroll();
@@ -445,6 +438,14 @@
     if (profileNavigationWired) return;
     profileNavigationWired = true;
     document.addEventListener('click', (e) => {
+      // Profile links win: they sit *inside* the verdict block, which as a whole opens the review.
+      const target = e.target.closest('[data-profile-user]');
+      if (target) {
+        e.preventDefault();
+        e.stopPropagation();
+        goToProfile(target.dataset.profileUser);
+        return;
+      }
       const review = e.target.closest('[data-review-book][data-review-user]');
       if (review) {
         const book = byId(review.dataset.reviewBook);
@@ -452,13 +453,7 @@
         e.preventDefault();
         e.stopPropagation();
         openSheet(book, { mode: 'review', reviewUserId: review.dataset.reviewUser });
-        return;
       }
-      const target = e.target.closest('[data-profile-user]');
-      if (!target) return;
-      e.preventDefault();
-      e.stopPropagation();
-      goToProfile(target.dataset.profileUser);
     }, true);
   }
 
@@ -737,8 +732,11 @@
       const e = verdictOf(b.id, u.id); const rated = typeof e.rating === 'number'; const read = store.getReading(b.id, u.id).status === 'read'; if (!(rated || e.review || e.liked || read)) return '';
       const stars = rated ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`;
       const heart = e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '';
-      const review = e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(u.id)}">“${escapeHtml(e.review)}”</button>` : '';
-      return `<div class="verdict">${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(u.id, u.name, 'verdict__name')}${stars}${heart}</div>${review}${readingLine(b, u.id)}</div></div>`;
+      const review = e.review ? `<span class="verdict__review verdict__review--open">“${escapeHtml(e.review)}”</span>` : '';
+      // The whole verdict opens that person's review (read-only), not just the quoted text — tapping
+      // anywhere near it used to fall through to the full book sheet with synopsis and editors.
+      const asReview = e.review ? ` role="button" tabindex="0" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(u.id)}"` : '';
+      return `<div class="verdict${e.review ? ' verdict--openable' : ''}"${asReview}>${avatarHTML(u, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(u.id, u.name, 'verdict__name')}${stars}${heart}</div>${review}${readingLine(b, u.id)}</div></div>`;
     }).join('');
     card.innerHTML = `<div class="watched__poster"><div class="poster__img" style="background:${coverArt(b)}"></div></div><div class="watched__body"><div class="watched__title">${escapeHtml(b.title)}</div><div class="watched__year">${[b.year, b.author].filter(Boolean).join(' · ')}</div><div class="verdicts">${verdicts}</div></div>`;
     card.addEventListener('click', () => openSheet(b));
@@ -1575,7 +1573,7 @@
       resetCards();
       wrapper.classList.remove('has-preview');
       wrapper.style.removeProperty('--profile-preview-height');
-      const previewRows = mobileQuery.matches ? 1 : Number(options.desktopRows || 0);
+      const previewRows = mobileQuery.matches ? Number(options.mobileRows || 1) : Number(options.desktopRows || 0);
       if (previewRows) {
         const tops = [...new Set(nodes.map((node) => node.offsetTop))].sort((a, b) => a - b);
         hasOverflow = tops.length > previewRows;
@@ -1691,7 +1689,7 @@
       c.innerHTML = `<span class="prev__poster" style="background:${coverArt(b)}"></span><span class="prev__b"><b>${escapeHtml(b.title)}</b><span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span><span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
       c.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: id }));
       return K.motion.tag(c, `prb-profile-review-${id}-${b.id}`);
-    }, 'Todavía sin reseñas.', { desktopRows: 3 });
+    }, 'Todavía sin reseñas.', { desktopRows: 3, mobileRows: 3 });
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
     profileContentPreview(sec.querySelector('#p-best-preview'), bw, sec.querySelector('#p-best-more'), sec.querySelector('#p-best-peek'), best, (b) =>
@@ -1800,8 +1798,9 @@
     await store.init();
     mergeExtras();
     refreshUsers();
+    if (store.getUser() === 'guest') store.clearUser();   // guest mode retired: send old sessions back to the gate
     const uid = store.getUser();
-    if (uid && (users[uid] || uid === 'guest')) { applyAccent(); startApp(); } else { showGate(); }
+    if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
     let painting = false;
     store.onRemote(() => {
       if (painting || !store.getUser() || !gate.hidden) return;

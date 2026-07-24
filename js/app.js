@@ -165,19 +165,9 @@
 
     const altRow = document.createElement('div');
     altRow.className = 'gate__alt';
-    const guest = document.createElement('button');
-    guest.className = 'profile profile--alt';
-    guest.style.setProperty('--c', '#8A8A92');
-    guest.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:#8A8A92">${icon('visibility')}</span>` +
-      `<span class="profile__name">Invitado</span><span class="profile__handle">solo mirar</span>`;
-    guest.addEventListener('click', () => enterAs('guest'));
-    altRow.appendChild(guest);
-
     const create = document.createElement('button');
-    create.className = 'profile profile--alt profile--new';
-    create.style.setProperty('--c', 'var(--lime)');
-    create.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:var(--lime)">${icon('person_add')}</span>` +
-      `<span class="profile__name">Crear usuario</span><span class="profile__handle">nuevo perfil</span>`;
+    create.className = 'gate__create';
+    create.innerHTML = `${icon('person_add')} Crear usuario`;
     create.addEventListener('click', () => openSignup());
     altRow.appendChild(create);
     wrap.appendChild(altRow);
@@ -488,11 +478,13 @@
 
   /* ============================================================= ROUTING */
   function setRoute(r, options = {}) {
+    // State + hash are set synchronously (the motion wrapper can defer its callback via view
+    // transitions): reloading right after a tap must still land on the section you tapped.
+    if (r === 'watchlist' && route !== 'watchlist') wlOwner = defaultWatchlistOwner();
+    route = r;
+    profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
+    syncHash(r);
     K.motion.run(() => {
-      if (r === 'watchlist' && route !== 'watchlist') wlOwner = defaultWatchlistOwner();
-      route = r;
-      profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
-      syncHash(r);
       updateNavActive();
       window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       renderRoute();
@@ -2658,7 +2650,10 @@
     let el = document.getElementById('trailer');
     if (!el) { el = document.createElement('div'); el.id = 'trailer'; el.className = 'trailer'; document.body.appendChild(el); }
     const httpOrigin = location.protocol === 'http:' || location.protocol === 'https:';
-    const src = `https://www.youtube.com/embed/${f.trailer}?autoplay=1&rel=0&modestbranding=1&playsinline=1&enablejsapi=1` + (httpOrigin ? `&origin=${encodeURIComponent(location.origin)}` : '');
+    // Mobile browsers block autoplay-with-sound, and a blocked embed just sits there black — which
+    // reads as "the trailer doesn't work". On touch we let YouTube show its poster + play button.
+    const auto = !isTouch();
+    const src = `https://www.youtube.com/embed/${f.trailer}?rel=0&modestbranding=1&playsinline=1&enablejsapi=1${auto ? '&autoplay=1' : ''}` + (httpOrigin ? `&origin=${encodeURIComponent(location.origin)}` : '');
     el.innerHTML =
       `<div class="trailer__scrim" data-tclose></div>` +
       `<button class="trailer__back" data-tclose aria-label="Volver">${icon('arrow_back')}</button>` +
@@ -2667,7 +2662,7 @@
       (!httpOrigin ? `<div class="trailer__warn">${icon('info')} Para que reproduzca acá, abrí PWM desde el servidor (http://…), no con doble clic. En el sitio publicado anda solo.</div>` : '') +
       `<div class="trailer__bar"><span class="trailer__title">${f.title}${f.year ? ` · ${f.year}` : ''} — Trailer</span>` +
       `<div class="trailer__ctrls">` +
-      `<button class="btn btn--soft" id="trailer-pause">${icon('pause')} Pausa</button>` +
+      `<button class="btn btn--soft" id="trailer-pause">${icon(auto ? 'pause' : 'play_arrow')} ${auto ? 'Pausa' : 'Reproducir'}</button>` +
       `<button class="btn btn--soft" id="trailer-fs">${icon('fullscreen')} Full screen</button>` +
       `<a class="btn btn--soft" href="https://www.youtube.com/watch?v=${f.trailer}" target="_blank" rel="noopener">${icon('open_in_new')} YouTube</a>` +
       `<button class="btn btn--accent" data-tclose>${icon('close')} Salir</button>` +
@@ -2676,7 +2671,7 @@
     document.body.style.overflow = 'hidden';
     const iframe = el.querySelector('#trailer-if');
     const cmd = (func) => { try { iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*'); } catch {} };
-    let playing = true;
+    let playing = auto;
     el.querySelector('#trailer-pause').addEventListener('click', (e) => {
       playing = !playing;
       cmd(playing ? 'playVideo' : 'pauseVideo');
@@ -2988,7 +2983,7 @@
       wrapper.classList.remove('has-preview');
       wrapper.style.removeProperty('--profile-preview-height');
 
-      const previewRows = mobileQuery.matches ? 1 : Number(options.desktopRows || 0);
+      const previewRows = mobileQuery.matches ? Number(options.mobileRows || 1) : Number(options.desktopRows || 0);
       if (previewRows) {
         const tops = [...new Set(nodes.map((node) => node.offsetTop))].sort((a, b) => a - b);
         hasOverflow = tops.length > previewRows;
@@ -3180,7 +3175,7 @@
           `<span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
         c.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: id }));
         return K.motion.tag(c, `pwm-profile-review-${id}-${f.id}`);
-      }, 'Todavía sin reseñas.', { desktopRows: 3 });
+      }, 'Todavía sin reseñas.', { desktopRows: 3, mobileRows: 3 });
 
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
@@ -3363,8 +3358,9 @@
 
   (async () => {
     await store.init(); mergeExtras(); refreshUsers(); // load shared state from Supabase (falls back to local cache)
+    if (store.getUser() === 'guest') store.clearUser();   // guest mode retired: send old sessions back to the gate
     const uid = store.getUser();
-    if (uid && (users[uid] || uid === 'guest')) { applyAccent(); startApp(); } else { showGate(); }
+    if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
 
     /* Everything is live now, not just the notifications: the store pushes on every remote change
      * (Supabase Realtime, or a light poll if the socket can't join) and we redraw what's on screen. */

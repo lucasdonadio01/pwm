@@ -120,9 +120,17 @@ a { color: inherit; text-decoration: none; }
 }
 .gate__profiles { display: flex; flex-direction: column; align-items: center; gap: clamp(1.5rem, 4vw, 2.4rem); }
 .gate__users { display: flex; gap: clamp(1.5rem, 6vw, 3.5rem); justify-content: center; flex-wrap: wrap; }
-/* Secondary options (Invitado + Crear usuario) sit below the real users, same level. */
-.gate__alt { display: flex; gap: clamp(1.4rem, 5vw, 2.6rem); justify-content: center; flex-wrap: wrap; align-items: flex-start;
+/* "Crear usuario" sits below the real users as a glass pill, not another avatar circle. */
+.gate__alt { display: flex; gap: clamp(1.4rem, 5vw, 2.6rem); justify-content: center; flex-wrap: wrap; align-items: center;
   width: min(100%, 460px); padding-top: clamp(1.3rem, 3vw, 1.9rem); border-top: 1px solid var(--hairline); }
+.gate__create { display: inline-flex; align-items: center; gap: .5rem; padding: .72rem 1.35rem; border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--lime) 42%, var(--hairline-2)); color: var(--ink); font-weight: 700; font-size: .95rem;
+  background: color-mix(in srgb, var(--lime) 10%, rgb(255 255 255 / .04)); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: background .2s, border-color .2s, transform .18s var(--ease-out), box-shadow .2s; }
+.gate__create .material-symbols-rounded { font-size: 20px; color: var(--lime); }
+.gate__create:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--lime) 70%, transparent);
+  background: color-mix(in srgb, var(--lime) 17%, rgb(255 255 255 / .06)); box-shadow: 0 0 24px color-mix(in srgb, var(--lime) 24%, transparent); }
+.gate__create:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
 .gate__hint { margin-top: 3rem; color: var(--ink-faint); font-size: 0.9rem; }
 
 .profile { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
@@ -1536,7 +1544,9 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 .profile-poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: clamp(.75rem, 1.6vw, 1rem); }
 .profile-poster-preview { position: relative; overflow: hidden; max-height: var(--profile-preview-height, none); }
 .profile-poster-preview.is-expanded { max-height: none; padding-bottom: 3.4rem; }
-.profile-poster-preview__veil { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; display: none; height: clamp(110px, 22vw, 180px); pointer-events: none; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--ground) 88%, transparent) 72%, var(--ground)); backdrop-filter: blur(3px); mask-image: linear-gradient(to bottom, transparent, #000 42%); }
+/* The veil fades into whatever the user picked as their profile background, so the cut-off row
+ * blends instead of fading to the app's default ground. Falls back outside a personalized profile. */
+.profile-poster-preview__veil { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; display: none; height: clamp(110px, 22vw, 180px); pointer-events: none; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--profile-bg-color, var(--ground)) 88%, transparent) 72%, var(--profile-bg-color, var(--ground))); backdrop-filter: blur(3px); mask-image: linear-gradient(to bottom, transparent, #000 42%); }
 .profile-poster-preview.has-preview:not(.is-expanded) .profile-poster-preview__veil { display: block; }
 .profile-poster-preview__more { position: absolute; z-index: 2; right: 50%; bottom: 1rem; display: inline-flex; align-items: center; gap: .38rem; min-height: 40px; padding: .55rem 1rem; transform: translateX(50%); border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--hairline)); border-radius: var(--r-pill); color: var(--ink); background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 12px 28px rgba(0,0,0,.34); backdrop-filter: blur(10px); font-size: .78rem; font-weight: 800; }
 .profile-poster-preview__more:hover { border-color: var(--accent); background: var(--surface-2); }
