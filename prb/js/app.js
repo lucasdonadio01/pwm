@@ -3,6 +3,7 @@
   'use strict';
   const store = PRB.store;
   const K = window.APPKIT;
+  const APP_ID = 'prb';
   const users = {};
   function refreshUsers() {
     const merged = K.accounts.all(store, PRB.users);
@@ -134,7 +135,7 @@
         `<div class="confirm__title">Crear usuario</div>` +
         `<div class="su-photo"><button class="su-photo__btn" id="su-pic" style="--c:${color}">` +
         (photo ? `<img src="${photo}" alt="">` : icon('add_a_photo')) + `</button>` +
-        `<div class="su-photo__txt"><b>Foto de perfil</b><small>Elegí una foto y recortala. Se comparte con PWM.</small>` +
+        `<div class="su-photo__txt"><b>Foto o GIF de perfil</b><small>Las fotos se recortan · los GIF animados de hasta 1MB mantienen el movimiento y se comparten con PWM.</small>` +
         (photo ? `<button class="linklike" id="su-picoff">Sacar la foto</button>` : '') + `</div></div>` +
         `<label class="tl-field"><span>Nombre</span><input id="su-name" type="text" maxlength="24" placeholder="Cómo te llamás" autocomplete="off"></label>` +
         `<label class="tl-field"><span>Usuario de Letterboxd <small>(opcional)</small></span><input id="su-lb" type="text" maxlength="40" placeholder="tuusuario" autocomplete="off"></label>` +
@@ -223,15 +224,102 @@
   let profileUserId = null;
   let profileNavigationWired = false;
 
+  function activityCopy(item) {
+    const actor = users[item.actor] || { name: 'Alguien' };
+    if (item.type === 'review_like') return {
+      icon: 'favorite',
+      title: `${actor.name} le dio me gusta a tu reseña`,
+      detail: item.title || 'Una de tus reseñas',
+    };
+    if (item.type === 'review_publish') return {
+      icon: 'rate_review',
+      title: `${actor.name} ${item.action === 'updated' ? 'actualizó' : 'publicó'} una reseña`,
+      detail: item.title || 'Nueva reseña',
+    };
+    if (item.type === 'calendar_invite') return {
+      icon: 'confirmation_number',
+      title: `${actor.name} te invitó a ver una función`,
+      detail: item.title || 'Invitación de PWM',
+    };
+    if (item.type === 'calendar_accept') return {
+      icon: 'celebration',
+      title: `${actor.name} confirmó que va`,
+      detail: item.title || 'Función de PWM',
+    };
+    return { icon: 'notifications', title: 'Tenés una novedad', detail: item.title || '' };
+  }
+
+  function closeNotifications() {
+    const el = document.getElementById('notification-center');
+    if (el) el.remove();
+    document.body.style.overflow = '';
+  }
+
+  function openActivityItem(item) {
+    closeNotifications();
+    if (item.type === 'calendar_invite' || item.type === 'calendar_accept') {
+      location.href = `../index.html?calendar=${encodeURIComponent(item.calId || 'cal-main')}&date=${encodeURIComponent(item.iso || '')}`;
+      return;
+    }
+    if ((item.type === 'review_like' || item.type === 'review_publish') && item.itemId) {
+      if (item.app === APP_ID) {
+        const b = byId(item.itemId);
+        if (b) openSheet(b, { mode: 'review', reviewUserId: item.reviewOwner || item.actor });
+      } else {
+        location.href = `../index.html?review=${encodeURIComponent(item.itemId)}&user=${encodeURIComponent(item.reviewOwner || item.actor || '')}`;
+      }
+    }
+  }
+
+  function openNotifications() {
+    const u = currentUser();
+    if (!u || u.guest) return;
+    closeNotifications();
+    const items = K.activity.forUser(store, u.id);
+    const unread = new Set(items.filter((item) => !(item.readBy || {})[u.id]).map((item) => item.id));
+    const el = document.createElement('div');
+    el.id = 'notification-center';
+    el.className = 'notification-center';
+    el.innerHTML =
+      `<button class="notification-center__scrim" data-notif-close aria-label="Cerrar notificaciones"></button>` +
+      `<aside class="notification-panel" role="dialog" aria-modal="true" aria-label="Notificaciones">` +
+      `<div class="notification-panel__head"><div><h3>Notificaciones</h3><p>Lo nuevo entre ustedes.</p></div><button class="icon-btn" data-notif-close aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<div class="notification-list">` +
+      (items.length ? items.map((item, i) => {
+        const copy = activityCopy(item);
+        const actor = users[item.actor] || { id: item.actor, color: '#777', initial: '?' };
+        return `<div class="notif-item${unread.has(item.id) ? ' is-unread' : ''}">` +
+          `<button class="notif-item__main" data-notif-open="${i}">${avatarHTML(actor, 'avatar notif-item__avatar')}` +
+          `<span class="notif-item__icon">${icon(copy.icon)}</span><span class="notif-item__copy"><b>${escapeHtml(copy.title)}</b>` +
+          `<small>${escapeHtml(copy.detail)}</small><time>${escapeHtml(K.activity.timeAgo(item.createdAt))}</time></span></button>` +
+          `<button class="icon-btn notif-item__dismiss" data-notif-dismiss="${i}" aria-label="Sacar notificación">${icon('close')}</button></div>`;
+      }).join('') : `<div class="notification-empty">${icon('notifications_none')}<b>Está todo tranquilo</b><p>Cuando alguien publique, le dé like a una reseña o te invite, aparece acá.</p></div>`) +
+      `</div></aside>`;
+    document.body.appendChild(el);
+    document.body.style.overflow = 'hidden';
+    el.querySelectorAll('[data-notif-close]').forEach((b) => b.addEventListener('click', closeNotifications));
+    el.querySelectorAll('[data-notif-open]').forEach((b) => b.addEventListener('click', () => openActivityItem(items[+b.dataset.notifOpen])));
+    el.querySelectorAll('[data-notif-dismiss]').forEach((b) => b.addEventListener('click', () => {
+      K.activity.dismiss(store, u.id, items[+b.dataset.notifDismiss].id);
+      openNotifications();
+    }));
+    if (unread.size) {
+      K.activity.markRead(store, u.id, [...unread]);
+      renderHeader();
+    }
+  }
+
   function renderHeader() {
     const u = currentUser();
     const header = $('#site-header');
+    const unread = u && !u.guest ? K.activity.unreadCount(store, u.id) : 0;
     header.innerHTML =
       `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
       `<a class="logo" href="#home" aria-label="PRB — Project Read Books"><b>PRB</b><span class="dot">.</span></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}` +
       `<a class="nav__x" href="../index.html">${icon('movie')} Pelis</a></nav>` +
-      `<div class="header__right"><div class="user-chip">` +
+      `<div class="header__right"><button class="icon-btn hdr-notif" id="hdr-notif" title="Notificaciones" aria-label="Notificaciones${unread ? ` · ${unread} nueva(s)` : ''}">${icon('notifications')}` +
+      (unread ? `<span class="hdr-badge">${unread > 9 ? '9+' : unread}</span>` : '') + `</button><div class="user-chip">` +
       `<button type="button" class="user-chip__name profile-link"${u ? ` data-profile-user="${escapeHtml(u.id)}"` : ''} title="Ver mi perfil">${u ? escapeHtml(u.name) : ''}</button>` +
       `<button type="button" class="user-chip__avatar" id="user-chip" title="Tu cuenta" aria-label="Abrir tu cuenta" aria-haspopup="true">` +
       (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
@@ -239,6 +327,7 @@
     header.querySelectorAll('[data-route]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setRoute(a.dataset.route); $('#nav', header).classList.remove('nav--open'); }));
     $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
     $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
+    $('#hdr-notif', header).addEventListener('click', openNotifications);
     $('#user-chip', header).addEventListener('click', openUserMenu);
     header.hidden = false;
   }
@@ -1035,6 +1124,51 @@
     }));
   }
 
+  function reviewLikeHTML(b, reviewOwner, viewer) {
+    const count = store.reviewLikeCount(b.id, reviewOwner.id);
+    if (reviewOwner.id === viewer.id) {
+      return count ? `<span class="review-like-summary">${icon('favorite')} ${count} ${count === 1 ? 'persona bancó' : 'personas bancaron'} tu reseña</span>` : '';
+    }
+    const liked = store.hasReviewLike(b.id, reviewOwner.id, viewer.id);
+    return `<button type="button" class="review-like${liked ? ' is-liked' : ''}" id="review-like">${icon('favorite')}` +
+      `<span class="review-like__label">${liked ? 'Te gusta esta reseña' : 'Me gusta esta reseña'}</span><b>${count || ''}</b></button>`;
+  }
+
+  function toggleReviewLike(b, reviewOwner, btn) {
+    const viewer = currentUser();
+    if (guestBlock('darle like a una reseña') || viewer.id === reviewOwner.id) return;
+    const next = !store.hasReviewLike(b.id, reviewOwner.id, viewer.id);
+    store.setReviewLike(b.id, reviewOwner.id, viewer.id, next);
+    const activityId = `review-like:${APP_ID}:${b.id}:${reviewOwner.id}:${viewer.id}`;
+    if (next) {
+      K.activity.push(store, {
+        id: activityId, type: 'review_like', app: APP_ID, actor: viewer.id, target: reviewOwner.id,
+        itemId: b.id, title: b.title, reviewOwner: reviewOwner.id, createdAt: new Date().toISOString(),
+      });
+    } else {
+      K.activity.remove(store, activityId);
+    }
+    const count = store.reviewLikeCount(b.id, reviewOwner.id);
+    btn.classList.toggle('is-liked', next);
+    btn.querySelector('.review-like__label').textContent = next ? 'Te gusta esta reseña' : 'Me gusta esta reseña';
+    btn.querySelector('b').textContent = count || '';
+  }
+
+  function publishReviewActivity(b, before, after) {
+    const actor = currentUser();
+    const cleanBefore = (before || '').trim();
+    const cleanAfter = (after || '').trim();
+    if (!cleanAfter || cleanAfter === cleanBefore) return;
+    const targets = Object.keys(users).filter((uid) => uid !== actor.id);
+    if (!targets.length) return;
+    K.activity.push(store, {
+      id: `review:${APP_ID}:${b.id}:${actor.id}:${Date.now()}`,
+      type: 'review_publish', app: APP_ID, actor: actor.id, targets,
+      itemId: b.id, title: b.title, reviewOwner: actor.id,
+      action: cleanBefore ? 'updated' : 'published', createdAt: new Date().toISOString(),
+    });
+  }
+
   /* ============================================================= SHEET */
   const sheet = $('#sheet');
   function openSheet(b, options = {}) {
@@ -1058,7 +1192,7 @@
       (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
       `</div>` +
       (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`) +
-      readingLine(b, reviewOwner.id) + `</div>`;
+      readingLine(b, reviewOwner.id) + reviewLikeHTML(b, reviewOwner, u) + `</div>`;
     const editor =
       `<div class="rate-box${editingReview ? ' rate-box--editing' : ''}><div class="rate-box__head">${avatarHTML(u)}` +
       `<span class="rate-box__you">${editingReview ? 'Editar reseña de' : 'Tu puntaje,'} ${profileLink(u.id, u.name)}</span></div>` +
@@ -1078,7 +1212,7 @@
       `<div class="sheet__genres">${(b.genres || []).map((g) => `<span class="gtag">${g}</span>`).join('')}</div>` +
       (!reviewMode ? `<p class="sheet__synopsis">${escapeHtml(b.synopsis || '')}</p>` : '') +
       (editorVisible ? editor : readonlyReview) +
-      (others.length ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijeron los demás</div>` +
+      (!reviewMode && others.length ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijeron los demás</div>` +
         others.map(({ u: ou, e }) => `<div class="verdict">${avatarHTML(ou, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(ou.id, ou.name, 'verdict__name')}` +
           (typeof e.rating === 'number' ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
           (e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
@@ -1092,7 +1226,9 @@
       $('#rate-clear', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setRating(b.id, u.id, null); openSheet(b, editOptions); });
       $('#save-review', sheet).addEventListener('click', () => {
         if (guestBlock()) return;
-        store.setReview(b.id, u.id, $('#review', sheet).value.trim());
+        const nextReview = $('#review', sheet).value.trim();
+        store.setReview(b.id, u.id, nextReview);
+        publishReviewActivity(b, me.review, nextReview);
         if (editingReview) { openSheet(b, { mode: 'review', reviewUserId: u.id }); return; }
         const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600);
       });
@@ -1103,6 +1239,8 @@
     } else {
       const edit = $('#edit-review', sheet);
       if (edit) edit.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id, editing: true }));
+      const reviewLike = $('#review-like', sheet);
+      if (reviewLike) reviewLike.addEventListener('click', () => toggleReviewLike(b, reviewOwner, reviewLike));
     }
     sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
     sheet.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onSheetKey);
@@ -1251,7 +1389,7 @@
     app.innerHTML = '';
     const sec = document.createElement('section'); sec.className = 'section'; sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     sec.innerHTML =
-      `<div class="phero phero--overview" style="--c:${u.color}"><div class="phero__identity"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'}>${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
+      `<div class="phero phero--overview" style="--c:${u.color}"><div class="phero__identity"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'} title="${mine ? 'Cambiar foto o GIF' : ''}">${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
       `<div class="phero__body"><h2 class="phero__name">${escapeHtml(u.name)}</h2><p class="phero__handle">@${escapeHtml(u.lb || u.handle || u.id)}</p>` +
       `<p class="phero__bio">${bio ? escapeHtml(bio) : (mine ? '<i>Sin descripción — podés agregar una.</i>' : '<i>Sin descripción.</i>')}</p>` +
       (mine ? `<button class="linklike" id="p-editbio">${icon('edit')} Editar descripción</button>` : '') + `</div></div>` +
@@ -1305,7 +1443,7 @@
     sec.innerHTML =
       `<div class="section__head"><div><h3 class="section__title">Configuraciones</h3><p class="section__sub">Tu cuenta — es la misma para <b>PRB</b> y <b>PWM</b>.</p></div></div>` +
       `<div class="cfg">` +
-      `<div class="cfg__row"><div class="cfg__l">${icon('account_circle')}<div><b>Foto de perfil</b><small>Se recorta y se comparte en las dos apps.</small></div></div><div class="cfg__r">${avatarHTML(me, 'avatar cfg__av')}<button class="btn btn--soft btn--xs" id="cfg-photo">${icon('photo_camera')} Cambiar</button>${acc.photo ? `<button class="btn btn--soft btn--xs" id="cfg-photo-off">${icon('delete')} Sacar</button>` : ''}</div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('account_circle')}<div><b>Foto o GIF de perfil</b><small>Las fotos se recortan; los GIF de hasta 1MB conservan la animación en las dos apps.</small></div></div><div class="cfg__r">${avatarHTML(me, 'avatar cfg__av')}<button class="btn btn--soft btn--xs" id="cfg-photo">${icon('photo_camera')} Cambiar</button>${acc.photo ? `<button class="btn btn--soft btn--xs" id="cfg-photo-off">${icon('delete')} Sacar</button>` : ''}</div></div>` +
       `<div class="cfg__row"><div class="cfg__l">${icon('badge')}<div><b>Nombre</b><small>Cómo te ven en la app.</small></div></div><div class="cfg__r"><input class="cfg__in" id="cfg-name" maxlength="24" value="${escapeHtml(me.name)}"></div></div>` +
       `<div class="cfg__row"><div class="cfg__l">${icon('palette')}<div><b>Tu color</b><small>Pinta tus puntajes y acentos.</small></div></div><div class="cfg__r su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c.toLowerCase() === String(me.color).toLowerCase() ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>` +
       `<div class="cfg__row"><div class="cfg__l">${icon('link')}<div><b>Usuario de Letterboxd</b><small>Se usa en PWM para sincronizar tus películas.</small></div></div><div class="cfg__r"><input class="cfg__in" id="cfg-lb" maxlength="40" placeholder="tuusuario" value="${escapeHtml(acc.lb || me.lb || me.handle || '')}"></div></div>` +
@@ -1365,7 +1503,16 @@
   }
 
   /* ============================================================= BOOT */
-  function startApp() { applyAccent(); wireProfileNavigation(); renderHeader(); setRoute('home'); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
+  function openDeepLink() {
+    const params = new URLSearchParams(location.search);
+    const reviewId = params.get('review');
+    const reviewUser = params.get('user');
+    if (!reviewId) return;
+    const b = byId(reviewId);
+    if (b) openSheet(b, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
+    history.replaceState({}, '', location.pathname);
+  }
+  function startApp() { applyAccent(); wireProfileNavigation(); renderHeader(); setRoute('home'); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
   (async () => {
     await store.init();
     mergeExtras();
@@ -1378,7 +1525,7 @@
       painting = true;
       requestAnimationFrame(() => {
         painting = false; mergeExtras(); refreshUsers();
-        const busy = !$('#sheet').hidden || $('#confirm').hidden === false || document.getElementById('picksheet')?.hidden === false || document.getElementById('addbook')?.hidden === false;
+        const busy = !$('#sheet').hidden || $('#confirm').hidden === false || document.getElementById('picksheet')?.hidden === false || document.getElementById('addbook')?.hidden === false || document.getElementById('notification-center');
         renderHeader();
         if (!busy) renderRoute();
       });

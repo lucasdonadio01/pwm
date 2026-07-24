@@ -4,6 +4,7 @@
   const trending = WM.trending;
   const store = WM.store;
   const K = window.APPKIT;
+  const APP_ID = 'pwm';
 
   // Users = the built-ins from data.js merged with the accounts anyone created (shared with PRB).
   // The object identity never changes, so every closure that captured `users` keeps working.
@@ -200,7 +201,7 @@
         `<div class="confirm__title">Crear usuario</div>` +
         `<div class="su-photo"><button class="su-photo__btn" id="su-pic" style="--c:${color}">` +
         (photo ? `<img src="${photo}" alt="">` : icon('add_a_photo')) + `</button>` +
-        `<div class="su-photo__txt"><b>Foto de perfil</b><small>Elegí una de la galería (hasta 10MB) y recortala. Se guarda chiquita.</small>` +
+        `<div class="su-photo__txt"><b>Foto o GIF de perfil</b><small>Fotos hasta 10MB para recortar · GIF animado hasta 1MB, sin perder el movimiento.</small>` +
         (photo ? `<button class="linklike" id="su-picoff">Sacar la foto</button>` : '') + `</div></div>` +
         `<label class="tl-field"><span>Nombre</span><input id="su-name" type="text" maxlength="24" placeholder="Cómo te llamás" autocomplete="off"></label>` +
         `<label class="tl-field"><span>Usuario de Letterboxd <small>(opcional)</small></span><input id="su-lb" type="text" maxlength="40" placeholder="tuusuario" autocomplete="off"></label>` +
@@ -258,10 +259,105 @@
   let profileUserId = null;
   let profileNavigationWired = false;
 
+  function activityCopy(item) {
+    const actor = users[item.actor] || { name: 'Alguien' };
+    if (item.type === 'review_like') return {
+      icon: 'favorite',
+      title: `${actor.name} le dio me gusta a tu reseña`,
+      detail: item.title || 'Una de tus reseñas',
+    };
+    if (item.type === 'review_publish') return {
+      icon: 'rate_review',
+      title: `${actor.name} ${item.action === 'updated' ? 'actualizó' : 'publicó'} una reseña`,
+      detail: item.title || 'Nueva reseña',
+    };
+    if (item.type === 'calendar_invite') return {
+      icon: 'confirmation_number',
+      title: `${actor.name} te invitó a ver una función`,
+      detail: [item.title, item.iso ? fmtDay(item.iso) : ''].filter(Boolean).join(' · '),
+    };
+    if (item.type === 'calendar_accept') return {
+      icon: 'celebration',
+      title: `${actor.name} confirmó que va`,
+      detail: [item.title, item.iso ? fmtDay(item.iso) : ''].filter(Boolean).join(' · '),
+    };
+    return { icon: 'notifications', title: 'Tenés una novedad', detail: item.title || '' };
+  }
+
+  function closeNotifications() {
+    const el = document.getElementById('notification-center');
+    if (el) el.remove();
+    document.body.style.overflow = '';
+  }
+
+  function openActivityItem(item) {
+    closeNotifications();
+    if (item.type === 'calendar_invite' || item.type === 'calendar_accept') {
+      calBoardId = item.calId || 'cal-main';
+      if (item.iso) {
+        const d = new Date(item.iso + 'T00:00:00');
+        calCursor = { y: d.getFullYear(), m: d.getMonth() };
+      }
+      setRoute('calendario');
+      if (item.iso) setTimeout(() => {
+        const C = currentCalendars().find((c) => c.id === calBoardId) || currentCalendars()[0];
+        openCalDay(C, item.iso);
+      }, 60);
+      return;
+    }
+    if ((item.type === 'review_like' || item.type === 'review_publish') && item.itemId) {
+      if (item.app === APP_ID) {
+        const f = byId(item.itemId);
+        if (f) openSheet(f, { mode: 'review', reviewUserId: item.reviewOwner || item.actor });
+      } else {
+        location.href = `prb/index.html?review=${encodeURIComponent(item.itemId)}&user=${encodeURIComponent(item.reviewOwner || item.actor || '')}`;
+      }
+    }
+  }
+
+  function openNotifications() {
+    const u = currentUser();
+    if (!u || u.guest) return;
+    closeNotifications();
+    const items = K.activity.forUser(store, u.id);
+    const unread = new Set(items.filter((item) => !(item.readBy || {})[u.id]).map((item) => item.id));
+    const el = document.createElement('div');
+    el.id = 'notification-center';
+    el.className = 'notification-center';
+    el.innerHTML =
+      `<button class="notification-center__scrim" data-notif-close aria-label="Cerrar notificaciones"></button>` +
+      `<aside class="notification-panel" role="dialog" aria-modal="true" aria-label="Notificaciones">` +
+      `<div class="notification-panel__head"><div><h3>Notificaciones</h3><p>Lo nuevo entre ustedes.</p></div><button class="icon-btn" data-notif-close aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<div class="notification-list">` +
+      (items.length ? items.map((item, i) => {
+        const copy = activityCopy(item);
+        const actor = users[item.actor] || { id: item.actor, color: '#777', initial: '?' };
+        return `<div class="notif-item${unread.has(item.id) ? ' is-unread' : ''}">` +
+          `<button class="notif-item__main" data-notif-open="${i}">${avatarHTML(actor, 'avatar notif-item__avatar')}` +
+          `<span class="notif-item__icon">${icon(copy.icon)}</span><span class="notif-item__copy"><b>${escapeHtml(copy.title)}</b>` +
+          `<small>${escapeHtml(copy.detail)}</small><time>${escapeHtml(K.activity.timeAgo(item.createdAt))}</time></span></button>` +
+          `<button class="icon-btn notif-item__dismiss" data-notif-dismiss="${i}" aria-label="Sacar notificación">${icon('close')}</button></div>`;
+      }).join('') : `<div class="notification-empty">${icon('notifications_none')}<b>Está todo tranquilo</b><p>Cuando alguien publique, le dé like a una reseña o te invite, aparece acá.</p></div>`) +
+      `</div></aside>`;
+    document.body.appendChild(el);
+    document.body.style.overflow = 'hidden';
+    el.querySelectorAll('[data-notif-close]').forEach((b) => b.addEventListener('click', closeNotifications));
+    el.querySelectorAll('[data-notif-open]').forEach((b) => b.addEventListener('click', () => openActivityItem(items[+b.dataset.notifOpen])));
+    el.querySelectorAll('[data-notif-dismiss]').forEach((b) => b.addEventListener('click', () => {
+      K.activity.dismiss(store, u.id, items[+b.dataset.notifDismiss].id);
+      openNotifications();
+    }));
+    if (unread.size) {
+      K.activity.markRead(store, u.id, [...unread]);
+      renderHeader();
+    }
+  }
+
   function renderHeader() {
     const u = currentUser();
     const header = $('#site-header');
     const pend = pendingInvites().length;
+    const unread = u && !u.guest ? K.activity.unreadCount(store, u.id) : 0;
     header.innerHTML =
       `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
       `<a class="logo" href="#home" aria-label="PWM — Project Watch Movies, inicio"><b>PWM</b><span class="dot">.</span></a>` +
@@ -270,6 +366,8 @@
       `<button class="icon-btn hdr-bolt" id="hdr-bolt" title="Modo relámpago" aria-label="Modo relámpago">${icon('bolt')}</button>` +
       `<button class="icon-btn hdr-cal" id="hdr-cal" title="Calendario" aria-label="Calendario${pend ? ` · ${pend} invitación(es) nueva(s)` : ''}">${icon('calendar_month')}` +
       (pend ? `<span class="hdr-badge">+${pend}</span>` : '') + `</button>` +
+      `<button class="icon-btn hdr-notif" id="hdr-notif" title="Notificaciones" aria-label="Notificaciones${unread ? ` · ${unread} nueva(s)` : ''}">${icon('notifications')}` +
+      (unread ? `<span class="hdr-badge">${unread > 9 ? '9+' : unread}</span>` : '') + `</button>` +
       `<div class="user-chip">` +
       `<button type="button" class="user-chip__name profile-link"${u ? ` data-profile-user="${escapeHtml(u.id)}"` : ''} title="Ver mi perfil">${u ? escapeHtml(u.name) : ''}</button>` +
       `<button type="button" class="user-chip__avatar" id="user-chip" title="Tu cuenta" aria-label="Abrir tu cuenta" aria-haspopup="true">` +
@@ -286,6 +384,7 @@
       setRoute('calendario');
       if (pendingInvites().length) setTimeout(openInviteOverlay, 80);
     });
+    $('#hdr-notif', header).addEventListener('click', openNotifications);
     $('#user-chip', header).addEventListener('click', openUserMenu);
     header.hidden = false;
   }
@@ -1226,6 +1325,31 @@
   ];
   const modeOf = (v) => CAL_MODES.find((m) => m.v === v) || null;
   const modeLabel = (ev) => { const m = modeOf(ev.mode); return m ? m.label : (ev.place || ''); };
+  function eventInvitees(C, ev) {
+    if (Array.isArray(ev.invitees)) return ev.invitees.filter((uid) => uid !== ev.by && users[uid]);
+    return C.members.filter((uid) => uid !== ev.by && users[uid]); // legacy events invited every member
+  }
+
+  function sendCalendarInviteActivities(C, iso, ev, invitees) {
+    const actor = users[ev.by] || currentUser();
+    const f = byId(ev.filmId) || { title: 'una función' };
+    K.activity.pushMany(store, invitees.map((uid) => ({
+      id: `calendar-invite:${C.id}:${ev.id}:${uid}`,
+      type: 'calendar_invite', app: APP_ID, actor: actor.id, target: uid,
+      calId: C.id, eventId: ev.id, iso, itemId: ev.filmId, title: f.title,
+      createdAt: new Date().toISOString(),
+    })));
+  }
+
+  function sendCalendarAcceptActivity(C, iso, ev, uid) {
+    const f = byId(ev.filmId) || { title: 'una función' };
+    K.activity.push(store, {
+      id: `calendar-accept:${C.id}:${ev.id}:${uid}`,
+      type: 'calendar_accept', app: APP_ID, actor: uid, target: ev.by,
+      calId: C.id, eventId: ev.id, iso, itemId: ev.filmId, title: f.title,
+      createdAt: new Date().toISOString(),
+    });
+  }
 
   /* ---------- invitations ----------
    * Every event records who created it (`by`). For everyone else on that calendar it is an
@@ -1245,7 +1369,7 @@
     const out = [];
     eachEvent((C, iso, ev) => {
       if (!ev.by || ev.by === u.id) return;
-      if (!C.members.includes(u.id)) return;
+      if (!eventInvitees(C, ev).includes(u.id)) return;
       if (iso < today) return;                                    // ya pasó, no molestamos
       if ((ev.accepted || {})[u.id] || (ev.dismissed || {})[u.id]) return;
       out.push({ C, iso, ev });
@@ -1365,10 +1489,10 @@
   }
 
   /** The invitation itself: poster, when, how, and Aceptar / Descartar. */
-  function openInviteOverlay() {
+  function openInviteOverlay(preferredEventId) {
     const list = pendingInvites();
     if (!list.length) return;
-    let i = 0;
+    let i = Math.max(0, list.findIndex((n) => n.ev.id === preferredEventId));
     const host = calendarNotificationHost();
     let el = document.getElementById('invite');
     if (!el) { el = document.createElement('div'); el.id = 'invite'; el.className = 'calnotify calnotify--invite'; host.prepend(el); }
@@ -1403,12 +1527,15 @@
       el.querySelector('[data-inv-yes]').addEventListener('click', () => {
         const u = currentUser();
         patchEvent(n.C.id, n.iso, n.ev.id, (e) => { e.accepted = e.accepted || {}; e.accepted[u.id] = new Date().toISOString(); });
+        sendCalendarAcceptActivity(n.C, n.iso, n.ev, u.id);
+        K.activity.markRead(store, u.id, [`calendar-invite:${n.C.id}:${n.ev.id}:${u.id}`]);
         showCalendarToast('¡Anotado!', `Le avisamos a ${users[n.ev.by] ? users[n.ev.by].name : 'quien te invitó'}.`, 'success');
         i++; draw();
       });
       el.querySelector('[data-inv-no]').addEventListener('click', () => {
         const u = currentUser();
         patchEvent(n.C.id, n.iso, n.ev.id, (e) => { e.dismissed = e.dismissed || {}; e.dismissed[u.id] = true; });
+        K.activity.markRead(store, u.id, [`calendar-invite:${n.C.id}:${n.ev.id}:${u.id}`]);
         i++; draw();
       });
     };
@@ -1446,6 +1573,30 @@
     grid.innerHTML = html;
     grid.querySelectorAll('[data-day]').forEach((cell) => cell.addEventListener('click', () => openCalDay(C, cell.dataset.day)));
   }
+  function eventAttendanceHTML(C, ev) {
+    const me = currentUser();
+    const invitees = eventInvitees(C, ev);
+    const accepted = ev.accepted || {};
+    const dismissed = ev.dismissed || {};
+    if (ev.by === me.id) {
+      if (!invitees.length) return `<div class="calev__attendance is-solo">${icon('person')} La agendaste sin invitados.</div>`;
+      return `<div class="calev__attendance-list">${invitees.map((uid) => {
+        const who = users[uid] || { name: uid };
+        if (accepted[uid]) return `<div class="calev__attendance is-going">${icon('how_to_reg')} <b>${escapeHtml(who.name)}</b> asistirá a la función!</div>`;
+        if (dismissed[uid]) return `<div class="calev__attendance is-declined">${icon('person_off')} <b>${escapeHtml(who.name)}</b> esta vez no puede.</div>`;
+        return `<div class="calev__attendance is-pending">${icon('schedule')} <b>${escapeHtml(who.name)}</b> todavía no confirmó.</div>`;
+      }).join('')}</div>`;
+    }
+    if (invitees.includes(me.id)) {
+      const from = users[ev.by] || { name: 'Alguien' };
+      if (accepted[me.id]) return `<div class="calev__attendance is-going">${icon('check_circle')} Confirmaste que vas a la función.</div>`;
+      if (dismissed[me.id]) return `<div class="calev__attendance is-declined">${icon('event_busy')} Dijiste que esta vez no.</div>`;
+      return `<div class="calev__attendance is-pending">${icon('mark_email_unread')} Invitación de <b>${escapeHtml(from.name)}</b> pendiente… ` +
+        `<button class="linklike" data-answer-invite="${escapeHtml(ev.id)}">Responder</button></div>`;
+    }
+    const going = invitees.filter((uid) => accepted[uid]);
+    return going.length ? `<div class="calev__attendance is-going">${icon('groups')} ${going.map((uid) => escapeHtml((users[uid] || {}).name || uid)).join(', ')} ${going.length === 1 ? 'asistirá' : 'asistirán'}.</div>` : '';
+  }
   function openCalDay(C, iso) {
     const evsNow = calEventsMap(C.id)[iso] || [];
     const watNow = watchedByDate(C.members)[iso] || [];
@@ -1465,11 +1616,10 @@
         (evs.length ? `<div class="calday__sec">${icon('theaters')} Funciones planeadas</div>` + evs.map((e) => {
           const f = byId(e.filmId) || { id: e.filmId, title: '?' };
           const m = modeOf(e.mode);
-          const going = Object.keys(e.accepted || {});
           return `<div class="calev"><span class="calev__poster" style="background:${filmThumb(f)}"></span>` +
             `<div class="calev__body"><div class="calev__title">${escapeHtml(f.title)}</div>` +
             `<div class="calev__meta">${[e.time ? icon('schedule') + ' ' + escapeHtml(e.time) : '', m ? icon(m.icon) + ' ' + m.label : '', e.place ? icon('place') + ' ' + escapeHtml(e.place) : ''].filter(Boolean).join(' · ') || 'sin horario ni lugar'}</div>` +
-            (going.length ? `<div class="calev__going">${icon('how_to_reg')} van ${going.map((uid) => escapeHtml((users[uid] || {}).name || uid)).join(', ')}</div>` : '') +
+            eventAttendanceHTML(C, e) +
             `</div>${C.editable ? `<button class="icon-btn calev__edit" data-edit="${e.id}" aria-label="Editar">${icon('edit')}</button>` : ''}</div>`;
         }).join('') : '') +
         (wat.length ? `<div class="calday__sec">${icon('event_available')} Vieron ese día</div>` + wat.map((w) => `<div class="calev"><span class="calev__poster" style="background:${filmThumb(w.film)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(w.film.title)}</div><div class="calev__meta">${avatarHTML(users[w.uid] || { id: w.uid, color: '#666', initial: '?' }, 'avatar calev__av')} ${escapeHtml((users[w.uid] || {}).name || w.uid)}</div></div></div>`).join('') : '') +
@@ -1487,6 +1637,11 @@
         if (!ev) return;
         closeCalDay();
         openCalEventModal(C, iso, ev, reopen, reopen);
+      }));
+      el.querySelectorAll('[data-answer-invite]').forEach((b) => b.addEventListener('click', () => {
+        const eventId = b.dataset.answerInvite;
+        closeCalDay();
+        openInviteOverlay(eventId);
       }));
     };
     render(); el.hidden = false; document.body.style.overflow = 'hidden';
@@ -1509,6 +1664,9 @@
     let picking = !filmId;
     let searchTimer = null;
     let searchToken = 0;
+    const eventCreatorId = (ev && ev.by) || currentUser().id;
+    const inviteCandidates = C.members.map((uid) => users[uid]).filter((u) => u && u.id !== eventCreatorId);
+    const invitees = new Set(editing ? eventInvitees(C, ev) : []);
 
     const localResults = (q) => movies.slice()
       .filter((m) => !q || m.title.toLowerCase().includes(q))
@@ -1581,6 +1739,9 @@
         `<div class="cev-row"><label class="fieldlet">Horario<input type="time" id="cev-time" value="${ev && ev.time ? escapeHtml(ev.time) : ''}"></label></div>` +
         `<div class="cev-modes"><span class="watchmeta__lbl">¿Cómo la vemos?</span>` +
         CAL_MODES.map((m) => `<button class="wchip${mode === m.v ? ' is-on' : ''}" data-mode="${m.v}" title="${m.note || m.label}">${icon(m.icon)} ${m.label}</button>`).join('') + `</div>` +
+        `<div class="tl-members cev-invitees"><div class="tl-members__lbl">¿A quién invitás? <span id="cev-invite-count">${invitees.size ? `${invitees.size} ${invitees.size === 1 ? 'persona elegida' : 'personas elegidas'}` : 'nadie por ahora'}</span></div>` +
+        (inviteCandidates.length ? inviteCandidates.map((person) => `<button type="button" class="tl-member${invitees.has(person.id) ? ' is-on' : ''}" data-invite-user="${escapeHtml(person.id)}">${avatarHTML(person, 'avatar tl-member__av')} ${escapeHtml(person.name)}</button>`).join('') :
+          `<p class="addfilm__hint">No hay otros usuarios en este calendario.</p>`) + `</div>` +
         `<label class="tl-field"><span>Nota <small>(opcional — sala, link, dirección…)</small></span><input type="text" id="cev-place" maxlength="60" placeholder="Ej: Showcase Norte, sala 4" value="${ev && ev.place ? escapeHtml(ev.place) : ''}"></label>` +
         `<div class="confirm__actions">` + (editing ? `<button class="btn btn--soft" id="cev-del">${icon('delete')} Borrar</button>` : '') +
         `<button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cev-ok">${icon('check')} ${editing ? 'Guardar' : 'Agregar'}</button></div></div>`;
@@ -1601,6 +1762,13 @@
         mode = mode === b.dataset.mode ? null : b.dataset.mode;
         el.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('is-on', x.dataset.mode === mode));
       }));
+      el.querySelectorAll('[data-invite-user]').forEach((b) => b.addEventListener('click', () => {
+        const uid = b.dataset.inviteUser;
+        if (invitees.has(uid)) invitees.delete(uid); else invitees.add(uid);
+        b.classList.toggle('is-on', invitees.has(uid));
+        const count = el.querySelector('#cev-invite-count');
+        if (count) count.textContent = invitees.size ? `${invitees.size} ${invitees.size === 1 ? 'persona elegida' : 'personas elegidas'}` : 'nadie por ahora';
+      }));
       el.querySelector('#cev-ok').addEventListener('click', () => {
         if (!filmId) { K.toast('Elegí una película primero.', 'bad'); picking = true; draw(); return; }
         if (askDay) { const di = el.querySelector('#cev-day'); day = (di && di.value) || day; }
@@ -1608,20 +1776,38 @@
         const place = el.querySelector('#cev-place').value.trim() || null;
         const me = currentUser();
         const map = store.getCalEvents(C.id); map[day] = map[day] || [];
+        let savedEvent = null;
+        let newInvitees = [];
         if (editing) {
           const e2 = map[day].find((x) => x.id === ev.id);
-          if (e2) { e2.filmId = filmId; e2.time = time; e2.place = place; e2.mode = mode; }
+          if (e2) {
+            const previous = eventInvitees(C, e2);
+            e2.filmId = filmId; e2.time = time; e2.place = place; e2.mode = mode; e2.invitees = [...invitees];
+            newInvitees = [...invitees].filter((uid) => !previous.includes(uid));
+            const removedInvitees = previous.filter((uid) => !invitees.has(uid));
+            K.activity.removeMany(store, removedInvitees.map((uid) => `calendar-invite:${C.id}:${e2.id}:${uid}`));
+            ['accepted', 'dismissed', 'acceptSeen'].forEach((field) => {
+              const status = e2[field] || {};
+              Object.keys(status).forEach((uid) => { if (!invitees.has(uid)) delete status[uid]; });
+              e2[field] = status;
+            });
+            savedEvent = e2;
+          }
         } else {
-          map[day].push({
+          savedEvent = {
             id: 'ce-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
             filmId, time, place, mode, by: me.id, createdAt: new Date().toISOString(),
-            accepted: {}, dismissed: {}, acceptSeen: {},
-          });
+            invitees: [...invitees], accepted: {}, dismissed: {}, acceptSeen: {},
+          };
+          map[day].push(savedEvent);
+          newInvitees = [...invitees];
         }
         store.saveCalEvents(C.id, map);
+        if (savedEvent && newInvitees.length) sendCalendarInviteActivities(C, day, savedEvent, newInvitees);
         el.hidden = true;
-        const invited = C.members.filter((m) => m !== me.id).length;
+        const invited = invitees.size;
         if (!editing && invited) showCalendarToast('Invitación enviada', `${invited} ${invited === 1 ? 'persona recibió' : 'personas recibieron'} la función.`, 'success');
+        else if (!editing) showCalendarToast('Función agendada', 'Quedó en tu calendario, sin invitados.', 'success');
         if (onDone) onDone(day);
       });
       const del = el.querySelector('#cev-del');
@@ -1629,6 +1815,10 @@
         const map = store.getCalEvents(C.id);
         map[iso] = (map[iso] || []).filter((x) => x.id !== ev.id);
         if (!map[iso].length) delete map[iso];
+        K.activity.removeMany(store, [
+          ...eventInvitees(C, ev).map((uid) => `calendar-invite:${C.id}:${ev.id}:${uid}`),
+          ...Object.keys(ev.accepted || {}).map((uid) => `calendar-accept:${C.id}:${ev.id}:${uid}`),
+        ]);
         store.saveCalEvents(C.id, map); el.hidden = true; if (onDone) onDone(iso);
       });
     };
@@ -1661,7 +1851,18 @@
     el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card"><div class="confirm__title">¿Borrar “${escapeHtml(C.name)}”?</div><p class="confirm__text">Se borran las funciones planeadas de este calendario. Las reseñas no se tocan.</p><div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cal-delok">${icon('delete')} Borrar</button></div></div>`;
     el.hidden = false;
     el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
-    el.querySelector('#cal-delok').addEventListener('click', () => { store.saveCalendars(store.getCalendars().filter((c) => c.id !== C.id)); store.clearCalEvents(C.id); calBoardId = null; el.hidden = true; renderCalendario(app); });
+    el.querySelector('#cal-delok').addEventListener('click', () => {
+      const activityIds = [];
+      const map = store.getCalEvents(C.id);
+      Object.values(map).flat().forEach((ev) => {
+        eventInvitees(C, ev).forEach((uid) => activityIds.push(`calendar-invite:${C.id}:${ev.id}:${uid}`));
+        Object.keys(ev.accepted || {}).forEach((uid) => activityIds.push(`calendar-accept:${C.id}:${ev.id}:${uid}`));
+      });
+      K.activity.removeMany(store, activityIds);
+      store.saveCalendars(store.getCalendars().filter((c) => c.id !== C.id));
+      store.clearCalEvents(C.id);
+      calBoardId = null; el.hidden = true; renderCalendario(app);
+    });
   }
   function openCalOthers(app, others) {
     openPickSheet('Calendarios de otros', () => others.map((c) => ({ thumb: userThumb(c.owner), label: `${c.name} — ${ownerName(c.owner)}`, check: c.id === calBoardId, onClick: () => { calBoardId = c.id; closePickSheet(); renderCalendario(app); } })));
@@ -1921,6 +2122,51 @@
     return parts.length ? `<p class="verdict__dates">${icon('event')} ${parts.join(' · ')}</p>` : '';
   }
 
+  function reviewLikeHTML(f, reviewOwner, viewer) {
+    const count = store.reviewLikeCount(f.id, reviewOwner.id);
+    if (reviewOwner.id === viewer.id) {
+      return count ? `<span class="review-like-summary">${icon('favorite')} ${count} ${count === 1 ? 'persona bancó' : 'personas bancaron'} tu reseña</span>` : '';
+    }
+    const liked = store.hasReviewLike(f.id, reviewOwner.id, viewer.id);
+    return `<button type="button" class="review-like${liked ? ' is-liked' : ''}" id="review-like">${icon('favorite')}` +
+      `<span class="review-like__label">${liked ? 'Te gusta esta reseña' : 'Me gusta esta reseña'}</span><b>${count || ''}</b></button>`;
+  }
+
+  function toggleReviewLike(f, reviewOwner, btn) {
+    const viewer = currentUser();
+    if (guestBlock('darle like a una reseña') || viewer.id === reviewOwner.id) return;
+    const next = !store.hasReviewLike(f.id, reviewOwner.id, viewer.id);
+    store.setReviewLike(f.id, reviewOwner.id, viewer.id, next);
+    const activityId = `review-like:${APP_ID}:${f.id}:${reviewOwner.id}:${viewer.id}`;
+    if (next) {
+      K.activity.push(store, {
+        id: activityId, type: 'review_like', app: APP_ID, actor: viewer.id, target: reviewOwner.id,
+        itemId: f.id, title: f.title, reviewOwner: reviewOwner.id, createdAt: new Date().toISOString(),
+      });
+    } else {
+      K.activity.remove(store, activityId);
+    }
+    const count = store.reviewLikeCount(f.id, reviewOwner.id);
+    btn.classList.toggle('is-liked', next);
+    btn.querySelector('.review-like__label').textContent = next ? 'Te gusta esta reseña' : 'Me gusta esta reseña';
+    btn.querySelector('b').textContent = count || '';
+  }
+
+  function publishReviewActivity(f, before, after) {
+    const actor = currentUser();
+    const cleanBefore = (before || '').trim();
+    const cleanAfter = (after || '').trim();
+    if (!cleanAfter || cleanAfter === cleanBefore) return;
+    const targets = Object.keys(users).filter((uid) => uid !== actor.id);
+    if (!targets.length) return;
+    K.activity.push(store, {
+      id: `review:${APP_ID}:${f.id}:${actor.id}:${Date.now()}`,
+      type: 'review_publish', app: APP_ID, actor: actor.id, targets,
+      itemId: f.id, title: f.title, reviewOwner: actor.id,
+      action: cleanBefore ? 'updated' : 'published', createdAt: new Date().toISOString(),
+    });
+  }
+
   /* ============================================================= SHEET */
   const sheet = $('#sheet');
   let sheetFilm = null;
@@ -1949,6 +2195,7 @@
       `</div>` +
       (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`) +
       watchMetaLine(f, reviewOwner.id) +
+      reviewLikeHTML(f, reviewOwner, u) +
       `</div>`;
     const editor =
       `<div class="rate-box${editingReview ? ' rate-box--editing' : ''}">` +
@@ -2004,7 +2251,9 @@
       });
       $('#save-review', sheet).addEventListener('click', () => {
         if (guestBlock()) return;
-        store.setReview(f.id, u.id, $('#review', sheet).value.trim());
+        const nextReview = $('#review', sheet).value.trim();
+        store.setReview(f.id, u.id, nextReview);
+        publishReviewActivity(f, me.review, nextReview);
         if (editingReview) {
           openSheet(f, { mode: 'review', reviewUserId: u.id });
           return;
@@ -2019,6 +2268,8 @@
     } else {
       const edit = $('#edit-review', sheet);
       if (edit) edit.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id, editing: true }));
+      const reviewLike = $('#review-like', sheet);
+      if (reviewLike) reviewLike.addEventListener('click', () => toggleReviewLike(f, reviewOwner, reviewLike));
     }
     const st = $('#sheet-trailer', sheet); if (st) st.addEventListener('click', () => openTrailer(f));
     const sp = $('#sheet-plan', sheet);
@@ -2404,7 +2655,7 @@
     sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     sec.innerHTML =
       `<div class="phero phero--overview" style="--c:${u.color}"><div class="phero__identity">` +
-      `<button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'} title="${mine ? 'Cambiar foto' : ''}">${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
+      `<button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'} title="${mine ? 'Cambiar foto o GIF' : ''}">${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
       `<div class="phero__body"><h2 class="phero__name">${escapeHtml(u.name)}</h2>` +
       `<p class="phero__handle">@${escapeHtml(u.lb || u.handle || u.id)}${u.lb ? ' · Letterboxd' : ''}</p>` +
       `<p class="phero__bio" id="p-bio">${bio ? escapeHtml(bio) : (mine ? '<i>Sin descripción — tocá para escribir algo.</i>' : '<i>Sin descripción.</i>')}</p>` +
@@ -2496,7 +2747,7 @@
       `<div class="section__head"><div><h3 class="section__title">Configuraciones</h3>` +
       `<p class="section__sub">Tu cuenta — es la misma para <b>PWM</b> y <b>PRB</b>.</p></div></div>` +
       `<div class="cfg">` +
-      `<div class="cfg__row"><div class="cfg__l">${icon('account_circle')}<div><b>Foto de perfil</b><small>Se recorta y se guarda chiquita (400×400).</small></div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('account_circle')}<div><b>Foto o GIF de perfil</b><small>Las fotos se recortan; los GIF de hasta 1MB conservan la animación en las dos apps.</small></div></div>` +
       `<div class="cfg__r">${avatarHTML(me, 'avatar cfg__av')}<button class="btn btn--soft btn--xs" id="cfg-photo">${icon('photo_camera')} Cambiar</button>` +
       (acc.photo ? `<button class="btn btn--soft btn--xs" id="cfg-photo-off">${icon('delete')} Sacar</button>` : '') + `</div></div>` +
 
@@ -2578,11 +2829,36 @@
   function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
   /* ============================================================= BOOT */
+  function openDeepLink() {
+    const params = new URLSearchParams(location.search);
+    const reviewId = params.get('review');
+    const reviewUser = params.get('user');
+    const calendarId = params.get('calendar');
+    const date = params.get('date');
+    if (reviewId) {
+      const f = byId(reviewId);
+      if (f) openSheet(f, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
+    } else if (calendarId) {
+      calBoardId = calendarId;
+      if (date) {
+        const d = new Date(date + 'T00:00:00');
+        calCursor = { y: d.getFullYear(), m: d.getMonth() };
+      }
+      setRoute('calendario');
+      if (date) setTimeout(() => {
+        const C = currentCalendars().find((c) => c.id === calBoardId) || currentCalendars()[0];
+        openCalDay(C, date);
+      }, 60);
+    }
+    if (reviewId || calendarId) history.replaceState({}, '', location.pathname);
+  }
+
   function startApp() {
     applyAccent();
     wireProfileNavigation();
     renderHeader();
     setRoute('home');
+    setTimeout(openDeepLink, 40);
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
   }
@@ -2605,7 +2881,8 @@
           || document.getElementById('swiper')?.hidden === false
           || $('#confirm').hidden === false
           || document.getElementById('invite')?.hidden === false
-          || document.getElementById('calday')?.hidden === false;
+          || document.getElementById('calday')?.hidden === false
+          || document.getElementById('notification-center');
         renderHeader();                                  // el +N del calendario siempre al día
         if (!busy) renderRoute();
       });

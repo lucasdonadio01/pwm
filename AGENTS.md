@@ -28,12 +28,12 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- Review correction lote 4 #13 and approve the push to `main`.
+- Review lote 4 #13–14 and approve the push to `main`.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-23 · Codex
-- Added focused review sheets in PWM and PRB: read-only by default, own-review edit mode, no synopsis, and no PWM scheduling in review context.
-- Added profile navigation from visible user names while preserving the separate account menu on the header avatar.
-- Verified own/other permissions, optional metadata editing, cross-profile navigation, standard movie sheets, and both apps in the local browser.
-- Bumped cache assets to v16 and app stamps to PWM 1.6 / PRB 1.5. Awaiting Lucas approval before push.
+- Added targeted calendar invitees, pending/accepted attendance states, and shared PWM/PRB notifications for invites, acceptances, review posts and review likes.
+- Added review-specific likes and tightened PRB focused reviews; added animated GIF avatars (1MB raw GIF, photos still cropped).
+- Removed the real test account `bob` plus its lone calendar reference; no Bob reviews existed.
+- Verified both apps, calendar selection/status, review permissions/likes, notification empty/real states, deep links, syntax and remote cleanup. Assets v18; PWM 1.7 / PRB 1.6. Awaiting Lucas approval.

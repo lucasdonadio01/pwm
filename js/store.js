@@ -214,6 +214,23 @@ WM.store = (function () {
       settings.watchmeta = all; saveLocal(); notify(); pushSetting('watchmeta');
     },
 
+    // Likes on a specific user's written review (separate from liking the film itself).
+    getReviewLikes(filmId, reviewUserId) {
+      const row = (settings.reviewlikes && settings.reviewlikes[filmId] && settings.reviewlikes[filmId][reviewUserId]) || {};
+      return JSON.parse(JSON.stringify(row));
+    },
+    hasReviewLike(filmId, reviewUserId, likerId) { return !!this.getReviewLikes(filmId, reviewUserId)[likerId]; },
+    reviewLikeCount(filmId, reviewUserId) { return Object.values(this.getReviewLikes(filmId, reviewUserId)).filter(Boolean).length; },
+    setReviewLike(filmId, reviewUserId, likerId, liked) {
+      const all = settings.reviewlikes || (settings.reviewlikes = {});
+      all[filmId] = all[filmId] || {};
+      all[filmId][reviewUserId] = all[filmId][reviewUserId] || {};
+      if (liked) all[filmId][reviewUserId][likerId] = true;
+      else delete all[filmId][reviewUserId][likerId];
+      settings.reviewlikes = all; saveLocal(); notify(); pushSetting('reviewlikes');
+      return liked;
+    },
+
     // custom & shared tier lists (beyond the per-user default) — synced via settings
     getTierlists() { return Array.isArray(settings.tierlists) ? settings.tierlists.slice() : []; },
     saveTierlists(list) { settings.tierlists = list.slice(); saveLocal(); notify(); pushSetting('tierlists'); },

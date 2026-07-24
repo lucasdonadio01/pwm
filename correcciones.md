@@ -98,3 +98,13 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Las reseñas ajenas son de solo lectura y mantienen debajo las opiniones de los demás usuarios.
 - Los nombres de usuario visibles en reseñas, perfiles, tiers y calendario llevan al perfil público con sus estadísticas.
 - Estado: **✅ implementado y verificado localmente en PWM y PRB; pendiente de aprobación de Lucas para publicar**.
+
+## 14. ✅ [Ambos · Actividad/Calendario/Cuentas] Invitaciones dirigidas + notificaciones + GIF
+- Calendario: cada función permite elegir exactamente a quién invitar; una función también puede quedar sin invitados.
+- Al abrir el día, el creador ve quién sigue pendiente, quién no puede y quién **asistirá a la función**. El invitado ve “Invitación de [usuario] pendiente” y puede responder desde ahí.
+- Centro de notificaciones compartido en PWM y PRB para invitaciones, confirmaciones, reseñas publicadas/actualizadas y likes de reseñas.
+- Likes de reseñas separados de los likes de películas/libros, con aviso para quien escribió la reseña.
+- En PRB, la vista enfocada de una reseña ajena muestra solamente esa reseña y el botón de like; la propia mantiene **Editar** y todos sus campos.
+- Las cuentas aceptan fotos recortables y GIF animados de hasta 1MB, visibles también en Perfil y “¿Quién sos?”.
+- Se eliminó de Supabase la cuenta de prueba `bob` y su única referencia de calendario, sin tocar la función ni datos ajenos.
+- Estado: **✅ implementado y verificado localmente; pendiente de aprobación de Lucas para publicar**.

@@ -11,7 +11,7 @@ web
 - Los usuarios principales son Lucas (Luke) y Bian, que usan la aplicación juntos para organizar, descubrir y registrar películas, series y libros.
 - Cualquier persona que reciba el enlace puede crear su propio perfil. No se busca difusión pública masiva: Lucas comparte el enlace con un grupo reducido.
 - También existe un modo Invitado de solo lectura para recorrer el contenido sin crear una cuenta.
-- Cada perfil conserva su nombre, foto, color, contraseña, usuario de Letterboxd y actividad propia.
+- Cada perfil conserva su nombre, foto o GIF animado, color, contraseña, usuario de Letterboxd y actividad propia.
 
 ## Product Purpose
 
@@ -67,7 +67,8 @@ Su mecanismo distintivo es conectar en un mismo espacio:
 - Puntuaciones de 0.5 a 5 estrellas, reseñas, likes, fecha y lugar de visualización.
 - Modo relámpago para puntuar títulos rápidamente.
 - Tier lists personales y compartidas con filas configurables.
-- Calendarios personales y compartidos, funciones programadas, invitaciones y notificaciones.
+- Calendarios personales y compartidos, funciones programadas e invitaciones dirigidas a usuarios concretos, con estados pendiente/confirmado.
+- Centro de notificaciones compartido para invitaciones, confirmaciones, nuevas reseñas y likes de reseñas.
 - Perfiles con estadísticas, actividad y medallas.
 
 ### PRB
@@ -76,6 +77,7 @@ Su mecanismo distintivo es conectar en un mismo espacio:
 - Biblioteca y prioridades de lectura.
 - Seguimiento de libros en curso.
 - Puntuaciones, reseñas, likes y fechas.
+- Likes sobre reseñas ajenas, con notificación para quien la escribió.
 - Tier lists personales y compartidas.
 
 ### Datos e infraestructura

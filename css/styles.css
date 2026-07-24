@@ -597,6 +597,18 @@ a { color: inherit; text-decoration: none; }
 }
 .review-focus__empty { color: var(--ink-faint); font-style: italic; margin-top: 1rem; }
 .rate-box--review .verdict__dates { margin-top: 0.9rem; }
+.review-like {
+  display: inline-flex; align-items: center; gap: .42rem; width: fit-content; margin-top: 1rem; padding: .5rem .72rem;
+  border: 1px solid var(--hairline-2); border-radius: var(--r-pill); color: var(--ink-dim);
+  font-size: .8rem; font-weight: 700; transition: color .16s, border-color .16s, background .16s, transform .16s;
+}
+.review-like:hover { color: var(--ink); border-color: color-mix(in srgb, var(--hot) 58%, var(--hairline)); transform: translateY(-1px); }
+.review-like .material-symbols-rounded { font-size: 18px; }
+.review-like b { min-width: .65rem; color: var(--ink-faint); font: .7rem 'JetBrains Mono', monospace; }
+.review-like.is-liked { color: #ffdce7; border-color: color-mix(in srgb, var(--hot) 62%, var(--hairline)); background: color-mix(in srgb, var(--hot) 14%, transparent); }
+.review-like.is-liked .material-symbols-rounded { color: var(--hot); font-variation-settings: 'FILL' 1; }
+.review-like-summary { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1rem; color: var(--ink-dim); font-size: .78rem; }
+.review-like-summary .material-symbols-rounded { color: var(--hot); font-size: 18px; font-variation-settings: 'FILL' 1; }
 
 .review-field { margin-top: 1rem; }
 .review-field label { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 0.5rem; }
@@ -1259,7 +1271,7 @@ a { color: inherit; text-decoration: none; }
 .shfmt__box--st { width: 20px; height: 32px; }
 
 /* A full-bleed event image makes the calendar useful at a glance. */
-.hdr-cal { position: relative; }
+.hdr-cal, .hdr-notif { position: relative; }
 .hdr-badge { position: absolute; top: -3px; right: -3px; min-width: 19px; height: 19px; display: grid; place-items: center; padding: 0 4px; border: 2px solid var(--ground); border-radius: var(--r-pill); background: var(--hot); color: #fff; font: 800 0.58rem 'JetBrains Mono', monospace; box-shadow: 0 0 12px rgba(255,0,85,.72); }
 .calcell.has-art { isolation: isolate; border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); background: var(--surface); background-size: cover !important; background-position: center !important; }
 .calcell__scrim { position: absolute; z-index: -1; inset: 0; background: linear-gradient(180deg, rgba(7,2,2,.2), rgba(7,2,2,.9) 88%); }
@@ -1293,6 +1305,44 @@ a { color: inherit; text-decoration: none; }
 .calnotify__close:hover { color: var(--ink); background: rgba(239,248,255,.08); }
 @keyframes notifyIn { from { opacity: 0; transform: translateX(22px); filter: blur(5px); } to { opacity: 1; transform: translateX(0); filter: blur(0); } }
 
+/* Shared activity center: reviews, review likes and calendar invitations. */
+.notification-center { position: fixed; inset: 0; z-index: 230; }
+.notification-center__scrim { position: absolute; inset: 0; width: 100%; background: rgba(4,1,1,.48); backdrop-filter: blur(2px); }
+.notification-panel {
+  position: absolute; top: calc(var(--header-h) + 10px); right: var(--gutter);
+  width: min(430px, calc(100vw - 2 * var(--gutter))); max-height: min(680px, calc(100svh - var(--header-h) - 24px));
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--hairline-2); border-radius: 18px; color: var(--ink); background: var(--surface);
+  box-shadow: 0 24px 70px rgba(0,0,0,.62), 0 6px 18px rgba(0,0,0,.34);
+  animation: notificationPanelIn .3s cubic-bezier(.16,1,.3,1);
+}
+@keyframes notificationPanelIn {
+  from { opacity: 0; transform: translateY(-8px) scale(.98); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.notification-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--hairline); }
+.notification-panel__head h3 { font-size: 1.08rem; }
+.notification-panel__head p { margin-top: .12rem; color: var(--ink-faint); font-size: .76rem; }
+.notification-list { min-height: 150px; overflow-y: auto; padding: .5rem; }
+.notif-item { position: relative; display: flex; align-items: stretch; border-radius: 13px; transition: background .16s; }
+.notif-item:hover { background: var(--surface-2); }
+.notif-item.is-unread { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.notif-item.is-unread::before { content: ''; position: absolute; top: 50%; left: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 65%, transparent); transform: translateY(-50%); }
+.notif-item__main { min-width: 0; flex: 1; display: flex; align-items: center; gap: .65rem; padding: .7rem .35rem .7rem .8rem; color: var(--ink); text-align: left; }
+.notif-item__avatar { flex: none; width: 36px; height: 36px; font-size: .78rem; }
+.notif-item__icon { flex: none; width: 26px; height: 26px; display: grid; place-items: center; margin-left: -1rem; margin-top: 1.8rem; border: 2px solid var(--surface); border-radius: 50%; color: var(--accent-ink); background: var(--accent); }
+.notif-item__icon .material-symbols-rounded { font-size: 14px; }
+.notif-item__copy { min-width: 0; flex: 1; }
+.notif-item__copy b, .notif-item__copy small, .notif-item__copy time { display: block; overflow-wrap: anywhere; }
+.notif-item__copy b { font-size: .85rem; line-height: 1.25; }
+.notif-item__copy small { margin-top: .16rem; color: var(--ink-dim); font-size: .75rem; line-height: 1.3; }
+.notif-item__copy time { margin-top: .25rem; color: var(--ink-faint); font: .62rem 'JetBrains Mono', monospace; }
+.notif-item__dismiss { align-self: center; flex: none; width: 30px; height: 30px; margin-right: .25rem; border-radius: 50%; color: var(--ink-faint); }
+.notification-empty { min-height: 220px; display: grid; place-items: center; align-content: center; gap: .4rem; padding: 2rem; color: var(--ink-faint); text-align: center; }
+.notification-empty > .material-symbols-rounded { font-size: 34px; color: var(--accent); }
+.notification-empty b { color: var(--ink); }
+.notification-empty p { max-width: 32ch; font-size: .8rem; line-height: 1.45; }
+
 .cevpick { margin: 0.2rem 0 1rem; }
 .cevpick__chosen { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface-2); }
 .cevpick__poster { width: 42px; height: 62px; flex: none; border-radius: 7px; background-size: cover !important; background-position: center !important; box-shadow: var(--shadow-1); }
@@ -1312,6 +1362,9 @@ a { color: inherit; text-decoration: none; }
 .cevres.is-loading { opacity: .62; }
 .cev-modes { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
 .cev-modes > .watchmeta__lbl { width: 100%; margin-bottom: 0.05rem; }
+.cev-invitees { padding: .75rem; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface-2); }
+.cev-invitees .tl-members__lbl { display: flex; justify-content: space-between; gap: .7rem; flex-wrap: wrap; }
+.cev-invitees .tl-members__lbl span { color: var(--accent); text-transform: none; letter-spacing: 0; }
 .cev-mode { display: inline-flex; align-items: center; gap: 0.32rem; padding: 0.42rem 0.68rem; border: 1px solid var(--hairline-2); border-radius: var(--r-pill); color: var(--ink-dim); font-size: .8rem; font-weight: 700; transition: color .15s, background .15s, border-color .15s; }
 .cev-mode .material-symbols-rounded { font-size: 17px; }
 .cev-mode:hover { color: var(--ink); }
@@ -1328,6 +1381,14 @@ a { color: inherit; text-decoration: none; }
 .invite__actions .btn { flex: 1; justify-content: center; padding: .65rem .7rem; }
 .invite__calendar { margin: .55rem auto 0; }
 .invite__count { margin-top: .75rem; color: var(--ink-faint); text-align: center; font: .66rem 'JetBrains Mono', monospace; }
+
+.calev__attendance-list { display: grid; gap: .22rem; margin-top: .4rem; }
+.calev__attendance { display: flex; align-items: center; gap: .28rem; width: fit-content; max-width: 100%; color: var(--ink-dim); font-size: .72rem; line-height: 1.35; overflow-wrap: anywhere; }
+.calev__attendance .material-symbols-rounded { flex: none; font-size: 15px; }
+.calev__attendance.is-going { color: var(--lime); }
+.calev__attendance.is-pending { color: #f4c96b; }
+.calev__attendance.is-declined, .calev__attendance.is-solo { color: var(--ink-faint); }
+.calev__attendance .linklike { margin-left: .2rem; font-size: .72rem; }
 
 /* Profile: one strong identity panel followed by useful data, not a dashboard wall. */
 .phero { display: flex; align-items: center; gap: clamp(1rem, 3vw, 1.5rem); padding: clamp(1.15rem, 3vw, 1.8rem); border: 1px solid color-mix(in srgb, var(--c) 34%, var(--hairline)); border-radius: 20px; background: linear-gradient(120deg, color-mix(in srgb, var(--c) 15%, var(--surface)), var(--surface)); box-shadow: 0 18px 46px rgba(0,0,0,.22); }
@@ -1488,6 +1549,8 @@ a { color: inherit; text-decoration: none; }
   .rowed__auto { display: none; }
   .invite__actions, .cfg__actions { flex-direction: column; align-items: stretch; }
   .invite__actions .btn { width: 100%; }
+  .notification-panel { top: auto; right: 0; bottom: 0; width: 100%; max-height: 90svh; border-radius: 20px 20px 0 0; }
+  .notification-panel__head { padding-top: 1.1rem; }
   .phero { flex-direction: column; }
   .phero__identity { align-items: flex-start; width: 100%; }
   .phero__av { width: 78px; height: 78px; }

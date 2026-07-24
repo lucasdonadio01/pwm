@@ -150,6 +150,85 @@ window.APPKIT = (function () {
     hasPin(store, id) { const a = store.getAccounts()[id]; return !!(a && a.pass); },
   };
 
+  /* ============================================================ shared activity
+   * One compact feed for PWM + PRB. Items can target one user (`target`) or several
+   * (`targets`) and keep per-user read/dismiss state inside the same shared JSON blob. */
+  const activity = {
+    all(store) {
+      const rows = store.getShared('activity');
+      return Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : [];
+    },
+    forUser(store, uid) {
+      return activity.all(store)
+        .filter((item) => {
+          const targets = Array.isArray(item.targets) ? item.targets : (item.target ? [item.target] : []);
+          return (!targets.length || targets.includes(uid)) && !(item.dismissedBy || {})[uid];
+        })
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    },
+    unreadCount(store, uid) {
+      return activity.forUser(store, uid).filter((item) => !(item.readBy || {})[uid]).length;
+    },
+    pushMany(store, incoming) {
+      const rows = activity.all(store);
+      const next = new Map(rows.map((item) => [item.id, item]));
+      (incoming || []).filter((item) => item && item.id).forEach((item) => {
+        const prev = next.get(item.id) || {};
+        next.set(item.id, {
+          ...prev, ...item,
+          createdAt: item.createdAt || new Date().toISOString(),
+          readBy: item.readBy || {},
+          dismissedBy: item.dismissedBy || {},
+        });
+      });
+      store.setShared('activity', [...next.values()]
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+        .slice(0, 250));
+    },
+    push(store, item) { activity.pushMany(store, [item]); },
+    remove(store, id) {
+      store.setShared('activity', activity.all(store).filter((item) => item.id !== id));
+    },
+    removeMany(store, ids) {
+      const unwanted = new Set(ids || []);
+      if (!unwanted.size) return;
+      store.setShared('activity', activity.all(store).filter((item) => !unwanted.has(item.id)));
+    },
+    markRead(store, uid, ids) {
+      const wanted = ids ? new Set(ids) : null;
+      const rows = activity.all(store);
+      let changed = false;
+      rows.forEach((item) => {
+        if (wanted && !wanted.has(item.id)) return;
+        const targets = Array.isArray(item.targets) ? item.targets : (item.target ? [item.target] : []);
+        if (targets.length && !targets.includes(uid)) return;
+        item.readBy = item.readBy || {};
+        if (!item.readBy[uid]) { item.readBy[uid] = new Date().toISOString(); changed = true; }
+      });
+      if (changed) store.setShared('activity', rows);
+    },
+    dismiss(store, uid, id) {
+      const rows = activity.all(store);
+      const item = rows.find((x) => x.id === id);
+      if (!item) return;
+      item.dismissedBy = item.dismissedBy || {};
+      item.dismissedBy[uid] = true;
+      store.setShared('activity', rows);
+    },
+    timeAgo(iso) {
+      const diff = Date.now() - Date.parse(iso || 0);
+      if (!Number.isFinite(diff) || diff < 0) return 'recién';
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'recién';
+      if (mins < 60) return `hace ${mins} min`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `hace ${hours} h`;
+      const days = Math.floor(hours / 24);
+      if (days < 7) return `hace ${days} ${days === 1 ? 'día' : 'días'}`;
+      return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+    },
+  };
+
   /* ============================================================ PIN pad
    * opts: { avatar (html), name, color, label, error, onDone(pin), onCancel } */
   function pinPad(opts) {
@@ -212,6 +291,7 @@ window.APPKIT = (function () {
    * pick up to 10MB → pan/zoom into a square frame → export ~400×400 JPEG (a few KB) → store that.
    * The 10MB original is never persisted. */
   const MAX_UPLOAD = 10 * 1024 * 1024;
+  const MAX_GIF_UPLOAD = 1024 * 1024;
   function pickPhoto(onReady) {
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
@@ -222,7 +302,15 @@ window.APPKIT = (function () {
       if (!file) return;
       if (file.size > MAX_UPLOAD) return toast('Esa imagen pesa más de 10MB. Probá con una más chica.', 'bad');
       const fr = new FileReader();
-      fr.onload = () => openCropper(fr.result, onReady);
+      fr.onload = () => {
+        if (file.type === 'image/gif') {
+          if (file.size > MAX_GIF_UPLOAD) return toast('Para que el GIF siga animado, elegí uno de hasta 1MB.', 'bad');
+          onReady(fr.result);
+          toast('GIF animado listo ✓');
+          return;
+        }
+        openCropper(fr.result, onReady);
+      };
       fr.onerror = () => toast('No pude leer la imagen.', 'bad');
       fr.readAsDataURL(file);
     });
@@ -532,8 +620,8 @@ window.APPKIT = (function () {
   return {
     icon, esc, toast,
     rampAt, autoColor, tierRows, normalizeRows, newRowId, openRowEditor,
-    accounts, sha256, pinPad, DEFAULT_PIN,
-    pickPhoto, openCropper, MAX_UPLOAD,
+    accounts, activity, sha256, pinPad, DEFAULT_PIN,
+    pickPhoto, openCropper, MAX_UPLOAD, MAX_GIF_UPLOAD,
     renderBoardImage, shareBoardImage, openShareBoard,
   };
 })();

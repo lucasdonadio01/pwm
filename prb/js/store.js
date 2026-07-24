@@ -219,6 +219,23 @@ PRB.store = (function () {
       settings.reading = all; saveLocal(); notify(); pushSetting('reading');
     },
 
+    // Likes on a specific user's written review (separate from liking the book itself).
+    getReviewLikes(bookId, reviewUserId) {
+      const row = (settings.reviewlikes && settings.reviewlikes[bookId] && settings.reviewlikes[bookId][reviewUserId]) || {};
+      return JSON.parse(JSON.stringify(row));
+    },
+    hasReviewLike(bookId, reviewUserId, likerId) { return !!this.getReviewLikes(bookId, reviewUserId)[likerId]; },
+    reviewLikeCount(bookId, reviewUserId) { return Object.values(this.getReviewLikes(bookId, reviewUserId)).filter(Boolean).length; },
+    setReviewLike(bookId, reviewUserId, likerId, liked) {
+      const all = settings.reviewlikes || (settings.reviewlikes = {});
+      all[bookId] = all[bookId] || {};
+      all[bookId][reviewUserId] = all[bookId][reviewUserId] || {};
+      if (liked) all[bookId][reviewUserId][likerId] = true;
+      else delete all[bookId][reviewUserId][likerId];
+      settings.reviewlikes = all; saveLocal(); notify(); pushSetting('reviewlikes');
+      return liked;
+    },
+
     // custom & shared tier lists (beyond the per-user default) — synced via settings
     getTierlists() { return Array.isArray(settings.tierlists) ? settings.tierlists.slice() : []; },
     saveTierlists(list) { settings.tierlists = list.slice(); saveLocal(); notify(); pushSetting('tierlists'); },
