@@ -2936,70 +2936,94 @@
       `<summary class="pdetail__summary"><span class="pdetail__title">${icon(iconName)}<span><b>${title}</b><small>${escapeHtml(insight)}</small></span></span><span class="pdetail__toggle">${icon('expand_more')}</span></summary>` +
       `<div class="pdetail__body">${body}<p class="pdetail__explain">${explanation}</p></div></details>`;
   }
-  function profileExpandable(host, button, items, initialCount, renderItem, emptyText) {
+  function profileContentPreview(wrapper, host, topButton, bottomButton, items, renderItem, emptyText, options = {}) {
     let expanded = false;
-    const draw = () => {
-      host.innerHTML = '';
-      if (!items.length) host.innerHTML = `<p class="addfilm__hint">${emptyText}</p>`;
-      (expanded ? items : items.slice(0, initialCount)).forEach((item, index) => host.appendChild(renderItem(item, index)));
-      button.hidden = items.length <= initialCount;
-      button.innerHTML = expanded
-        ? `${icon('unfold_less')} Ver menos`
-        : `${icon('unfold_more')} Ver todas <span>${items.length}</span>`;
-      button.setAttribute('aria-expanded', String(expanded));
-    };
-    button.addEventListener('click', () => K.motion.run(() => { expanded = !expanded; draw(); }, { kind: 'shared', target: host }));
-    draw();
-  }
-
-  function profilePosterPreview(wrapper, host, topButton, bottomButton, items, renderItem, emptyText) {
-    let expanded = false;
-    let hasThirdRow = false;
+    let hasOverflow = false;
+    let measureFrame = 0;
+    let observer = null;
+    const mobileQuery = window.matchMedia('(max-width: 520px)');
     host.innerHTML = '';
     if (!items.length) host.innerHTML = `<p class="addfilm__hint">${emptyText}</p>`;
     items.forEach((item, index) => host.appendChild(renderItem(item, index)));
     const cards = () => [...host.children].filter((node) => !node.classList.contains('addfilm__hint'));
     const syncButtons = () => {
-      topButton.hidden = !hasThirdRow;
-      bottomButton.hidden = expanded || !hasThirdRow;
+      const usesInlinePreview = mobileQuery.matches || !!options.desktopRows;
+      topButton.hidden = !hasOverflow;
+      bottomButton.hidden = expanded || !hasOverflow || !usesInlinePreview;
       topButton.innerHTML = expanded
         ? `${icon('unfold_less')} Ver menos`
         : `${icon('unfold_more')} Ver todas <span>${items.length}</span>`;
       topButton.setAttribute('aria-expanded', String(expanded));
       bottomButton.setAttribute('aria-expanded', String(expanded));
     };
+    const resetCards = () => cards().forEach((node) => {
+      node.hidden = false;
+      node.inert = false;
+    });
     const measure = () => {
       if (!wrapper.isConnected || expanded) return;
       const nodes = cards();
-      const tops = [...new Set(nodes.map((node) => node.offsetTop))].sort((a, b) => a - b);
-      hasThirdRow = tops.length > 2;
-      if (hasThirdRow) {
-        const thirdTop = tops[2];
-        const third = nodes.find((node) => node.offsetTop === thirdTop);
-        wrapper.style.setProperty('--profile-preview-height', `${Math.round(thirdTop + (third ? third.offsetHeight * .52 : 120))}px`);
-        nodes.forEach((node) => { node.inert = node.offsetTop >= thirdTop; });
+      resetCards();
+      wrapper.classList.remove('has-preview');
+      wrapper.style.removeProperty('--profile-preview-height');
+
+      const previewRows = mobileQuery.matches ? 1 : Number(options.desktopRows || 0);
+      if (previewRows) {
+        const tops = [...new Set(nodes.map((node) => node.offsetTop))].sort((a, b) => a - b);
+        hasOverflow = tops.length > previewRows;
+        if (hasOverflow) {
+          const clippedTop = tops[previewRows];
+          const clippedCard = nodes.find((node) => node.offsetTop === clippedTop);
+          wrapper.style.setProperty('--profile-preview-height', `${Math.round(clippedTop + (clippedCard ? clippedCard.offsetHeight * .52 : 120))}px`);
+          nodes.forEach((node) => { node.inert = node.offsetTop >= clippedTop; });
+          wrapper.classList.add('has-preview');
+        }
       } else {
-        wrapper.style.removeProperty('--profile-preview-height');
-        nodes.forEach((node) => { node.inert = false; });
+        const desktopCount = Number(options.desktopCount || items.length);
+        hasOverflow = items.length > desktopCount;
+        nodes.forEach((node, index) => {
+          const concealed = index >= desktopCount;
+          node.hidden = concealed;
+          node.inert = concealed;
+        });
       }
-      wrapper.classList.toggle('has-preview', hasThirdRow);
       syncButtons();
     };
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(measureFrame);
+      measureFrame = requestAnimationFrame(measure);
+    };
+    const handleBreakpointChange = () => {
+      if (!wrapper.isConnected) {
+        mobileQuery.removeEventListener('change', handleBreakpointChange);
+        if (observer) observer.disconnect();
+        return;
+      }
+      scheduleMeasure();
+    };
     const setExpanded = (next) => {
-      expanded = next;
-      wrapper.classList.toggle('is-expanded', expanded);
-      cards().forEach((node) => { node.inert = false; });
-      if (!expanded) requestAnimationFrame(measure);
-      syncButtons();
+      K.motion.run(() => {
+        expanded = next;
+        wrapper.classList.toggle('is-expanded', expanded);
+        if (expanded) {
+          resetCards();
+          wrapper.classList.remove('has-preview');
+          wrapper.style.removeProperty('--profile-preview-height');
+        } else {
+          scheduleMeasure();
+        }
+        syncButtons();
+      }, { kind: 'shared', target: host });
     };
     topButton.addEventListener('click', () => setExpanded(!expanded));
     bottomButton.addEventListener('click', () => setExpanded(true));
-    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
       if (!wrapper.isConnected) return observer.disconnect();
-      measure();
+      scheduleMeasure();
     }) : null;
     if (observer) observer.observe(host);
-    requestAnimationFrame(measure);
+    if (mobileQuery.addEventListener) mobileQuery.addEventListener('change', handleBreakpointChange);
+    scheduleMeasure();
   }
 
   function openRatingBreakdown(uid, rating, items) {
@@ -3072,11 +3096,15 @@
       `</div></div>` +
 
       `<div class="profile-layout"><div class="profile-main">` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" hidden></button></div><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><button class="profile-more" id="p-best-more" hidden></button></div>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" aria-controls="p-reviews" hidden></button></div>` +
+      `<div class="profile-poster-preview" id="p-reviews-preview"><div class="pgrid pgrid--wide" id="p-reviews"></div><span class="profile-poster-preview__veil" aria-hidden="true"></span>` +
+      `<button class="profile-poster-preview__more" id="p-reviews-peek" aria-controls="p-reviews" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><button class="profile-more" id="p-best-more" aria-controls="p-best" hidden></button></div>` +
       `<div class="profile-poster-preview" id="p-best-preview"><div class="profile-poster-grid" id="p-best"></div><span class="profile-poster-preview__veil" aria-hidden="true"></span>` +
-      `<button class="profile-poster-preview__more" id="p-best-peek" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Watchlist de ${escapeHtml(u.name)}</h3><button class="profile-more" id="p-watchlist-more" hidden></button></div><div class="profile-poster-grid" id="p-watchlist"></div></section>` +
+      `<button class="profile-poster-preview__more" id="p-best-peek" aria-controls="p-best" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Watchlist de ${escapeHtml(u.name)}</h3><button class="profile-more" id="p-watchlist-more" aria-controls="p-watchlist" hidden></button></div>` +
+      `<div class="profile-poster-preview" id="p-watchlist-preview"><div class="profile-poster-grid" id="p-watchlist"></div><span class="profile-poster-preview__veil" aria-hidden="true"></span>` +
+      `<button class="profile-poster-preview__more" id="p-watchlist-peek" aria-controls="p-watchlist" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
       `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
       `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(profileCalendarDays(id, s.byDay), u.color)}` +
       `<p class="pdetail__explain">Los días marcados reúnen funciones agendadas y títulos vistos.</p>` +
@@ -3121,7 +3149,7 @@
       .map((f) => ({ f, t: Date.parse(store.get(f.id, id).updatedAt || 0) || 0 }))
       .sort((a, b) => b.t - a.t);
     const rw = sec.querySelector('#p-reviews');
-    profileExpandable(rw, sec.querySelector('#p-reviews-more'), revs, 4, ({ f }) => {
+    profileContentPreview(sec.querySelector('#p-reviews-preview'), rw, sec.querySelector('#p-reviews-more'), sec.querySelector('#p-reviews-peek'), revs, ({ f }) => {
         const v = verdictOf(f.id, id);
         const c = document.createElement('button');
         c.className = 'prev';
@@ -3131,17 +3159,17 @@
           `<span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
         c.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: id }));
         return K.motion.tag(c, `pwm-profile-review-${id}-${f.id}`);
-      }, 'Todavía sin reseñas.');
+      }, 'Todavía sin reseñas.', { desktopCount: 4 });
 
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
-    profilePosterPreview(sec.querySelector('#p-best-preview'), bw, sec.querySelector('#p-best-more'), sec.querySelector('#p-best-peek'), best, (f) =>
-      K.motion.tag(posterCard(f), `pwm-profile-best-${id}-${f.id}`), 'Puntuá algo y aparece acá.');
+    profileContentPreview(sec.querySelector('#p-best-preview'), bw, sec.querySelector('#p-best-more'), sec.querySelector('#p-best-peek'), best, (f) =>
+      K.motion.tag(posterCard(f), `pwm-profile-best-${id}-${f.id}`), 'Puntuá algo y aparece acá.', { desktopRows: 2 });
 
     const watchlist = orderedWatchlist().filter((f) => ownersOf(f).includes(id));
     const ww = sec.querySelector('#p-watchlist');
-    profileExpandable(ww, sec.querySelector('#p-watchlist-more'), watchlist, 12, (f) =>
-      K.motion.tag(posterCard(f), `pwm-profile-watchlist-${id}-${f.id}`), `${escapeHtml(u.name)} todavía no tiene títulos en su watchlist.`);
+    profileContentPreview(sec.querySelector('#p-watchlist-preview'), ww, sec.querySelector('#p-watchlist-more'), sec.querySelector('#p-watchlist-peek'), watchlist, (f) =>
+      K.motion.tag(posterCard(f), `pwm-profile-watchlist-${id}-${f.id}`), `${escapeHtml(u.name)} todavía no tiene títulos en su watchlist.`, { desktopCount: 12 });
 
     if (mine) {
       sec.querySelector('#p-photo').addEventListener('click', () => K.pickPhoto((data) => {

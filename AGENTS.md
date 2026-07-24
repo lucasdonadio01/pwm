@@ -33,7 +33,6 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-24 · Codex
-- PRB profile parity remains committed locally in `8466cd6`, still awaiting approval.
-- PWM profile stats now default open and persist manual detail state locally; best-ranked titles show a measured 2.5-row preview with top and inline expansion controls.
-- PWM now defaults to deterministic personal calendars. Custom sharing uses `pendingMembers` plus `calendar_share_invite` / `calendar_share_accept`; membership begins only after acceptance. Legacy `cal-main` is preserved as filtered “Calendario anterior”.
-- Verified at 1280×720 and 390×844 without Supabase test writes. Assets v23; PWM 1.11 / PRB 1.11. Current batch awaits Lucas approval before push.
+- PRB profile parity (`8466cd6`) and PWM personal calendars/profile stats (`de0bf2c`) remain committed locally, awaiting approval.
+- PWM mobile profile previews now show one full row plus half of the next blurred row for reviews, best-ranked titles and Watchlist; top and inline expansion controls stay synchronized. Desktop behavior is unchanged.
+- Verified at 390×844 and 1280×720 without Supabase writes. Assets v24; PWM 1.12 / PRB 1.12. Current batch awaits Lucas approval before push.

@@ -1749,6 +1749,7 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 @media (max-width: 520px) {
   .profile-customize { position: relative; align-self: flex-end; top: auto; right: auto; margin-bottom: -.2rem; }
   .profile-block__head { align-items: flex-start; flex-direction: column; gap: .55rem; }
+  .profile-more, .profile-poster-preview__more { min-height: 44px; }
   .profile-bg-modes { grid-template-columns: 1fr; }
   .profile-gif-search { align-items: stretch; flex-direction: column; }
   .profile-gif-search .btn { justify-content: center; }

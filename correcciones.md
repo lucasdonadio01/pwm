@@ -143,6 +143,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Perfil: **Cómo puntuás** aparece antes de **Últimos 12 meses**. Cómo puntuás, Últimos 12 meses, Tus géneros y Medallas nacen desplegados.
 - El estado abierto/cerrado se guarda localmente por usuario y perfil visitado, así que los refrescos de Realtime o el polling ya no vuelven a cerrar los paneles.
 - **Mejor rankeadas** muestra dos filas completas y media tercera fila desenfocada, con un botón **Ver más** sobre el recorte; el botón superior **Ver todas / Ver menos** se mantiene.
+- En mobile, **Últimas reseñas**, **Mejor rankeadas** y **Watchlist** muestran una fila completa y media segunda fila desenfocada, con **Ver más**; al expandir crecen hacia abajo.
 - Calendario: el mes queda centrado entre las flechas en PC y mobile.
 - Cada usuario recibe un **Mi calendario** personal. Las funciones nuevas se guardan ahí y las funciones ajenas aparecen solamente después de aceptar su invitación.
 - Los calendarios compartidos usan invitación pendiente: la otra persona no obtiene acceso hasta aceptar desde Notificaciones. PRB también reconoce estas notificaciones y abre PWM.
