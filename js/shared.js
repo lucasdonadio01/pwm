@@ -418,7 +418,7 @@ window.APPKIT = (function () {
    * The 10MB original is never persisted. */
   const MAX_UPLOAD = 10 * 1024 * 1024;
   const MAX_GIF_UPLOAD = 1024 * 1024;
-  function pickPhoto(onReady) {
+  function chooseAvatarFile(onReady) {
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
     document.body.appendChild(inp);
@@ -441,6 +441,53 @@ window.APPKIT = (function () {
       fr.readAsDataURL(file);
     });
     inp.click();
+  }
+  // Avatar picker: upload a file (image → crop, gif → as-is) OR search Giphy/Tenor and pick one.
+  function pickPhoto(onReady) {
+    let el = document.getElementById('avatar-picker');
+    if (!el) { el = document.createElement('div'); el.id = 'avatar-picker'; el.className = 'avatarpick'; document.body.appendChild(el); }
+    let results = [], cursor = null, activeQuery = '';
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const close = () => { el.hidden = true; el.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onKey); };
+    el.innerHTML =
+      `<div class="avatarpick__scrim" data-ap-close></div>` +
+      `<div class="avatarpick__panel" role="dialog" aria-modal="true" aria-label="Elegí tu foto">` +
+      `<div class="avatarpick__head"><h3>Foto de perfil</h3><button class="icon-btn" data-ap-close aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<button class="btn btn--soft avatarpick__upload" id="ap-upload">${icon('upload')} Subir foto o GIF</button>` +
+      `<div class="profile-gif-search"><label class="search"><span class="material-symbols-rounded">search</span><input id="ap-query" type="search" maxlength="60" placeholder="Buscar GIFs: gato, feliz, anime…"></label>` +
+      `<button class="btn btn--soft" id="ap-search">${icon('gif_box')} Buscar</button></div>` +
+      `<div class="profile-gif-results avatarpick__results" id="ap-results"><p>Buscá un GIF en Giphy y Tenor, o subí tu foto.</p></div>` +
+      `<button class="btn btn--soft btn--xs profile-gif-more" id="ap-more" hidden>${icon('expand_more')} Ver más GIFs</button>` +
+      `</div>`;
+    el.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onKey);
+    el.querySelectorAll('[data-ap-close]').forEach((b) => b.addEventListener('click', close));
+    el.querySelector('#ap-upload').addEventListener('click', () => chooseAvatarFile((data) => { close(); onReady(data); }));
+    const host = el.querySelector('#ap-results'), more = el.querySelector('#ap-more');
+    const draw = (busy, message) => {
+      more.hidden = true;
+      if (busy) { host.innerHTML = `<p>${icon('hourglass_top')} Buscando GIFs…</p>`; return; }
+      if (message) { host.innerHTML = `<p>${esc(message)}</p>`; return; }
+      host.innerHTML = results.map((it, i) => `<button class="profile-gif-result" data-ap-gif="${i}" title="${esc(it.title)}"><img src="${esc(it.preview)}" alt="${esc(it.title)}" loading="lazy"><span>${esc(it.title)}</span></button>`).join('');
+      host.querySelectorAll('[data-ap-gif]').forEach((b) => b.addEventListener('click', () => { const it = results[+b.dataset.apGif]; close(); onReady(it.url); toast('GIF listo ✓'); }));
+      more.hidden = cursor == null;
+    };
+    const run = async (append = false) => {
+      const q = el.querySelector('#ap-query').value.trim();
+      if (!q) { el.querySelector('#ap-query').focus(); return; }
+      if (!append || q !== activeQuery) { activeQuery = q; cursor = null; results = []; }
+      draw(true);
+      try {
+        const page = await gifSearch(q, append ? cursor : null);
+        const seen = new Set(results.map((x) => x.url));
+        results = results.concat(page.items.filter((x) => !seen.has(x.url)));
+        cursor = page.cursor;
+        draw(false, results.length ? '' : 'No encontré GIFs con esa búsqueda. Probá otra palabra.');
+      } catch { draw(false, 'No pude buscar ahora. Igual podés subir tu foto.'); }
+    };
+    el.querySelector('#ap-search').addEventListener('click', () => run(false));
+    el.querySelector('#ap-more').addEventListener('click', () => run(true));
+    el.querySelector('#ap-query').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); run(false); } });
+    setTimeout(() => { const q = el.querySelector('#ap-query'); if (q) q.focus(); }, 60);
   }
 
   function pickBackground(onReady) {
@@ -543,6 +590,83 @@ window.APPKIT = (function () {
    * profileBg (data image or https URL), profileBgMode ('banner' | 'full'),
    * profileBgColor (#rrggbb) and profileBgShade (25..85).
    * GIF search uses Wikimedia Commons: free, client-side and no key required. */
+  /* ============================================================ GIF search (Giphy + Tenor)
+   * Shared by the avatar picker and the profile-background customizer. Reads keys from whichever
+   * app is loaded (WM.keys / PRB.keys). Merges both providers for the best results; if neither has
+   * a working key it falls back to Wikimedia Commons so search never dies. A "cursor" carries each
+   * provider's paging token so "ver más" keeps going. Items: {title,url,preview,provider}. */
+  const httpsImg = (v) => { const s = String(v || '').trim(); return /^https:\/\//i.test(s) ? s : ''; };
+  function gifKeys() { const k = (window.WM && WM.keys) || (window.PRB && PRB.keys) || {}; return { giphy: k.giphy || '', tenor: k.tenor || '' }; }
+  const gifSearchAvailable = () => { const k = gifKeys(); return !!(k.giphy || k.tenor); };
+
+  async function giphySearch(q, offset, key) {
+    const u = new URL('https://api.giphy.com/v1/gifs/search');
+    u.searchParams.set('api_key', key); u.searchParams.set('q', q);
+    u.searchParams.set('limit', '24'); u.searchParams.set('offset', String(offset || 0));
+    u.searchParams.set('rating', 'pg-13'); u.searchParams.set('bundle', 'messaging_non_clips');
+    const r = await fetch(u); if (!r.ok) throw new Error('giphy ' + r.status);
+    const d = await r.json(); const im = (g, k) => (g.images[k] || {}).url;
+    const items = (d.data || []).map((g) => ({
+      title: g.title || 'GIF', provider: 'giphy',
+      url: httpsImg(im(g, 'downsized_medium') || im(g, 'original')),
+      preview: httpsImg(im(g, 'fixed_width_small') || im(g, 'fixed_width') || im(g, 'preview_gif')),
+    })).filter((x) => x.url && x.preview);
+    const p = d.pagination || {};
+    const next = (p.offset + p.count) < p.total_count ? (offset || 0) + (d.data || []).length : null;
+    return { items, next };
+  }
+  async function tenorSearch(q, pos, key) {
+    const u = new URL('https://tenor.googleapis.com/v2/search');
+    u.searchParams.set('key', key); u.searchParams.set('q', q); u.searchParams.set('client_key', 'pwm-prb');
+    u.searchParams.set('limit', '24'); u.searchParams.set('media_filter', 'gif,tinygif'); u.searchParams.set('contentfilter', 'medium');
+    if (pos) u.searchParams.set('pos', String(pos));
+    const r = await fetch(u); if (!r.ok) throw new Error('tenor ' + r.status);
+    const d = await r.json(); const mf = (g, k) => ((g.media_formats || {})[k] || {}).url;
+    const items = (d.results || []).map((g) => ({
+      title: g.content_description || g.title || 'GIF', provider: 'tenor',
+      url: httpsImg(mf(g, 'gif')), preview: httpsImg(mf(g, 'tinygif') || mf(g, 'nanogif') || mf(g, 'gif')),
+    })).filter((x) => x.url && x.preview);
+    return { items, next: d.next || null };
+  }
+  async function wikimediaSearch(q, offset) {
+    const params = new URLSearchParams({
+      action: 'query', generator: 'search', gsrnamespace: '6', gsrsearch: `${q} filemime:image/gif`,
+      gsrlimit: '16', gsroffset: String(Math.max(0, Number(offset) || 0)), prop: 'imageinfo',
+      iiprop: 'url|mime|size', iiurlwidth: '640', format: 'json', origin: '*',
+    });
+    const r = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`); if (!r.ok) throw new Error('wiki');
+    const d = await r.json();
+    const items = Object.values((d.query && d.query.pages) || {}).map((page) => {
+      const info = page.imageinfo && page.imageinfo[0];
+      return info && info.mime === 'image/gif' ? { title: String(page.title || '').replace(/^File:/, ''), url: httpsImg(info.url), preview: httpsImg(info.thumburl || info.url), provider: 'wiki' } : null;
+    }).filter((x) => x && x.url).slice(0, 12);
+    return { items, next: d.continue && Number.isFinite(Number(d.continue.gsroffset)) ? Number(d.continue.gsroffset) : null };
+  }
+  function interleave(lists) {
+    const out = [], seen = new Set(); let i = 0, more = true;
+    while (more) { more = false; lists.forEach((l) => { if (i < l.length) { more = true; const it = l[i]; if (!seen.has(it.url)) { seen.add(it.url); out.push(it); } } }); i++; }
+    return out;
+  }
+  async function gifSearch(query, cursor) {
+    const q = String(query || '').trim().slice(0, 60);
+    if (!q) return { items: [], cursor: null, hasMore: false };
+    const keys = gifKeys(); const first = !cursor; const c = cursor || {};
+    const jobs = [];
+    if (keys.giphy && (first || c.giphy != null)) jobs.push(giphySearch(q, first ? 0 : c.giphy, keys.giphy).then((r) => ({ p: 'giphy', r })).catch(() => ({ p: 'giphy', r: { items: [], next: null } })));
+    if (keys.tenor && (first || c.tenor != null)) jobs.push(tenorSearch(q, first ? '' : c.tenor, keys.tenor).then((r) => ({ p: 'tenor', r })).catch(() => ({ p: 'tenor', r: { items: [], next: null } })));
+    const res = await Promise.all(jobs);
+    let items = interleave(res.map((o) => o.r.items));
+    const nextCursor = {}; res.forEach((o) => { nextCursor[o.p] = o.r.next; });
+    // Wikimedia fallback: only when the keyed providers gave nothing on the first page (dead key, etc.)
+    if (first && !items.length) {
+      try { const w = await wikimediaSearch(q, 0); if (w.items.length) return { items: w.items, cursor: w.next != null ? { wiki: w.next } : null, hasMore: w.next != null }; } catch {}
+    }
+    if (first && c.wiki == null && !keys.giphy && !keys.tenor) { const w = await wikimediaSearch(q, 0); return { items: w.items, cursor: w.next != null ? { wiki: w.next } : null, hasMore: w.next != null }; }
+    if (cursor && c.wiki != null) { const w = await wikimediaSearch(q, c.wiki); return { items: w.items, cursor: w.next != null ? { wiki: w.next } : null, hasMore: w.next != null }; }
+    const hasMore = Object.values(nextCursor).some((v) => v != null && v !== '');
+    return { items, cursor: hasMore ? nextCursor : null, hasMore };
+  }
+
   const profileBackground = (function () {
     const DEFAULT_COLOR = '#16090b';
     const safeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
@@ -588,51 +712,13 @@ window.APPKIT = (function () {
       return state;
     }
 
-    async function search(query, offset = 0) {
-      const q = String(query || '').trim().slice(0, 50);
-      if (!q) return { items: [], nextOffset: null };
-      const params = new URLSearchParams({
-        action: 'query',
-        generator: 'search',
-        gsrnamespace: '6',
-        gsrsearch: `${q} filemime:image/gif`,
-        gsrlimit: '16',
-        gsroffset: String(Math.max(0, Number(offset) || 0)),
-        prop: 'imageinfo',
-        iiprop: 'url|mime|size',
-        iiurlwidth: '640',
-        format: 'json',
-        origin: '*',
-      });
-      const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
-      if (!response.ok) throw new Error('gif-search');
-      const payload = await response.json();
-      const items = Object.values((payload.query && payload.query.pages) || {})
-        .map((page) => {
-          const info = page.imageinfo && page.imageinfo[0];
-          return info && info.mime === 'image/gif' ? {
-            title: String(page.title || '').replace(/^File:/, ''),
-            url: safeImage(info.url),
-            preview: safeImage(info.thumburl || info.url),
-            width: info.width || 0,
-            height: info.height || 0,
-          } : null;
-        })
-        .filter((item) => item && item.url)
-        .slice(0, 12);
-      return {
-        items,
-        nextOffset: payload.continue && Number.isFinite(Number(payload.continue.gsroffset))
-          ? Number(payload.continue.gsroffset)
-          : null,
-      };
-    }
+    const search = gifSearch; // Giphy + Tenor (Wikimedia fallback), shared with the avatar picker
 
     function open(store, userId, options = {}) {
       const account = store.getAccounts()[userId] || {};
       const state = read(account, options.color);
       let results = [];
-      let searchOffset = null;
+      let gifCursor = null;
       let activeQuery = '';
       let el = document.getElementById('profile-customizer');
       if (!el) {
@@ -659,9 +745,9 @@ window.APPKIT = (function () {
         `<div><button class="btn btn--soft btn--xs" id="pb-upload">${icon('upload')} Subir</button>` +
         `<button class="btn btn--soft btn--xs" id="pb-remove">${icon('hide_image')} Usar solo color</button></div></div>` +
         `<label class="profile-bg-url"><span>También podés pegar un enlace directo</span><input id="pb-url" type="url" placeholder="https://…/fondo.gif" value="${esc(state.image && !state.image.startsWith('data:') ? state.image : '')}"></label>` +
-        `<div class="profile-gif-search"><label class="search"><span class="material-symbols-rounded">search</span><input id="pb-query" type="search" maxlength="50" placeholder="Buscar GIFs: cine, galaxia, lluvia…"></label>` +
+        `<div class="profile-gif-search"><label class="search"><span class="material-symbols-rounded">search</span><input id="pb-query" type="search" maxlength="60" placeholder="Buscar GIFs: cine, galaxia, lluvia…"></label>` +
         `<button class="btn btn--soft" id="pb-search">${icon('gif_box')} Buscar</button></div>` +
-        `<div class="profile-gif-results" id="pb-results"><p>Buscá un GIF libre en Wikimedia Commons o subí el tuyo.</p></div>` +
+        `<div class="profile-gif-results" id="pb-results"><p>Buscá un GIF en Giphy y Tenor, o subí el tuyo.</p></div>` +
         `<button class="btn btn--soft btn--xs profile-gif-more" id="pb-more" hidden>${icon('expand_more')} Ver más GIFs</button>` +
         `</section></div>` +
         `<div class="profile-customizer__actions"><button class="btn btn--soft" data-pb-close>Cancelar</button>` +
@@ -745,22 +831,22 @@ window.APPKIT = (function () {
           host.querySelectorAll('.profile-gif-result').forEach((node) => node.classList.toggle('is-on', node === button));
           refresh();
         }));
-        more.hidden = searchOffset == null;
+        more.hidden = gifCursor == null;
       };
       const runSearch = async (append = false) => {
         const query = el.querySelector('#pb-query').value.trim();
         if (!query) { el.querySelector('#pb-query').focus(); return; }
         if (!append || query !== activeQuery) {
           activeQuery = query;
-          searchOffset = 0;
+          gifCursor = null;
           results = [];
         }
         drawResults(true, '', append);
         try {
-          const page = await search(query, searchOffset || 0);
+          const page = await gifSearch(query, append ? gifCursor : null);
           const seen = new Set(results.map((item) => item.url));
           results = results.concat(page.items.filter((item) => !seen.has(item.url)));
-          searchOffset = page.nextOffset;
+          gifCursor = page.cursor;
           drawResults(false, results.length ? '' : 'No encontré GIFs con esa búsqueda. Probá con otra palabra.');
           if (append) el.querySelector('#pb-results').scrollTo({ top: el.querySelector('#pb-results').scrollHeight, behavior: 'smooth' });
         } catch {

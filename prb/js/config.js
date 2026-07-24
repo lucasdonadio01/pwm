@@ -1,6 +1,9 @@
 /* PRB — client config. Shared cloud store via Supabase (publishable key only; secret never here).
  * Same project/table as PWM, namespaced with app='prb'. */
 window.PRB = window.PRB || {};
+// GIF search keys (shared avatar/background picker in APPKIT). Keep in sync with WM.keys in js/config.js.
+// giphy: developers.giphy.com → Create App. tenor: Google Cloud → enable "Tenor API". Empty = Wikimedia fallback.
+PRB.keys = { giphy: '', tenor: '' };
 PRB.supabase = {
   url: 'https://kcqrcyxzuskgnxnplbxb.supabase.co',
   key: 'sb_publishable_SGd6YSFMKYd_8t_uaXm-sQ_AXvawyJX',

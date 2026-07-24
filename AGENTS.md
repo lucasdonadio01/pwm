@@ -28,9 +28,15 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- None.
+- **GIF search keys (optional but recommended).** Giphy's old public key is dead (403), so avatar/background GIF search falls back to Wikimedia (weak results) until a real key is pasted. Get a free Giphy key at developers.giphy.com → Create App → paste into `giphy:` in BOTH `js/config.js` (`WM.keys`) and `prb/js/config.js` (`PRB.keys`). Tenor is optional and needs a Google Cloud "Tenor API" key. It turns on instantly, no code change.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
+
+### 2026-07-24 · Claude — v33 / PWM+PRB 1.21
+- GIF search now uses **Giphy + Tenor** (merged/interleaved), added to `APPKIT` as module-level `gifSearch(query, cursor)` reading keys from `WM.keys`/`PRB.keys`. Wikimedia Commons stays as a keyless fallback (also kicks in if a keyed provider returns nothing on page 1, e.g. a dead key). The profile-background customizer was switched from its own Wikimedia search to this (`search = gifSearch`; `searchOffset`→`gifCursor`).
+- **New avatar picker**: `pickPhoto` now opens a modal (`.avatarpick`) with "Subir foto o GIF" **and** GIF search, instead of going straight to a file dialog. Upload path unchanged (extracted to `chooseAvatarFile`: image→cropper, gif→as-is). Picking a searched GIF stores its external URL (tiny in storage, animates in the circular avatar). All `pickPhoto` call sites (signup/profile/config, both apps) get it for free.
+- ⚠️ Giphy's public beta key `dc6zaTOxFJmzC` is **dead (403)** — don't reuse it. Both configs ship with empty keys → see "Needs Lucas".
+- Verified on a local server: avatar picker (upload + search + pick + close), background customizer search, and that an invalid key still falls back to Wikimedia without breaking. No console errors. The actual Giphy/Tenor result path can't be verified without a real key.
 
 ### 2026-07-24 · Claude — v32 / PWM+PRB 1.20
 - **"Seen" is now one rule** (`hasSeen` in PWM): a title counts as seen when it has a score, a written review, a like **or** a watch date — clearing all four takes it out again. `boardEligible` no longer keeps every `f.extra`, which was pinning films added by the swiper / calendar / "Agregar peli" in the tier pool forever with nothing on them (Lucas hit this after typing a date by accident and clearing it). Pool went 46 → 39 on his data, and every remaining chip is justified (`seen by nobody: 0`).
