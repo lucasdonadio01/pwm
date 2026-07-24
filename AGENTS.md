@@ -28,9 +28,18 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- **GIF search keys (optional but recommended).** Giphy's old public key is dead (403), so avatar/background GIF search falls back to Wikimedia (weak results) until a real key is pasted. Get a free Giphy key at developers.giphy.com → Create App → paste into `giphy:` in BOTH `js/config.js` (`WM.keys`) and `prb/js/config.js` (`PRB.keys`). Tenor is optional and needs a Google Cloud "Tenor API" key. It turns on instantly, no code change.
+- ~~GIF search keys~~ → your Giphy key `KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr` is now in both configs. Tenor key still optional. The key is a free read-only public API key — no card attached, no risk.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
+
+### 2026-07-24 · Gemini 3.6 Flash — v34 / PWM+PRB 1.22
+- **Review GIFs**: new `reviewgif` blob stores external GIF URLs per film+user. Added `getReviewGif`/`setReviewGif` to both stores, synced via `pushSetting` like other blobs.
+- **`pickGif()`** exposed from APPKIT (refactored `pickPhoto` → `openMediaPicker(opts)`). Opens the same Giphy/Tenor/Wikimedia modal but as a GIF-only picker, without the file-upload button.
+- **Editor**: GIF button in the review sheet (`.btn#review-gif-btn`) calls `K.pickGif()` and saves the URL. If a GIF is already attached, a remove-X button (`.review-gif__x`) appears on the thumbnail; both re-open the sheet via `reopen()` to reflect the change.
+- **Focus view**: when reading a review, a GIF below the text shows as `.review-focus__gif` (max 320×240, rounded).
+- **Verdict**: `.verdict__gif` (max 160×110, cursor pointer) with `data-review-film`/`data-review-user` attributes — clicks open the review sheet just like the text review button. The verdict filter now also exposes users who only left a GIF (no text).
+- **Keys**: Giphy key `KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr` added to both configs. Tenor remains empty (optional). The key is a free read-only public API key — safe to expose like TMDB/OMDB.
+- Version 1.22, cache-bust v=34. Pushed to `main`.
 
 ### 2026-07-24 · Claude — v33 / PWM+PRB 1.21
 - GIF search now uses **Giphy + Tenor** (merged/interleaved), added to `APPKIT` as module-level `gifSearch(query, cursor)` reading keys from `WM.keys`/`PRB.keys`. Wikimedia Commons stays as a keyless fallback (also kicks in if a keyed provider returns nothing on page 1, e.g. a dead key). The profile-background customizer was switched from its own Wikimedia search to this (`search = gifSearch`; `searchOffset`→`gifCursor`).
