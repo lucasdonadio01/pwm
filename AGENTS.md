@@ -28,12 +28,12 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- Review lote 4 #13–14 and approve the push to `main`.
+- Review lote 4 #13–15 and approve the push to `main`.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-23 · Codex
-- Added targeted calendar invitees, pending/accepted attendance states, and shared PWM/PRB notifications for invites, acceptances, review posts and review likes.
-- Added review-specific likes and tightened PRB focused reviews; added animated GIF avatars (1MB raw GIF, photos still cropped).
-- Removed the real test account `bob` plus its lone calendar reference; no Bob reviews existed.
-- Verified both apps, calendar selection/status, review permissions/likes, notification empty/real states, deep links, syntax and remote cleanup. Assets v18; PWM 1.7 / PRB 1.6. Awaiting Lucas approval.
+- Added shared profile backgrounds: color, contrast, upload or free Wikimedia GIF search, with banner/full-profile scope in PWM and PRB.
+- PWM profiles now show that user's Watchlist; both apps expand all reviews and top-rated items.
+- Added shared View Transition/Web Animation/CSS motion for routes, filters and list-grid swaps; refined overlays and profile details with reduced-motion support.
+- Browser-tested PWM/PRB, GIF search, profile lists and motion; no test account data was saved. Assets v19; PWM 1.8 / PRB 1.7. Awaiting Lucas approval.

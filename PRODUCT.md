@@ -55,21 +55,23 @@ Su mecanismo distintivo es conectar en un mismo espacio:
 
 - Creación de perfiles desde la aplicación.
 - Contraseña numérica por perfil.
-- Perfil configurable con nombre, foto, color, descripción y usuario de Letterboxd.
+- Perfil configurable con nombre, foto o GIF, color, descripción, usuario de Letterboxd y fondo personal.
+- El fondo del perfil puede ser un color, una imagen o un GIF ultrawide, aplicado solo a la portada o a toda la vista. Los GIFs se pueden subir o buscar gratis en Wikimedia Commons.
 - Modo Invitado de solo lectura.
 - No existe un registro público tradicional por correo electrónico.
 
 ### PWM
 
 - Home cinematográfico con destacados y tendencias.
-- Watchlist combinada y ordenable.
+- Watchlist combinada y ordenable, visible también dentro del perfil de cada usuario.
 - Catálogos de películas y series con filtros y descubrimiento mediante TMDB.
 - Puntuaciones de 0.5 a 5 estrellas, reseñas, likes, fecha y lugar de visualización.
 - Modo relámpago para puntuar títulos rápidamente.
 - Tier lists personales y compartidas con filas configurables.
 - Calendarios personales y compartidos, funciones programadas e invitaciones dirigidas a usuarios concretos, con estados pendiente/confirmado.
 - Centro de notificaciones compartido para invitaciones, confirmaciones, nuevas reseñas y likes de reseñas.
-- Perfiles con estadísticas, actividad y medallas.
+- Perfiles con estadísticas, actividad, medallas, reseñas y mejores puntuadas expandibles.
+- Transiciones breves y coherentes en rutas, filtros y cambios lista/grilla, con respaldo para navegadores sin View Transitions y respeto por movimiento reducido.
 
 ### PRB
 

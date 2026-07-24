@@ -357,11 +357,13 @@
 
   /* ============================================================= ROUTING */
   function setRoute(r, options = {}) {
-    route = r;
-    profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
-    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
-    window.scrollTo({ top: 0, behavior: 'auto' });
-    renderRoute(); onScroll();
+    K.motion.run(() => {
+      route = r;
+      profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
+      document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      renderRoute(); onScroll();
+    }, { kind: 'route' });
   }
   function renderRoute() {
     stopHero();
@@ -579,16 +581,20 @@
       wrap.appendChild(grid);
     };
     s.querySelector('#read-ownerbar').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-owner]'); if (!b) return;
-      readOwner = b.dataset.owner;
-      s.querySelectorAll('.read-owner').forEach((x) => x.classList.toggle('is-on', x.dataset.owner === readOwner));
-      fill();
+      const b = e.target.closest('[data-owner]'); if (!b || b.dataset.owner === readOwner) return;
+      K.motion.run(() => {
+        readOwner = b.dataset.owner;
+        s.querySelectorAll('.read-owner').forEach((x) => x.classList.toggle('is-on', x.dataset.owner === readOwner));
+        fill();
+      }, { kind: 'shared', target: s.querySelector('#read-results') });
     });
     s.querySelector('#read-view').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-rview]'); if (!b) return;
-      readView = b.dataset.rview;
-      s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.rview === readView));
-      fill();
+      const b = e.target.closest('[data-rview]'); if (!b || b.dataset.rview === readView) return;
+      K.motion.run(() => {
+        readView = b.dataset.rview;
+        s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.rview === readView));
+        fill();
+      }, { kind: 'shared', target: s.querySelector('#read-results') });
     });
     s.querySelector('#read-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => { closeAddBook(); openSheet(b); }); });
     fill();
@@ -596,6 +602,7 @@
   }
   function readGridCell(b) {
     const card = document.createElement('button'); card.className = 'readcell';
+    K.motion.tag(card, `prb-read-${b.id}`);
     const people = (readOwner === 'all' ? Object.values(users) : [users[readOwner]]).filter(Boolean);
     const scores = people.map((u) => {
       const v = verdictOf(b.id, u.id);
@@ -611,6 +618,7 @@
   }
   function readCard(b) {
     const card = document.createElement('article'); card.className = 'watched'; card.style.cursor = 'pointer';
+    K.motion.tag(card, `prb-read-${b.id}`);
     const verdicts = Object.values(users).map((u) => {
       const e = verdictOf(b.id, u.id); const rated = typeof e.rating === 'number'; const read = store.getReading(b.id, u.id).status === 'read'; if (!(rated || e.review || e.liked || read)) return '';
       const stars = rated ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`;
@@ -641,7 +649,14 @@
       `<p class="plist__hint" id="pl-hint"></p><div class="plist" id="plist"></div>`;
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#wl-search').addEventListener('input', (e) => { wlQuery = e.target.value; fillPlist(); });
-    s.querySelector('#view-toggle').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; selectosView = b.dataset.view; s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.view === selectosView)); fillPlist(); });
+    s.querySelector('#view-toggle').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-view]'); if (!b || b.dataset.view === selectosView) return;
+      K.motion.run(() => {
+        selectosView = b.dataset.view;
+        s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.view === selectosView));
+        fillPlist();
+      }, { kind: 'shared', target: s.querySelector('#plist') });
+    });
     enableReorder(s.querySelector('#plist')); fillPlist();
   }
   function fillPlist() {
@@ -660,6 +675,7 @@
   }
   function plGridCell(b, rank) {
     const cell = document.createElement('button'); cell.className = 'plcell'; cell.dataset.id = b.id; cell.title = `${rank}. ${b.title}`;
+    K.motion.tag(cell, `prb-selectos-${b.id}`);
     cell.innerHTML = `<span class="plcell__rank">${rank}</span><div class="plcell__img" style="background:${coverArt(b)}"></div><span class="plcell__t">${escapeHtml(b.title)}</span>`;
     cell.addEventListener('click', () => openSheet(b));
     return cell;
@@ -672,6 +688,7 @@
   }
   function plRow(b, rank, total) {
     const row = document.createElement('div'); row.className = 'plitem'; row.draggable = true; row.dataset.id = b.id;
+    K.motion.tag(row, `prb-selectos-${b.id}`);
     row.innerHTML = `<input class="plitem__rankin" type="number" min="1" max="${total}" value="${rank}" aria-label="Prioridad">` +
       `<div class="plitem__poster"><div class="chip__img" style="background:${coverArt(b)}"></div></div>` +
       `<div class="plitem__body"><div class="plitem__title">${escapeHtml(b.title)}</div><div class="plitem__meta"><span>${b.author || ''}</span><span>${b.year || ''}</span></div></div>` +
@@ -718,7 +735,13 @@
       s.appendChild(wrap);
     }
     app.appendChild(s); app.appendChild(buildFooter());
-    s.querySelector('#ly-view').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; leyendoView = b.dataset.view; renderLeyendo(document.getElementById('app')); });
+    s.querySelector('#ly-view').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-view]'); if (!b || b.dataset.view === leyendoView) return;
+      K.motion.run(() => {
+        leyendoView = b.dataset.view;
+        renderLeyendo(document.getElementById('app'));
+      }, { kind: 'shared', target: document.getElementById('app') });
+    });
     s.querySelector('#ly-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => { closeAddBook(); openSheet(b); }); });
   }
   function readingCard(b) {
@@ -728,6 +751,7 @@
     const ro = other ? store.getReading(b.id, other.id) : null;
     const meReading = r.status === 'reading';
     const card = document.createElement('article'); card.className = 'reading';
+    K.motion.tag(card, `prb-reading-${b.id}`);
     const p = readingPercent(r);
     const statLine = (rr) => `${readingPercent(rr) != null ? `<b>${readingPercent(rr)}%</b>` : '<b>—</b>'}${rr.chapter ? ` · cap. ${escapeHtml(rr.chapter)}` : ''}${rr.page != null && rr.pageTotal != null ? ` · pág. ${rr.page}/${rr.pageTotal}` : ''}<span class="reading__since">${rr.startedAt ? `desde ${fmtDate(rr.startedAt)}` : 'sin fecha de inicio'}</span>`;
     let ctrls;
@@ -775,6 +799,7 @@
     if (r.status !== 'reading') { const o = Object.values(users).find((x) => store.getReading(b.id, x.id).status === 'reading'); if (o) { who = o; r = store.getReading(b.id, o.id); } }
     const p = readingPercent(r) || 0;
     const cell = document.createElement('button'); cell.className = 'rgcell'; cell.title = `${b.title} — ${p}%`;
+    K.motion.tag(cell, `prb-reading-${b.id}`);
     cell.innerHTML =
       `<div class="rgcell__cover">` +
       `<div class="rgcell__dim" style="background:${coverArt(b)}"></div>` +
@@ -1365,6 +1390,21 @@
       `<summary class="pdetail__summary"><span class="pdetail__title">${icon(iconName)}<span><b>${title}</b><small>${escapeHtml(insight)}</small></span></span><span class="pdetail__toggle">${icon('expand_more')}</span></summary>` +
       `<div class="pdetail__body">${body}<p class="pdetail__explain">${explanation}</p></div></details>`;
   }
+  function profileExpandable(host, button, items, initialCount, renderItem, emptyText) {
+    let expanded = false;
+    const draw = () => {
+      host.innerHTML = '';
+      if (!items.length) host.innerHTML = `<p class="addfilm__hint">${emptyText}</p>`;
+      (expanded ? items : items.slice(0, initialCount)).forEach((item, index) => host.appendChild(renderItem(item, index)));
+      button.hidden = items.length <= initialCount;
+      button.innerHTML = expanded
+        ? `${icon('unfold_less')} Ver menos`
+        : `${icon('unfold_more')} Ver todas <span>${items.length}</span>`;
+      button.setAttribute('aria-expanded', String(expanded));
+    };
+    button.addEventListener('click', () => K.motion.run(() => { expanded = !expanded; draw(); }, { kind: 'shared', target: host }));
+    draw();
+  }
   function profileBookCard(b, uid) {
     const v = verdictOf(b.id, uid);
     const c = document.createElement('button'); c.className = 'pbook';
@@ -1389,14 +1429,16 @@
     app.innerHTML = '';
     const sec = document.createElement('section'); sec.className = 'section'; sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     sec.innerHTML =
-      `<div class="phero phero--overview" style="--c:${u.color}"><div class="phero__identity"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'} title="${mine ? 'Cambiar foto o GIF' : ''}">${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
+      `<div class="phero phero--overview" style="--c:${u.color}">` +
+      (mine ? `<button class="profile-customize" id="p-customize">${icon('palette')} Personalizar fondo</button>` : '') +
+      `<div class="phero__identity"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'} title="${mine ? 'Cambiar foto o GIF' : ''}">${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
       `<div class="phero__body"><h2 class="phero__name">${escapeHtml(u.name)}</h2><p class="phero__handle">@${escapeHtml(u.lb || u.handle || u.id)}</p>` +
       `<p class="phero__bio">${bio ? escapeHtml(bio) : (mine ? '<i>Sin descripción — podés agregar una.</i>' : '<i>Sin descripción.</i>')}</p>` +
       (mine ? `<button class="linklike" id="p-editbio">${icon('edit')} Editar descripción</button>` : '') + `</div></div>` +
       `<div class="ptiles ptiles--overview">${statTile(s.read, 'libros leídos')}${statTile(s.thisYear, 'este año', year)}${statTile(s.reading, 'leyendo ahora')}${statTile(s.reviews, 'reseñas')}${statTile(s.likes, 'me gusta')}${statTile(s.avg ? s.avg.toFixed(2) : '—', 'promedio', 'de 5')}</div></div>` +
       `<div class="profile-layout"><div class="profile-main">` +
-      `<section class="profile-block"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
-      `<section class="profile-block"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><div class="profile-books" id="p-best"></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" hidden></button></div><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><button class="profile-more" id="p-best-more" hidden></button></div><div class="profile-books" id="p-best"></div></section>` +
       `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
       `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}<p class="pdetail__explain">Los días marcados muestran cuándo terminaste o puntuaste una lectura durante el mes.</p></div>` +
       profileDetail('bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos libros registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
@@ -1405,21 +1447,26 @@
       profileDetail('workspace_premium', 'Medallas', `${medalsDone} de ${BOOK_MEDALS.length} logradas`, `<div class="pmedals">${medals}</div>`, 'Se desbloquean automáticamente con tu actividad. La barra muestra cuánto te falta para cada objetivo.') +
       `</aside></div>`;
     app.appendChild(sec); app.appendChild(buildFooter());
-    const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t).slice(0, 4);
+    K.profileBackground.apply(sec, sec.querySelector('.phero'), acc, u.color);
+    const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t);
     const rw = sec.querySelector('#p-reviews');
-    if (!revs.length) rw.innerHTML = `<p class="addfilm__hint">Todavía sin reseñas.</p>`;
-    revs.forEach(({ b }) => {
+    profileExpandable(rw, sec.querySelector('#p-reviews-more'), revs, 4, ({ b }) => {
       const v = verdictOf(b.id, id), c = document.createElement('button'); c.className = 'prev';
       c.innerHTML = `<span class="prev__poster" style="background:${coverArt(b)}"></span><span class="prev__b"><b>${escapeHtml(b.title)}</b><span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span><span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
-      c.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: id })); rw.appendChild(c);
-    });
-    const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating).slice(0, 12);
+      c.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: id }));
+      return K.motion.tag(c, `prb-profile-review-${id}-${b.id}`);
+    }, 'Todavía sin reseñas.');
+    const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
-    if (!best.length) bw.innerHTML = `<p class="addfilm__hint">Puntuá un libro y aparece acá.</p>`;
-    best.forEach((b) => bw.appendChild(profileBookCard(b, id)));
+    profileExpandable(bw, sec.querySelector('#p-best-more'), best, 12, (b) =>
+      K.motion.tag(profileBookCard(b, id), `prb-profile-best-${id}-${b.id}`), 'Puntuá un libro y aparece acá.');
     if (mine) {
       sec.querySelector('#p-photo').addEventListener('click', () => K.pickPhoto((data) => { K.accounts.patch(store, id, { photo: data }); refreshUsers(); renderHeader(); renderPerfil(app); K.toast('Foto actualizada ✓'); }));
       sec.querySelector('#p-editbio').addEventListener('click', () => openBioEditor(app, id, bio));
+      sec.querySelector('#p-customize').addEventListener('click', () => K.profileBackground.open(store, id, {
+        color: u.color,
+        onSave: () => { refreshUsers(); renderPerfil(app, id); },
+      }));
     }
   }
   function openBioEditor(app, id, bio) {

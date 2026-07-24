@@ -20,6 +20,122 @@ window.APPKIT = (function () {
     toastTimer = setTimeout(() => el.classList.remove('is-on'), 2600);
   }
 
+  /* ============================================================ motion */
+  const motion = (function () {
+    const reducedQuery = '(prefers-reduced-motion: reduce)';
+    let active = null;
+    let fallbackPending = null;
+
+    function reduced() {
+      return typeof window.matchMedia === 'function' && window.matchMedia(reducedQuery).matches;
+    }
+
+    function flushFallback() {
+      if (!fallbackPending) return;
+      const pending = fallbackPending;
+      if (!pending.committed) {
+        pending.committed = true;
+        pending.update();
+      }
+      if (pending.animation && typeof pending.animation.cancel === 'function') pending.animation.cancel();
+      if (pending.timer) clearTimeout(pending.timer);
+      if (pending.target) pending.target.classList.remove('app-motion-fallback--out', 'app-motion-fallback--in', 'app-motion-fallback--route');
+      fallbackPending = null;
+    }
+
+    function run(update, options = {}) {
+      if (typeof update !== 'function') return null;
+      if (reduced()) {
+        update();
+        return null;
+      }
+
+      const root = document.documentElement;
+      const kind = options.kind === 'shared' ? 'shared' : 'route';
+      if (typeof document.startViewTransition !== 'function') {
+        const target = typeof options.target === 'string'
+          ? document.querySelector(options.target)
+          : options.target || document.getElementById('app');
+        if (!target) {
+          update();
+          return null;
+        }
+        flushFallback();
+        if (typeof target.animate !== 'function') {
+          const pending = { update, target, committed: false, timer: null };
+          fallbackPending = pending;
+          target.classList.toggle('app-motion-fallback--route', kind === 'route');
+          target.classList.add('app-motion-fallback--out');
+          pending.timer = setTimeout(() => {
+            if (fallbackPending !== pending) return;
+            pending.committed = true;
+            update();
+            target.classList.remove('app-motion-fallback--out');
+            target.classList.add('app-motion-fallback--in');
+            pending.timer = setTimeout(() => {
+              target.classList.remove('app-motion-fallback--in', 'app-motion-fallback--route');
+              if (fallbackPending === pending) fallbackPending = null;
+            }, kind === 'route' ? 240 : 190);
+          }, kind === 'route' ? 120 : 90);
+          return pending;
+        }
+        const shift = kind === 'route' ? 6 : 3;
+        const pending = { update, target, committed: false, animation: null };
+        const out = target.animate([
+          { opacity: 1, transform: 'translateY(0)', filter: 'blur(0)' },
+          { opacity: 0, transform: `translateY(-${shift}px)`, filter: 'blur(2px)' },
+        ], { duration: kind === 'route' ? 120 : 90, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' });
+        pending.animation = out;
+        fallbackPending = pending;
+        out.finished.catch(() => {}).then(() => {
+          if (fallbackPending !== pending) return;
+          pending.committed = true;
+          update();
+          out.cancel();
+          const incoming = target.animate([
+            { opacity: 0, transform: `translateY(${shift}px)`, filter: 'blur(2px)' },
+            { opacity: 1, transform: 'translateY(0)', filter: 'blur(0)' },
+          ], { duration: kind === 'route' ? 240 : 190, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
+          pending.animation = incoming;
+          incoming.finished.catch(() => {}).finally(() => {
+            if (fallbackPending === pending) fallbackPending = null;
+          });
+        });
+        return out;
+      }
+
+      root.dataset.appMotion = kind;
+      if (active && typeof active.skipTransition === 'function') active.skipTransition();
+
+      try {
+        const transition = document.startViewTransition(update);
+        active = transition;
+        transition.finished.catch(() => {}).finally(() => {
+          if (active !== transition) return;
+          active = null;
+          delete root.dataset.appMotion;
+        });
+        return transition;
+      } catch {
+        delete root.dataset.appMotion;
+        update();
+        return null;
+      }
+    }
+
+    function tag(element, id) {
+      if (!element || id == null) return element;
+      const safe = String(id).trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+      if (safe) {
+        element.classList.add('app-motion-item');
+        element.style.viewTransitionName = `item-${safe}`;
+      }
+      return element;
+    }
+
+    return { run, tag, reduced };
+  })();
+
   /* ============================================================ colors */
   const hex2rgb = (h) => { const s = h.replace('#', ''); const n = parseInt(s.length === 3 ? s.split('').map((c) => c + c).join('') : s, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const rgb2hex = (r, g, b) => '#' + [r, g, b].map((x) => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, '0')).join('');
@@ -317,18 +433,51 @@ window.APPKIT = (function () {
     inp.click();
   }
 
+  function pickBackground(onReady) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/jpeg,image/png,image/webp,image/gif'; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', () => {
+      const file = inp.files && inp.files[0];
+      inp.remove();
+      if (!file) return;
+      if (file.size > MAX_UPLOAD) return toast('Ese fondo pesa más de 10MB. Probá con uno más chico.', 'bad');
+      const fr = new FileReader();
+      fr.onload = () => {
+        if (file.type === 'image/gif') {
+          if (file.size > MAX_GIF_UPLOAD) return toast('Para guardar el GIF animado, elegí uno de hasta 1MB.', 'bad');
+          onReady(fr.result);
+          toast('GIF de fondo listo ✓');
+          return;
+        }
+        openCropper(fr.result, onReady, {
+          width: 1400, height: 480,
+          title: 'Recortá el fondo',
+          hint: 'Arrastrá para encuadrar · queda en formato ultrawide',
+          action: 'Usar este fondo',
+        });
+      };
+      fr.onerror = () => toast('No pude leer esa imagen.', 'bad');
+      fr.readAsDataURL(file);
+    });
+    inp.click();
+  }
+
   function openCropper(src, onReady, size) {
-    const OUT = size || 400;
+    const opts = size && typeof size === 'object' ? size : {};
+    const OUT_W = typeof size === 'number' ? size : (opts.width || 400);
+    const OUT_H = typeof size === 'number' ? size : (opts.height || OUT_W);
+    const wide = OUT_W / OUT_H > 1.4;
     let el = document.getElementById('cropper');
     if (!el) { el = document.createElement('div'); el.id = 'cropper'; el.className = 'cropper'; document.body.appendChild(el); }
     el.innerHTML =
-      `<div class="cropper__scrim" data-cclose></div><div class="cropper__panel">` +
-      `<div class="cropper__head"><h3>Recortá tu foto</h3><button class="icon-btn" data-cclose aria-label="Cerrar">${icon('close')}</button></div>` +
-      `<div class="cropper__stage" id="cr-stage"><canvas id="cr-canvas" width="${OUT}" height="${OUT}"></canvas><div class="cropper__ring"></div></div>` +
+      `<div class="cropper__scrim" data-cclose></div><div class="cropper__panel${wide ? ' cropper__panel--wide' : ''}">` +
+      `<div class="cropper__head"><h3>${esc(opts.title || 'Recortá tu foto')}</h3><button class="icon-btn" data-cclose aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<div class="cropper__stage${wide ? ' cropper__stage--wide' : ''}" id="cr-stage"><canvas id="cr-canvas" width="${OUT_W}" height="${OUT_H}"></canvas><div class="cropper__ring"></div></div>` +
       `<label class="cropper__zoom">${icon('zoom_out')}<input type="range" id="cr-zoom" min="100" max="400" value="100">${icon('zoom_in')}</label>` +
-      `<p class="cropper__hint">Arrastrá para mover · deslizá para acercar</p>` +
+      `<p class="cropper__hint">${esc(opts.hint || 'Arrastrá para mover · deslizá para acercar')}</p>` +
       `<div class="confirm__actions"><button class="btn btn--soft" data-cclose>Cancelar</button>` +
-      `<button class="btn btn--accent" id="cr-ok">${icon('check')} Usar esta foto</button></div></div>`;
+      `<button class="btn btn--accent" id="cr-ok">${icon('check')} ${esc(opts.action || 'Usar esta foto')}</button></div></div>`;
     el.hidden = false;
     document.body.style.overflow = 'hidden';
     const close = () => { el.hidden = true; el.innerHTML = ''; document.body.style.overflow = ''; };
@@ -339,32 +488,32 @@ window.APPKIT = (function () {
     const img = new Image();
     let scale = 1, minScale = 1, ox = 0, oy = 0, drag = null;
     img.onload = () => {
-      minScale = Math.max(OUT / img.width, OUT / img.height);
-      scale = minScale; ox = (OUT - img.width * scale) / 2; oy = (OUT - img.height * scale) / 2;
+      minScale = Math.max(OUT_W / img.width, OUT_H / img.height);
+      scale = minScale; ox = (OUT_W - img.width * scale) / 2; oy = (OUT_H - img.height * scale) / 2;
       paint();
     };
     img.onerror = () => { toast('No pude abrir esa imagen.', 'bad'); close(); };
     img.src = src;
     function clamp() {
       const w = img.width * scale, h = img.height * scale;
-      ox = Math.min(0, Math.max(OUT - w, ox));
-      oy = Math.min(0, Math.max(OUT - h, oy));
+      ox = Math.min(0, Math.max(OUT_W - w, ox));
+      oy = Math.min(0, Math.max(OUT_H - h, oy));
     }
     function paint() {
       clamp();
-      ctx.clearRect(0, 0, OUT, OUT);
-      ctx.fillStyle = '#0b0b0f'; ctx.fillRect(0, 0, OUT, OUT);
+      ctx.clearRect(0, 0, OUT_W, OUT_H);
+      ctx.fillStyle = '#0b0b0f'; ctx.fillRect(0, 0, OUT_W, OUT_H);
       ctx.drawImage(img, ox, oy, img.width * scale, img.height * scale);
     }
     zoomInput.addEventListener('input', () => {
-      const cx = OUT / 2, cy = OUT / 2;
+      const cx = OUT_W / 2, cy = OUT_H / 2;
       const prev = scale;
       scale = minScale * (+zoomInput.value / 100);
       ox = cx - (cx - ox) * (scale / prev);
       oy = cy - (cy - oy) * (scale / prev);
       paint();
     });
-    const pt = (e) => { const r = cv.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return { x: (t.clientX - r.left) * (OUT / r.width), y: (t.clientY - r.top) * (OUT / r.height) }; };
+    const pt = (e) => { const r = cv.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return { x: (t.clientX - r.left) * (OUT_W / r.width), y: (t.clientY - r.top) * (OUT_H / r.height) }; };
     const down = (e) => { const p = pt(e); drag = { x: p.x - ox, y: p.y - oy }; };
     const move = (e) => { if (!drag) return; e.preventDefault(); const p = pt(e); ox = p.x - drag.x; oy = p.y - drag.y; paint(); };
     const up = () => (drag = null);
@@ -378,6 +527,213 @@ window.APPKIT = (function () {
       onReady(out);
     });
   }
+
+  /* ============================================================ profile background
+   * Shared account fields:
+   * profileBg (data image or https URL), profileBgMode ('banner' | 'full'),
+   * profileBgColor (#rrggbb) and profileBgShade (25..85).
+   * GIF search uses Wikimedia Commons: free, client-side and no key required. */
+  const profileBackground = (function () {
+    const DEFAULT_COLOR = '#16090b';
+    const safeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
+    const safeImage = (value) => {
+      const src = String(value || '').trim();
+      if (/^https:\/\//i.test(src)) return src;
+      if (/^data:image\/(?:gif|png|jpeg|webp);base64,/i.test(src)) return src;
+      return '';
+    };
+    const safeShade = (value) => Math.max(25, Math.min(85, parseInt(value, 10) || 62));
+
+    function read(account, fallbackColor) {
+      return {
+        image: safeImage(account && account.profileBg),
+        mode: account && account.profileBgMode === 'full' ? 'full' : 'banner',
+        color: safeColor(account && account.profileBgColor, DEFAULT_COLOR),
+        shade: safeShade(account && account.profileBgShade),
+      };
+    }
+
+    function setVars(element, state) {
+      if (!element) return;
+      element.style.setProperty('--profile-bg-color', state.color);
+      element.style.setProperty('--profile-bg-image', state.image ? `url("${state.image.replace(/["\\]/g, '\\$&')}")` : 'none');
+      element.style.setProperty('--profile-bg-shade', String(state.shade / 100));
+    }
+
+    function apply(section, hero, account, fallbackColor) {
+      const state = read(account, fallbackColor);
+      section.classList.add('profile-section', `profile-section--${state.mode}`);
+      section.style.setProperty('--c', safeColor(fallbackColor, '#ff0055'));
+      hero.classList.add('phero--personalized');
+      setVars(section, state);
+      setVars(hero, state);
+      return state;
+    }
+
+    async function search(query) {
+      const q = String(query || '').trim().slice(0, 50);
+      if (!q) return [];
+      const params = new URLSearchParams({
+        action: 'query',
+        generator: 'search',
+        gsrnamespace: '6',
+        gsrsearch: `${q} filemime:image/gif`,
+        gsrlimit: '12',
+        prop: 'imageinfo',
+        iiprop: 'url|mime|size',
+        iiurlwidth: '640',
+        format: 'json',
+        origin: '*',
+      });
+      const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
+      if (!response.ok) throw new Error('gif-search');
+      const payload = await response.json();
+      return Object.values((payload.query && payload.query.pages) || {})
+        .map((page) => {
+          const info = page.imageinfo && page.imageinfo[0];
+          return info && info.mime === 'image/gif' ? {
+            title: String(page.title || '').replace(/^File:/, ''),
+            url: safeImage(info.url),
+            preview: safeImage(info.thumburl || info.url),
+            width: info.width || 0,
+            height: info.height || 0,
+          } : null;
+        })
+        .filter((item) => item && item.url)
+        .slice(0, 8);
+    }
+
+    function open(store, userId, options = {}) {
+      const account = store.getAccounts()[userId] || {};
+      const state = read(account, options.color);
+      let results = [];
+      let el = document.getElementById('profile-customizer');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'profile-customizer';
+        el.className = 'profile-customizer';
+        document.body.appendChild(el);
+      }
+      el.innerHTML =
+        `<div class="profile-customizer__scrim" data-pb-close></div>` +
+        `<div class="profile-customizer__panel" role="dialog" aria-modal="true" aria-labelledby="pb-title">` +
+        `<div class="profile-customizer__head"><div><h3 id="pb-title">Personalizá tu perfil</h3><p>Elegí dónde vive el fondo y hacelo bien tuyo.</p></div>` +
+        `<button class="icon-btn" data-pb-close aria-label="Cerrar">${icon('close')}</button></div>` +
+        `<div class="profile-bg-preview" id="pb-preview"><span>Vista previa</span></div>` +
+        `<div class="profile-customizer__grid">` +
+        `<section class="profile-customizer__group"><h4>Alcance</h4><div class="profile-bg-modes" role="group" aria-label="Dónde aplicar el fondo">` +
+        `<button class="profile-bg-mode" data-pb-mode="banner">${icon('panorama')}<span><b>Solo portada</b><small>Arriba, junto a tu descripción.</small></span></button>` +
+        `<button class="profile-bg-mode" data-pb-mode="full">${icon('fullscreen')}<span><b>Todo el perfil</b><small>Acompaña reseñas y estadísticas.</small></span></button></div></section>` +
+        `<section class="profile-customizer__group"><h4>Color y contraste</h4><div class="profile-bg-color">` +
+        `<label><span>Color base</span><input type="color" id="pb-color" value="${esc(state.color)}"></label>` +
+        `<label class="profile-bg-shade"><span>Oscurecer imagen</span><input type="range" id="pb-shade" min="25" max="85" value="${state.shade}"><b id="pb-shade-value">${state.shade}%</b></label>` +
+        `</div></section>` +
+        `<section class="profile-customizer__group profile-customizer__group--wide"><div class="profile-customizer__title"><h4>Imagen o GIF ultrawide</h4>` +
+        `<div><button class="btn btn--soft btn--xs" id="pb-upload">${icon('upload')} Subir</button>` +
+        `<button class="btn btn--soft btn--xs" id="pb-remove">${icon('hide_image')} Usar solo color</button></div></div>` +
+        `<label class="profile-bg-url"><span>También podés pegar un enlace directo</span><input id="pb-url" type="url" placeholder="https://…/fondo.gif" value="${esc(state.image && !state.image.startsWith('data:') ? state.image : '')}"></label>` +
+        `<div class="profile-gif-search"><label class="search"><span class="material-symbols-rounded">search</span><input id="pb-query" type="search" maxlength="50" placeholder="Buscar GIFs: cine, galaxia, lluvia…"></label>` +
+        `<button class="btn btn--soft" id="pb-search">${icon('gif_box')} Buscar</button></div>` +
+        `<div class="profile-gif-results" id="pb-results"><p>Buscá un GIF libre en Wikimedia Commons o subí el tuyo.</p></div>` +
+        `</section></div>` +
+        `<div class="profile-customizer__actions"><button class="btn btn--soft" data-pb-close>Cancelar</button>` +
+        `<button class="btn btn--accent" id="pb-save">${icon('check')} Guardar fondo</button></div></div>`;
+      el.hidden = false;
+      document.body.style.overflow = 'hidden';
+
+      const preview = el.querySelector('#pb-preview');
+      const urlInput = el.querySelector('#pb-url');
+      const close = () => {
+        el.hidden = true;
+        el.innerHTML = '';
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKey);
+      };
+      const onKey = (event) => { if (event.key === 'Escape') close(); };
+      document.addEventListener('keydown', onKey);
+      el.querySelectorAll('[data-pb-close]').forEach((button) => button.addEventListener('click', close));
+
+      const refresh = () => {
+        setVars(preview, state);
+        preview.classList.toggle('is-full', state.mode === 'full');
+        preview.classList.toggle('has-image', !!state.image);
+        el.querySelectorAll('[data-pb-mode]').forEach((button) => button.classList.toggle('is-on', button.dataset.pbMode === state.mode));
+        el.querySelector('#pb-shade-value').textContent = `${state.shade}%`;
+      };
+      el.querySelectorAll('[data-pb-mode]').forEach((button) => button.addEventListener('click', () => {
+        state.mode = button.dataset.pbMode;
+        refresh();
+      }));
+      el.querySelector('#pb-color').addEventListener('input', (event) => { state.color = event.target.value; refresh(); });
+      el.querySelector('#pb-shade').addEventListener('input', (event) => { state.shade = safeShade(event.target.value); refresh(); });
+      el.querySelector('#pb-upload').addEventListener('click', () => pickBackground((data) => {
+        state.image = data;
+        urlInput.value = '';
+        refresh();
+      }));
+      el.querySelector('#pb-remove').addEventListener('click', () => {
+        state.image = '';
+        urlInput.value = '';
+        refresh();
+      });
+      urlInput.addEventListener('change', () => {
+        const next = safeImage(urlInput.value);
+        if (urlInput.value.trim() && !next) {
+          toast('Pegá un enlace directo que empiece con https://', 'bad');
+          urlInput.value = state.image.startsWith('https://') ? state.image : '';
+          return;
+        }
+        state.image = next;
+        refresh();
+      });
+
+      const drawResults = (busy, message) => {
+        const host = el.querySelector('#pb-results');
+        if (busy) { host.innerHTML = `<p>${icon('hourglass_top')} Buscando GIFs…</p>`; return; }
+        if (message) { host.innerHTML = `<p>${esc(message)}</p>`; return; }
+        host.innerHTML = results.map((item, index) =>
+          `<button class="profile-gif-result" data-pb-gif="${index}" title="${esc(item.title)}">` +
+          `<img src="${esc(item.preview)}" alt="${esc(item.title)}" loading="lazy"><span>${esc(item.title)}</span></button>`
+        ).join('');
+        host.querySelectorAll('[data-pb-gif]').forEach((button) => button.addEventListener('click', () => {
+          const item = results[Number(button.dataset.pbGif)];
+          state.image = item.url;
+          urlInput.value = item.url;
+          host.querySelectorAll('.profile-gif-result').forEach((node) => node.classList.toggle('is-on', node === button));
+          refresh();
+        }));
+      };
+      const runSearch = async () => {
+        const query = el.querySelector('#pb-query').value.trim();
+        if (!query) { el.querySelector('#pb-query').focus(); return; }
+        drawResults(true);
+        try {
+          results = await search(query);
+          drawResults(false, results.length ? '' : 'No encontré GIFs con esa búsqueda. Probá con otra palabra.');
+        } catch {
+          drawResults(false, 'No pude buscar ahora. Igual podés subir un GIF o pegar un enlace.');
+        }
+      };
+      el.querySelector('#pb-search').addEventListener('click', runSearch);
+      el.querySelector('#pb-query').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); runSearch(); }
+      });
+      el.querySelector('#pb-save').addEventListener('click', () => {
+        accounts.patch(store, userId, {
+          profileBg: state.image || null,
+          profileBgMode: state.mode,
+          profileBgColor: state.color,
+          profileBgShade: state.shade,
+        });
+        close();
+        if (typeof options.onSave === 'function') options.onSave();
+        toast('Fondo del perfil actualizado ✓');
+      });
+      refresh();
+    }
+
+    return { read, apply, open, search };
+  })();
 
   /* ============================================================ board → image (social export)
    * Hand-drawn on a canvas instead of screenshotting the DOM: the goal is a clean, minimal
@@ -619,9 +975,10 @@ window.APPKIT = (function () {
 
   return {
     icon, esc, toast,
+    motion,
     rampAt, autoColor, tierRows, normalizeRows, newRowId, openRowEditor,
     accounts, activity, sha256, pinPad, DEFAULT_PIN,
-    pickPhoto, openCropper, MAX_UPLOAD, MAX_GIF_UPLOAD,
+    pickPhoto, pickBackground, openCropper, profileBackground, MAX_UPLOAD, MAX_GIF_UPLOAD,
     renderBoardImage, shareBoardImage, openShareBoard,
   };
 })();
