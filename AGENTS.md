@@ -32,9 +32,10 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-24 · Claude — v30 / PWM+PRB 1.18
+### 2026-07-24 · Claude — v31 / PWM+PRB 1.19
 - PWM home: dropped "Ya vimos"; "Últimas reseñas" now renders **one card per film** with a compact chip strip (avatar + score + review mark) per user, tapping opens the read-only review sheet. Removed the orphaned `buildWatched` / `watchedCard` / `latestTs`.
-- New `mobileRows` option in `profileContentPreview` (both apps): reviews reveal **3 rows + half** on mobile instead of 1. The blur veil now fades to `var(--profile-bg-color)`, so it blends with the user's chosen profile background instead of the default ground.
+- New `mobileRows` option in `profileContentPreview` (both apps): reviews reveal **3 rows + half** on mobile instead of 1.
+- Preview veil colour: fading to the raw `--profile-bg-color` was **wrong** (Lucas caught it — it read grey against a near-black canvas). In full mode `.profile-section--full::before` paints that colour under a near-black wash reaching `rgb(7 2 2)/.88` (PWM) / `rgb(2 6 14)/.9` (PRB), so the veil now fades to `--veil-ink`, the same blend. Verified numerically: identical RGB to the real background for #1c1c1c, #e63b7a, #2e7bff, #bbef1f. Banner mode and non-profile peeks fall back to `--ground`.
 - `setRoute` writes state + hash **synchronously** — it used to sit inside the deferred motion callback, so reloading right after a tap could miss the hash.
 - Trailers: no `autoplay` on touch devices. Mobile blocks autoplay-with-sound and the blocked embed just sat black; now YouTube's poster + play button shows and the control starts as "Reproducir".
 - PRB: the whole verdict block opens the read-only review (before, only the quoted text did — anywhere else fell through to the full sheet with synopsis + editors). Profile links inside it still win: the delegated handler checks `[data-profile-user]` first.

@@ -1544,9 +1544,12 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 .profile-poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: clamp(.75rem, 1.6vw, 1rem); }
 .profile-poster-preview { position: relative; overflow: hidden; max-height: var(--profile-preview-height, none); }
 .profile-poster-preview.is-expanded { max-height: none; padding-bottom: 3.4rem; }
-/* The veil fades into whatever the user picked as their profile background, so the cut-off row
- * blends instead of fading to the app's default ground. Falls back outside a personalized profile. */
-.profile-poster-preview__veil { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; display: none; height: clamp(110px, 22vw, 180px); pointer-events: none; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--profile-bg-color, var(--ground)) 88%, transparent) 72%, var(--profile-bg-color, var(--ground))); backdrop-filter: blur(3px); mask-image: linear-gradient(to bottom, transparent, #000 42%); }
+/* The veil has to fade into what the user ACTUALLY sees. In full-canvas mode that's not the raw
+ * colour they picked: `.profile-section--full::before` paints it under a near-black wash that
+ * reaches rgb(7 2 2)/.88 by the bottom, so we fade to that same blend — dark, but tinted by their
+ * colour, and different for every user. Banner mode and non-profile peeks keep the app ground. */
+.profile-section--full { --veil-ink: color-mix(in srgb, var(--profile-bg-color, var(--ground)) 12%, rgb(7 2 2)); }
+.profile-poster-preview__veil { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; display: none; height: clamp(110px, 22vw, 180px); pointer-events: none; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--veil-ink, var(--ground)) 88%, transparent) 72%, var(--veil-ink, var(--ground))); backdrop-filter: blur(3px); mask-image: linear-gradient(to bottom, transparent, #000 42%); }
 .profile-poster-preview.has-preview:not(.is-expanded) .profile-poster-preview__veil { display: block; }
 .profile-poster-preview__more { position: absolute; z-index: 2; right: 50%; bottom: 1rem; display: inline-flex; align-items: center; gap: .38rem; min-height: 40px; padding: .55rem 1rem; transform: translateX(50%); border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--hairline)); border-radius: var(--r-pill); color: var(--ink); background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 12px 28px rgba(0,0,0,.34); backdrop-filter: blur(10px); font-size: .78rem; font-weight: 800; }
 .profile-poster-preview__more:hover { border-color: var(--accent); background: var(--surface-2); }
