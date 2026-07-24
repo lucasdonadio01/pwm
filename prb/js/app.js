@@ -246,6 +246,16 @@
       title: `${actor.name} confirmó que va`,
       detail: item.title || 'Función de PWM',
     };
+    if (item.type === 'calendar_share_invite') return {
+      icon: 'calendar_add_on',
+      title: `${actor.name} quiere compartir un calendario con vos`,
+      detail: item.title || 'Calendario de PWM',
+    };
+    if (item.type === 'calendar_share_accept') return {
+      icon: 'group_add',
+      title: `${actor.name} aceptó compartir tu calendario`,
+      detail: item.title || 'Calendario de PWM',
+    };
     if (item.type === 'user_joined') return {
       icon: 'waving_hand',
       title: `¡${actor.name} se ha unido!`,
@@ -264,6 +274,14 @@
     closeNotifications();
     if (item.type === 'user_joined') {
       goToProfile(item.actor);
+      return;
+    }
+    if (item.type === 'calendar_share_invite') {
+      location.href = `../index.html?calendar-share=${encodeURIComponent(item.calId || '')}`;
+      return;
+    }
+    if (item.type === 'calendar_share_accept') {
+      location.href = `../index.html?calendar=${encodeURIComponent(item.calId || '')}`;
       return;
     }
     if (item.type === 'calendar_invite' || item.type === 'calendar_accept') {

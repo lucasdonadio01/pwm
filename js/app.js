@@ -281,6 +281,16 @@
       title: `${actor.name} confirmó que va`,
       detail: [item.title, item.iso ? fmtDay(item.iso) : ''].filter(Boolean).join(' · '),
     };
+    if (item.type === 'calendar_share_invite') return {
+      icon: 'calendar_add_on',
+      title: `${actor.name} quiere compartir un calendario con vos`,
+      detail: item.title || 'Calendario compartido',
+    };
+    if (item.type === 'calendar_share_accept') return {
+      icon: 'group_add',
+      title: `${actor.name} aceptó compartir tu calendario`,
+      detail: item.title || 'Calendario compartido',
+    };
     if (item.type === 'user_joined') return {
       icon: 'waving_hand',
       title: `¡${actor.name} se ha unido!`,
@@ -301,7 +311,20 @@
       goToProfile(item.actor);
       return;
     }
+    if (item.type === 'calendar_share_invite') {
+      openCalendarShareInvite(item);
+      return;
+    }
+    if (item.type === 'calendar_share_accept') {
+      calBoardId = item.calId;
+      setRoute('calendario');
+      return;
+    }
     if (item.type === 'calendar_invite' || item.type === 'calendar_accept') {
+      if (item.type === 'calendar_invite') {
+        openInviteOverlay(item.eventId);
+        return;
+      }
       calBoardId = item.calId || 'cal-main';
       if (item.iso) {
         const d = new Date(item.iso + 'T00:00:00');
@@ -1399,11 +1422,51 @@
   const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const WEEKDAYS = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const isoDate = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const personalCalendarId = (uid) => `cal-personal:${uid}`;
+  function personalCalendar(uid, viewerId = uid) {
+    return {
+      id: personalCalendarId(uid), type: 'personal', name: uid === viewerId ? 'Mi calendario' : `Calendario de ${ownerName(uid)}`,
+      owner: uid, members: [uid], pendingMembers: [], editable: !currentUser().guest && uid === viewerId, viewUser: uid,
+    };
+  }
+  function normalizedCalendar(c, viewerId = currentUser().id) {
+    const members = Array.isArray(c.members) && c.members.length ? [...new Set(c.members)] : [c.owner];
+    if (!members.includes(c.owner)) members.unshift(c.owner);
+    return {
+      ...c, type: 'custom', members,
+      pendingMembers: Array.isArray(c.pendingMembers) ? c.pendingMembers.filter((uid) => !members.includes(uid)) : [],
+      editable: !currentUser().guest && members.includes(viewerId),
+      manageable: !currentUser().guest && c.owner === viewerId,
+    };
+  }
+  function legacyCalendarFor(uid) {
+    const all = store.getCalEvents('cal-main');
+    const involved = Object.values(all).flat().some((ev) =>
+      ev.by === uid || eventInvitees({ id: 'cal-main', members: Object.keys(users) }, ev).includes(uid) || !!(ev.accepted || {})[uid]);
+    if (!involved) return null;
+    return {
+      id: 'cal-main', type: 'legacy', name: 'Calendario anterior', owner: uid, members: [uid],
+      pendingMembers: [], editable: !currentUser().guest, manageable: false, viewUser: uid,
+    };
+  }
   function currentCalendars() {
     const me = currentUser();
-    const list = [{ id: 'cal-main', type: 'default', name: 'Nuestro calendario', owner: me.id, members: Object.values(users).map((u) => u.id), editable: !me.guest }];
-    store.getCalendars().forEach((c) => { const members = Array.isArray(c.members) && c.members.length ? c.members : [c.owner]; list.push({ id: c.id, type: 'custom', name: c.name, owner: c.owner, members, editable: !me.guest && members.includes(me.id) }); });
+    const list = [personalCalendar(me.id, me.id)];
+    store.getCalendars().forEach((raw) => {
+      const c = normalizedCalendar(raw, me.id);
+      if (c.owner === me.id || c.members.includes(me.id)) list.push(c);
+    });
+    const legacy = legacyCalendarFor(me.id);
+    if (legacy) list.push(legacy);
     return list;
+  }
+  function allEventCalendars() {
+    const out = Object.keys(users).filter((uid) => uid !== 'guest').map((uid) => personalCalendar(uid, currentUser().id));
+    store.getCalendars().forEach((raw) => out.push(normalizedCalendar(raw, currentUser().id)));
+    if (Object.keys(store.getCalEvents('cal-main')).length) {
+      out.push({ id: 'cal-main', type: 'legacy', name: 'Calendario anterior', owner: null, members: Object.keys(users), pendingMembers: [], editable: false });
+    }
+    return out;
   }
 
   /* ---------- how you're watching it ---------- */
@@ -1417,7 +1480,35 @@
   const modeLabel = (ev) => { const m = modeOf(ev.mode); return m ? m.label : (ev.place || ''); };
   function eventInvitees(C, ev) {
     if (Array.isArray(ev.invitees)) return ev.invitees.filter((uid) => uid !== ev.by && users[uid]);
+    if (C.id === 'cal-main') {
+      const knownLegacyMembers = new Set(['bian', 'luke', ...Object.keys(ev.accepted || {}), ...Object.keys(ev.dismissed || {})]);
+      return [...knownLegacyMembers].filter((uid) => uid !== ev.by && users[uid]);
+    }
     return C.members.filter((uid) => uid !== ev.by && users[uid]); // legacy events invited every member
+  }
+
+  function calendarEventsFor(C) {
+    const base = store.getCalEvents(C.id);
+    if (C.type !== 'personal' && C.type !== 'legacy') return base;
+    const uid = C.viewUser || currentUser().id;
+    const visible = {};
+    Object.entries(base).forEach(([iso, events]) => {
+      const rows = events.filter((ev) => ev.by === uid || !!(ev.accepted || {})[uid]);
+      if (rows.length) visible[iso] = rows;
+    });
+    if (C.type === 'personal') {
+      allEventCalendars().forEach((source) => {
+        if (source.id === C.id) return;
+        Object.entries(store.getCalEvents(source.id)).forEach(([iso, events]) => {
+          events.forEach((ev) => {
+            if (!(ev.accepted || {})[uid]) return;
+            const exists = (visible[iso] || []).some((row) => row.id === ev.id && (row.__calId || C.id) === source.id);
+            if (!exists) (visible[iso] = visible[iso] || []).push({ ...ev, __calId: source.id });
+          });
+        });
+      });
+    }
+    return visible;
   }
 
   function sendCalendarInviteActivities(C, iso, ev, invitees) {
@@ -1441,11 +1532,73 @@
     });
   }
 
+  function sendCalendarShareActivities(C, invitees) {
+    const actor = users[C.owner] || currentUser();
+    K.activity.pushMany(store, invitees.map((uid) => ({
+      id: `calendar-share:${C.id}:${uid}`,
+      type: 'calendar_share_invite', app: APP_ID, actor: actor.id, target: uid,
+      calId: C.id, title: C.name, createdAt: new Date().toISOString(),
+    })));
+  }
+
+  function openCalendarShareInvite(item) {
+    const me = currentUser();
+    const raw = store.getCalendars().find((c) => c.id === item.calId);
+    if (!raw || !(raw.pendingMembers || []).includes(me.id)) {
+      K.activity.markRead(store, me.id, [item.id]);
+      K.toast('Esta invitación ya no está disponible.', 'bad');
+      return;
+    }
+    const owner = users[raw.owner] || { name: item.actorName || 'Alguien', color: 'var(--accent)' };
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-cancel></div><div class="confirm__card calendar-share-invite" style="--c:${owner.color}">` +
+      `<span class="calendar-share-invite__icon">${icon('calendar_add_on')}</span>` +
+      `<div class="confirm__title">${escapeHtml(owner.name)} quiere compartir un calendario con vos</div>` +
+      `<p class="confirm__text">Si aceptás, <b>${escapeHtml(raw.name)}</b> va a aparecer junto a tu calendario personal y van a poder editarlo entre los dos.</p>` +
+      `<div class="confirm__actions"><button class="btn btn--soft" id="cal-share-no">${icon('close')} Ahora no</button>` +
+      `<button class="btn btn--accent" id="cal-share-yes">${icon('group_add')} Aceptar calendario</button></div></div>`;
+    el.hidden = false;
+    el.querySelector('[data-cancel]').addEventListener('click', () => (el.hidden = true));
+    el.querySelector('#cal-share-no').addEventListener('click', () => {
+      const next = store.getCalendars().map((c) => c.id === raw.id
+        ? { ...c, pendingMembers: (c.pendingMembers || []).filter((uid) => uid !== me.id) }
+        : c);
+      store.saveCalendars(next);
+      K.activity.dismiss(store, me.id, item.id);
+      el.hidden = true;
+      K.toast('No se compartió el calendario.');
+    });
+    el.querySelector('#cal-share-yes').addEventListener('click', () => {
+      const acceptedAt = new Date().toISOString();
+      const next = store.getCalendars().map((c) => {
+        if (c.id !== raw.id) return c;
+        return {
+          ...c,
+          members: [...new Set([...(c.members || [c.owner]), me.id])],
+          pendingMembers: (c.pendingMembers || []).filter((uid) => uid !== me.id),
+        };
+      });
+      store.saveCalendars(next);
+      K.activity.markRead(store, me.id, [item.id]);
+      K.activity.dismiss(store, me.id, item.id);
+      K.activity.push(store, {
+        id: `calendar-share-accept:${raw.id}:${me.id}`,
+        type: 'calendar_share_accept', app: APP_ID, actor: me.id, target: raw.owner,
+        calId: raw.id, title: raw.name, createdAt: acceptedAt,
+      });
+      calBoardId = raw.id;
+      el.hidden = true;
+      setRoute('calendario');
+      showCalendarToast('Calendario compartido', `Ya podés usar “${raw.name}”.`, 'success');
+    });
+  }
+
   /* ---------- invitations ----------
    * Every event records who created it (`by`). For everyone else on that calendar it is an
    * invitation until they accept or dismiss it — that's the +N on the header calendar icon. */
   function eachEvent(fn) {
-    const cals = currentCalendars();
+    const cals = allEventCalendars();
     const all = store.allCalEvents();
     cals.forEach((C) => {
       const map = all[C.id] || {};
@@ -1504,25 +1657,29 @@
     app.innerHTML = '';
     const s = document.createElement('section'); s.className = 'section'; s.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
     const mine = cals.filter((c) => c.editable);
-    const others = cals.filter((c) => !c.editable);
+    const acceptedMembers = C.members.filter((uid) => uid !== C.owner);
+    const pendingCount = (C.pendingMembers || []).length;
+    const memberSummary = C.type === 'personal'
+      ? 'Solo vos · las funciones que aceptes también aparecen acá'
+      : [acceptedMembers.length ? `${acceptedMembers.length + 1} personas` : 'Solo vos por ahora', pendingCount ? `${pendingCount} pendiente${pendingCount === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     s.innerHTML =
-      `<div class="section__head"><div><h3 class="section__title">Calendario</h3><p class="section__sub">${C.members.map((uid) => profileLink(uid, ownerName(uid))).join(' y ')} · poné pelis en fechas y mirá lo que vieron</p></div></div>` +
+      `<div class="section__head"><div><h3 class="section__title">Calendario</h3><p class="section__sub">${memberSummary} · poné pelis en fechas y mirá lo que ${C.type === 'personal' ? 'viste' : 'vieron'}</p></div></div>` +
       `<div class="tier-switch" id="cal-switch">` +
       mine.map((c) => `<button class="tswitch${c.id === C.id ? ' is-on' : ''}" data-cal="${c.id}">${icon('calendar_month')}${escapeHtml(c.name)}</button>`).join('') +
       `<button class="tswitch tswitch--add" id="cal-new">${icon('add')} Nuevo</button>` +
-      (others.length ? `<button class="tswitch tswitch--others${!C.editable ? ' is-on' : ''}" id="cal-others">${icon('visibility')} ${!C.editable ? escapeHtml(C.name) : 'Ver de otros'}</button>` : '') +
       `</div>` +
-      (C.type === 'custom' && C.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="cal-edit">${icon('edit')} Editar</button><button class="btn btn--soft btn--xs" id="cal-del">${icon('delete')} Borrar</button></div>` : '') +
-      `<div class="calbar"><button class="icon-btn" id="cal-prev" aria-label="Mes anterior">${icon('chevron_left')}</button>` +
+      (C.type === 'personal' ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="cal-share">${icon('group_add')} Compartir calendario</button></div>`
+        : (C.manageable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="cal-edit">${icon('edit')} Editar y compartir</button><button class="btn btn--soft btn--xs" id="cal-del">${icon('delete')} Borrar</button></div>` : '')) +
+      `<div class="calbar"><div class="calbar__nav"><button class="icon-btn" id="cal-prev" aria-label="Mes anterior">${icon('chevron_left')}</button>` +
       `<div class="calbar__title">${MONTHS[calCursor.m]} ${calCursor.y}</div>` +
-      `<button class="icon-btn" id="cal-next" aria-label="Mes siguiente">${icon('chevron_right')}</button>` +
+      `<button class="icon-btn" id="cal-next" aria-label="Mes siguiente">${icon('chevron_right')}</button></div>` +
       `<button class="btn btn--soft btn--xs cal-today" id="cal-today">Hoy</button></div>` +
       `<div class="calgrid" id="calgrid"></div>` +
       `<div class="cal-legend">${icon('theaters')} función planeada · ${icon('event_available')} ya la vieron (según la fecha de la reseña)</div>`;
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#cal-switch').addEventListener('click', (e) => { const b = e.target.closest('[data-cal]'); if (!b) return; calBoardId = b.dataset.cal; renderCalendario(app); });
     s.querySelector('#cal-new').addEventListener('click', () => { if (!guestBlock()) openCalendarModal(app, null); });
-    const co = s.querySelector('#cal-others'); if (co) co.addEventListener('click', () => openCalOthers(app, others));
+    const cs = s.querySelector('#cal-share'); if (cs) cs.addEventListener('click', () => openCalendarModal(app, null, { name: `Calendario de ${currentUser().name}` }));
     const ce = s.querySelector('#cal-edit'); if (ce) ce.addEventListener('click', () => openCalendarModal(app, C));
     const cd = s.querySelector('#cal-del'); if (cd) cd.addEventListener('click', () => deleteCalendar(app, C));
     s.querySelector('#cal-prev').addEventListener('click', () => { calCursor.m--; if (calCursor.m < 0) { calCursor.m = 11; calCursor.y--; } renderCalGrid(C); });
@@ -1636,7 +1793,7 @@
   function renderCalGrid(C) {
     const grid = document.getElementById('calgrid'); if (!grid) return;
     const titleEl = document.querySelector('.calbar__title'); if (titleEl) titleEl.textContent = `${MONTHS[calCursor.m]} ${calCursor.y}`;
-    const events = calEventsMap(C.id);
+    const events = calendarEventsFor(C);
     const watched = watchedByDate(C.members);
     const todayIso = new Date().toISOString().slice(0, 10);
     const startDow = (new Date(calCursor.y, calCursor.m, 1).getDay() + 6) % 7; // Monday=0
@@ -1688,7 +1845,7 @@
     return going.length ? `<div class="calev__attendance is-going">${icon('groups')} ${going.map((uid) => escapeHtml((users[uid] || {}).name || uid)).join(', ')} ${going.length === 1 ? 'asistirá' : 'asistirán'}.</div>` : '';
   }
   function openCalDay(C, iso) {
-    const evsNow = calEventsMap(C.id)[iso] || [];
+    const evsNow = calendarEventsFor(C)[iso] || [];
     const watNow = watchedByDate(C.members)[iso] || [];
     if (!evsNow.length && !watNow.length && C.editable) {
       openCalEventModal(C, iso, null, () => renderCalGrid(C), () => {});
@@ -1696,7 +1853,7 @@
     }
     let el = document.getElementById('calday'); if (!el) { el = document.createElement('div'); el.id = 'calday'; el.className = 'picksheet'; document.body.appendChild(el); }
     const render = () => {
-      const evs = calEventsMap(C.id)[iso] || [];
+      const evs = calendarEventsFor(C)[iso] || [];
       const wat = watchedByDate(C.members)[iso] || [];
       const dateLabel = new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       el.innerHTML =
@@ -1706,11 +1863,12 @@
         (evs.length ? `<div class="calday__sec">${icon('theaters')} Funciones planeadas</div>` + evs.map((e) => {
           const f = byId(e.filmId) || { id: e.filmId, title: '?' };
           const m = modeOf(e.mode);
+          const canEdit = C.type === 'personal' || C.type === 'legacy' ? e.by === currentUser().id : C.editable;
           return `<div class="calev"><span class="calev__poster" style="background:${filmThumb(f)}"></span>` +
             `<div class="calev__body"><div class="calev__title">${escapeHtml(f.title)}</div>` +
             `<div class="calev__meta">${[e.time ? icon('schedule') + ' ' + escapeHtml(e.time) : '', m ? icon(m.icon) + ' ' + m.label : '', e.place ? icon('place') + ' ' + escapeHtml(e.place) : ''].filter(Boolean).join(' · ') || 'sin horario ni lugar'}</div>` +
             eventAttendanceHTML(C, e) +
-            `</div>${C.editable ? `<button class="icon-btn calev__edit" data-edit="${e.id}" aria-label="Editar">${icon('edit')}</button>` : ''}</div>`;
+            `</div>${canEdit ? `<button class="icon-btn calev__edit" data-edit="${e.id}" data-edit-cal="${escapeHtml(e.__calId || C.id)}" aria-label="Editar">${icon('edit')}</button>` : ''}</div>`;
         }).join('') : '') +
         (wat.length ? `<div class="calday__sec">${icon('event_available')} Vieron ese día</div>` + wat.map((w) => `<div class="calev"><span class="calev__poster" style="background:${filmThumb(w.film)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(w.film.title)}</div><div class="calev__meta">${avatarHTML(users[w.uid] || { id: w.uid, color: '#666', initial: '?' }, 'avatar calev__av')} ${escapeHtml((users[w.uid] || {}).name || w.uid)}</div></div></div>`).join('') : '') +
         (!evs.length && !wat.length ? `<p class="addfilm__hint">Nada este día${C.editable ? '. Agregá una función 👇' : '.'}</p>` : '') +
@@ -1723,10 +1881,12 @@
       const add = el.querySelector('[data-cdadd]');
       if (add) add.addEventListener('click', () => { closeCalDay(); openCalEventModal(C, iso, null, reopen, reopen); });
       el.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
-        const ev = (calEventsMap(C.id)[iso] || []).find((x) => x.id === b.dataset.edit);
+        const sourceId = b.dataset.editCal || C.id;
+        const ev = (calEventsMap(sourceId)[iso] || []).find((x) => x.id === b.dataset.edit);
         if (!ev) return;
+        const sourceCalendar = allEventCalendars().find((calendar) => calendar.id === sourceId) || C;
         closeCalDay();
-        openCalEventModal(C, iso, ev, reopen, reopen);
+        openCalEventModal(sourceCalendar, iso, ev, reopen, reopen);
       }));
       el.querySelectorAll('[data-answer-invite]').forEach((b) => b.addEventListener('click', () => {
         const eventId = b.dataset.answerInvite;
@@ -1755,7 +1915,7 @@
     let searchTimer = null;
     let searchToken = 0;
     const eventCreatorId = (ev && ev.by) || currentUser().id;
-    const inviteCandidates = C.members.map((uid) => users[uid]).filter((u) => u && u.id !== eventCreatorId);
+    const inviteCandidates = Object.values(users).filter((u) => u && !u.guest && u.id !== eventCreatorId);
     const invitees = new Set(editing ? eventInvitees(C, ev) : []);
 
     const localResults = (q) => movies.slice()
@@ -1831,7 +1991,7 @@
         CAL_MODES.map((m) => `<button class="wchip${mode === m.v ? ' is-on' : ''}" data-mode="${m.v}" title="${m.note || m.label}">${icon(m.icon)} ${m.label}</button>`).join('') + `</div>` +
         `<div class="tl-members cev-invitees"><div class="tl-members__lbl">¿A quién invitás? <span id="cev-invite-count">${invitees.size ? `${invitees.size} ${invitees.size === 1 ? 'persona elegida' : 'personas elegidas'}` : 'nadie por ahora'}</span></div>` +
         (inviteCandidates.length ? inviteCandidates.map((person) => `<button type="button" class="tl-member${invitees.has(person.id) ? ' is-on' : ''}" data-invite-user="${escapeHtml(person.id)}">${avatarHTML(person, 'avatar tl-member__av')} ${escapeHtml(person.name)}</button>`).join('') :
-          `<p class="addfilm__hint">No hay otros usuarios en este calendario.</p>`) + `</div>` +
+          `<p class="addfilm__hint">No hay otros usuarios disponibles.</p>`) + `</div>` +
         `<label class="tl-field"><span>Nota <small>(opcional — sala, link, dirección…)</small></span><input type="text" id="cev-place" maxlength="60" placeholder="Ej: Showcase Norte, sala 4" value="${ev && ev.place ? escapeHtml(ev.place) : ''}"></label>` +
         `<div class="confirm__actions">` + (editing ? `<button class="btn btn--soft" id="cev-del">${icon('delete')} Borrar</button>` : '') +
         `<button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cev-ok">${icon('check')} ${editing ? 'Guardar' : 'Agregar'}</button></div></div>`;
@@ -1915,25 +2075,55 @@
     draw();
     el.hidden = false;
   }
-  function openCalendarModal(app, C) {
+  function openCalendarModal(app, C, options = {}) {
     const editing = !!C; const me = currentUser();
-    const others = Object.values(users).filter((x) => x.id !== me.id);
-    const members = new Set(editing && Array.isArray(C.members) ? C.members.filter((id) => id !== me.id) : others.map((o) => o.id));
+    const others = Object.values(users).filter((x) => x.id !== me.id && x.id !== 'guest' && !x.guest);
+    const accepted = new Set(editing && Array.isArray(C.members) ? C.members.filter((id) => id !== me.id) : []);
+    const selected = new Set([...accepted, ...(editing && Array.isArray(C.pendingMembers) ? C.pendingMembers : [])]);
     const el = $('#confirm');
     el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
       `<div class="confirm__title">${editing ? 'Editar calendario' : 'Nuevo calendario'}</div>` +
-      `<label class="tl-field"><span>Nombre</span><input id="cal-name" type="text" maxlength="40" placeholder="Ej: Ciclo de terror…" value="${editing ? escapeHtml(C.name) : ''}"></label>` +
-      `<div class="tl-members"><div class="tl-members__lbl">¿Con quién lo compartís? (lo editan vos + ellos; el resto solo lo ve)</div>${others.map((o) => `<button class="tl-member${members.has(o.id) ? ' is-on' : ''}" data-member="${o.id}">${avatarHTML(o, 'avatar tl-member__av')} ${o.name}</button>`).join('')}</div>` +
+      `<label class="tl-field"><span>Nombre</span><input id="cal-name" type="text" maxlength="40" placeholder="Ej: Ciclo de terror…" value="${escapeHtml(editing ? C.name : (options.name || ''))}"></label>` +
+      `<div class="tl-members"><div class="tl-members__lbl">¿Con quién querés compartirlo? <span>Les llega una invitación y recién se suma si la aceptan.</span></div>${others.map((o) => {
+        const state = accepted.has(o.id) ? ' · ya aceptó' : (selected.has(o.id) ? ' · invitación pendiente' : '');
+        return `<button class="tl-member${selected.has(o.id) ? ' is-on' : ''}" data-member="${o.id}">${avatarHTML(o, 'avatar tl-member__av')} ${escapeHtml(o.name)}${state ? `<small>${state}</small>` : ''}</button>`;
+      }).join('')}</div>` +
       `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cal-ok">${icon('check')} ${editing ? 'Guardar' : 'Crear'}</button></div></div>`;
     el.hidden = false;
     const nameInput = el.querySelector('#cal-name'); setTimeout(() => nameInput.focus(), 40);
-    el.querySelectorAll('[data-member]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.member; if (members.has(id)) members.delete(id); else members.add(id); b.classList.toggle('is-on', members.has(id)); }));
+    el.querySelectorAll('[data-member]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.dataset.member;
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      b.classList.toggle('is-on', selected.has(id));
+    }));
     el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
     el.querySelector('#cal-ok').addEventListener('click', () => {
       const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; }
-      if (editing) { store.saveCalendars(store.getCalendars().map((c) => (c.id === C.id ? { ...c, name, members: [me.id, ...members] } : c))); }
-      else { const id = 'cal-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); store.saveCalendars([...store.getCalendars(), { id, name, owner: me.id, members: [me.id, ...members] }]); calBoardId = id; }
+      let saved;
+      let newlyInvited = [];
+      if (editing) {
+        const removed = [...new Set([...(C.members || []), ...(C.pendingMembers || [])])]
+          .filter((uid) => uid !== C.owner && !selected.has(uid));
+        newlyInvited = [...selected].filter((uid) => !accepted.has(uid) && !(C.pendingMembers || []).includes(uid));
+        saved = {
+          ...C, name,
+          members: [C.owner, ...[...accepted].filter((uid) => selected.has(uid))],
+          pendingMembers: [...selected].filter((uid) => !accepted.has(uid)),
+        };
+        delete saved.editable;
+        delete saved.manageable;
+        store.saveCalendars(store.getCalendars().map((c) => (c.id === C.id ? saved : c)));
+        K.activity.removeMany(store, removed.map((uid) => `calendar-share:${C.id}:${uid}`));
+      } else {
+        const id = 'cal-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        newlyInvited = [...selected];
+        saved = { id, name, owner: me.id, members: [me.id], pendingMembers: newlyInvited };
+        store.saveCalendars([...store.getCalendars(), saved]);
+        calBoardId = id;
+      }
+      if (newlyInvited.length) sendCalendarShareActivities(saved, newlyInvited);
       el.hidden = true; renderCalendario(app);
+      if (newlyInvited.length) showCalendarToast('Invitación para compartir enviada', `${newlyInvited.length === 1 ? 'La otra persona decide' : 'Las otras personas deciden'} si se suma al calendario.`, 'success');
     });
   }
   function deleteCalendar(app, C) {
@@ -1948,6 +2138,8 @@
         eventInvitees(C, ev).forEach((uid) => activityIds.push(`calendar-invite:${C.id}:${ev.id}:${uid}`));
         Object.keys(ev.accepted || {}).forEach((uid) => activityIds.push(`calendar-accept:${C.id}:${ev.id}:${uid}`));
       });
+      (C.pendingMembers || []).forEach((uid) => activityIds.push(`calendar-share:${C.id}:${uid}`));
+      (C.members || []).filter((uid) => uid !== C.owner).forEach((uid) => activityIds.push(`calendar-share-accept:${C.id}:${uid}`));
       K.activity.removeMany(store, activityIds);
       store.saveCalendars(store.getCalendars().filter((c) => c.id !== C.id));
       store.clearCalEvents(C.id);
@@ -2675,8 +2867,7 @@
   function profileCalendarDays(uid, byDay) {
     const merged = {};
     Object.entries(byDay).forEach(([iso, items]) => (merged[iso] = items.slice()));
-    currentCalendars().forEach((C) => {
-      if (!C.members.includes(uid)) return;
+    allEventCalendars().forEach((C) => {
       const dates = calEventsMap(C.id);
       Object.entries(dates).forEach(([iso, events]) => events.forEach((ev) => {
         const involved = ev.by === uid || eventInvitees(C, ev).includes(uid) || !!(ev.accepted || {})[uid];
@@ -2727,8 +2918,21 @@
     const max = top[0][1];
     return `<div class="prows">${top.map(([g, n]) => `<div class="prow"><span class="prow__l">${escapeHtml(g)}</span><span class="prow__t"><span class="prow__f" style="width:${Math.round((n / max) * 100)}%;--c:${color}"></span></span><b>${n}</b></div>`).join('')}</div>`;
   }
-  function profileDetail(iconName, title, insight, body, explanation, open = false) {
-    return `<details class="pcard pdetail"${open ? ' open' : ''}>` +
+  const PROFILE_DETAIL_STATE_KEY = 'pwm.profile.detailState';
+  let profileDetailState = {};
+  try { profileDetailState = JSON.parse(localStorage.getItem(PROFILE_DETAIL_STATE_KEY) || '{}') || {}; } catch {}
+  function profileDetailIsOpen(profileId, key) {
+    const viewer = (currentUser() || {}).id || 'anon';
+    const saved = profileDetailState[`${viewer}:${profileId}:${key}`];
+    return saved !== false;
+  }
+  function rememberProfileDetail(profileId, key, open) {
+    const viewer = (currentUser() || {}).id || 'anon';
+    profileDetailState[`${viewer}:${profileId}:${key}`] = !!open;
+    try { localStorage.setItem(PROFILE_DETAIL_STATE_KEY, JSON.stringify(profileDetailState)); } catch {}
+  }
+  function profileDetail(profileId, key, iconName, title, insight, body, explanation) {
+    return `<details class="pcard pdetail" data-profile-detail="${escapeHtml(key)}"${profileDetailIsOpen(profileId, key) ? ' open' : ''}>` +
       `<summary class="pdetail__summary"><span class="pdetail__title">${icon(iconName)}<span><b>${title}</b><small>${escapeHtml(insight)}</small></span></span><span class="pdetail__toggle">${icon('expand_more')}</span></summary>` +
       `<div class="pdetail__body">${body}<p class="pdetail__explain">${explanation}</p></div></details>`;
   }
@@ -2746,6 +2950,56 @@
     };
     button.addEventListener('click', () => K.motion.run(() => { expanded = !expanded; draw(); }, { kind: 'shared', target: host }));
     draw();
+  }
+
+  function profilePosterPreview(wrapper, host, topButton, bottomButton, items, renderItem, emptyText) {
+    let expanded = false;
+    let hasThirdRow = false;
+    host.innerHTML = '';
+    if (!items.length) host.innerHTML = `<p class="addfilm__hint">${emptyText}</p>`;
+    items.forEach((item, index) => host.appendChild(renderItem(item, index)));
+    const cards = () => [...host.children].filter((node) => !node.classList.contains('addfilm__hint'));
+    const syncButtons = () => {
+      topButton.hidden = !hasThirdRow;
+      bottomButton.hidden = expanded || !hasThirdRow;
+      topButton.innerHTML = expanded
+        ? `${icon('unfold_less')} Ver menos`
+        : `${icon('unfold_more')} Ver todas <span>${items.length}</span>`;
+      topButton.setAttribute('aria-expanded', String(expanded));
+      bottomButton.setAttribute('aria-expanded', String(expanded));
+    };
+    const measure = () => {
+      if (!wrapper.isConnected || expanded) return;
+      const nodes = cards();
+      const tops = [...new Set(nodes.map((node) => node.offsetTop))].sort((a, b) => a - b);
+      hasThirdRow = tops.length > 2;
+      if (hasThirdRow) {
+        const thirdTop = tops[2];
+        const third = nodes.find((node) => node.offsetTop === thirdTop);
+        wrapper.style.setProperty('--profile-preview-height', `${Math.round(thirdTop + (third ? third.offsetHeight * .52 : 120))}px`);
+        nodes.forEach((node) => { node.inert = node.offsetTop >= thirdTop; });
+      } else {
+        wrapper.style.removeProperty('--profile-preview-height');
+        nodes.forEach((node) => { node.inert = false; });
+      }
+      wrapper.classList.toggle('has-preview', hasThirdRow);
+      syncButtons();
+    };
+    const setExpanded = (next) => {
+      expanded = next;
+      wrapper.classList.toggle('is-expanded', expanded);
+      cards().forEach((node) => { node.inert = false; });
+      if (!expanded) requestAnimationFrame(measure);
+      syncButtons();
+    };
+    topButton.addEventListener('click', () => setExpanded(!expanded));
+    bottomButton.addEventListener('click', () => setExpanded(true));
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      if (!wrapper.isConnected) return observer.disconnect();
+      measure();
+    }) : null;
+    if (observer) observer.observe(host);
+    requestAnimationFrame(measure);
   }
 
   function openRatingBreakdown(uid, rating, items) {
@@ -2819,26 +3073,32 @@
 
       `<div class="profile-layout"><div class="profile-main">` +
       `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" hidden></button></div><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><button class="profile-more" id="p-best-more" hidden></button></div><div class="profile-poster-grid" id="p-best"></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><button class="profile-more" id="p-best-more" hidden></button></div>` +
+      `<div class="profile-poster-preview" id="p-best-preview"><div class="profile-poster-grid" id="p-best"></div><span class="profile-poster-preview__veil" aria-hidden="true"></span>` +
+      `<button class="profile-poster-preview__more" id="p-best-peek" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
       `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Watchlist de ${escapeHtml(u.name)}</h3><button class="profile-more" id="p-watchlist-more" hidden></button></div><div class="profile-poster-grid" id="p-watchlist"></div></section>` +
       `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
       `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(profileCalendarDays(id, s.byDay), u.color)}` +
       `<p class="pdetail__explain">Los días marcados reúnen funciones agendadas y títulos vistos.</p>` +
       `<button class="linklike profile-calendar__open" id="p-calendar-open">${icon('open_in_new')} Abrir calendario completo</button></div>` +
-      profileDetail('bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos títulos registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
-      profileDetail('star', 'Cómo puntuás', s.avg ? `${s.avg.toFixed(2)} de promedio` : 'Sin promedio', distChart(s.dist, u.color), 'Agrupa tus puntuaciones de media en media estrella para mostrar si sos más exigente o generoso al puntuar.') +
-      profileDetail('category', 'Tus géneros', topGenre, genreChart(s.genres, u.color), 'Cuenta los géneros presentes en los títulos que puntuaste. Una película puede sumar en más de un género.') +
-      profileDetail('workspace_premium', 'Medallas', `${medalsDone} de ${MEDALS.length} logradas`, `<div class="pmedals">${medals}</div>`, 'Se desbloquean automáticamente con tu actividad. La barra muestra cuánto te falta para cada objetivo.') +
+      profileDetail(id, 'ratings', 'star', 'Cómo puntuás', s.avg ? `${s.avg.toFixed(2)} de promedio` : 'Sin promedio', distChart(s.dist, u.color), 'Agrupa tus puntuaciones de media en media estrella para mostrar si sos más exigente o generoso al puntuar.') +
+      profileDetail(id, 'months', 'bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos títulos registraste en ese mes. Sirve para ver tus épocas más activas.') +
+      profileDetail(id, 'genres', 'category', 'Tus géneros', topGenre, genreChart(s.genres, u.color), 'Cuenta los géneros presentes en los títulos que puntuaste. Una película puede sumar en más de un género.') +
+      profileDetail(id, 'medals', 'workspace_premium', 'Medallas', `${medalsDone} de ${MEDALS.length} logradas`, `<div class="pmedals">${medals}</div>`, 'Se desbloquean automáticamente con tu actividad. La barra muestra cuánto te falta para cada objetivo.') +
       `</aside></div>`;
     app.appendChild(sec);
     app.appendChild(buildFooter());
     K.profileBackground.apply(sec, sec.querySelector('.phero'), acc, u.color);
     const openProfileCalendar = (iso = '') => {
-      const cals = currentCalendars().filter((C) => C.members.includes(id));
+      if (id !== me.id) {
+        K.toast(`El calendario completo de ${u.name} es personal.`);
+        return;
+      }
+      const cals = currentCalendars();
       let target = cals.find((C) => {
         if (!iso) return false;
-        return (calEventsMap(C.id)[iso] || []).some((ev) => ev.by === id || eventInvitees(C, ev).includes(id) || !!(ev.accepted || {})[id]);
-      }) || cals.find((C) => C.id === 'cal-main') || cals[0] || currentCalendars()[0];
+        return (calendarEventsFor(C)[iso] || []).some((ev) => ev.by === id || !!(ev.accepted || {})[id]);
+      }) || cals.find((C) => C.type === 'personal') || cals[0] || currentCalendars()[0];
       calBoardId = target.id;
       if (iso) {
         const date = new Date(`${iso}T00:00:00`);
@@ -2853,6 +3113,9 @@
     sec.querySelector('#p-calendar-open').addEventListener('click', () => openProfileCalendar());
     sec.querySelectorAll('[data-profile-cal-date]').forEach((button) => button.addEventListener('click', () => openProfileCalendar(button.dataset.profileCalDate)));
     sec.querySelectorAll('[data-profile-rating]').forEach((button) => button.addEventListener('click', () => openRatingBreakdown(id, Number(button.dataset.profileRating), s.ratedList)));
+    sec.querySelectorAll('[data-profile-detail]').forEach((detail) => detail.addEventListener('toggle', () => {
+      rememberProfileDetail(id, detail.dataset.profileDetail, detail.open);
+    }));
 
     const revs = s.reviewList
       .map((f) => ({ f, t: Date.parse(store.get(f.id, id).updatedAt || 0) || 0 }))
@@ -2872,7 +3135,7 @@
 
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
-    profileExpandable(bw, sec.querySelector('#p-best-more'), best, 12, (f) =>
+    profilePosterPreview(sec.querySelector('#p-best-preview'), bw, sec.querySelector('#p-best-more'), sec.querySelector('#p-best-peek'), best, (f) =>
       K.motion.tag(posterCard(f), `pwm-profile-best-${id}-${f.id}`), 'Puntuá algo y aparece acá.');
 
     const watchlist = orderedWatchlist().filter((f) => ownersOf(f).includes(id));
@@ -3013,10 +3276,16 @@
     const reviewId = params.get('review');
     const reviewUser = params.get('user');
     const calendarId = params.get('calendar');
+    const calendarShareId = params.get('calendar-share');
     const date = params.get('date');
     if (reviewId) {
       const f = byId(reviewId);
       if (f) openSheet(f, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
+    } else if (calendarShareId) {
+      const invite = K.activity.forUser(store, currentUser().id)
+        .find((item) => item.type === 'calendar_share_invite' && item.calId === calendarShareId);
+      if (invite) openCalendarShareInvite(invite);
+      else K.toast('Esa invitación para compartir ya no está disponible.', 'bad');
     } else if (calendarId) {
       calBoardId = calendarId;
       if (date) {
@@ -3029,7 +3298,7 @@
         openCalDay(C, date);
       }, 60);
     }
-    if (reviewId || calendarId) history.replaceState({}, '', location.pathname);
+    if (reviewId || calendarId || calendarShareId) history.replaceState({}, '', location.pathname);
   }
 
   function startApp() {

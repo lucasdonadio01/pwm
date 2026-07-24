@@ -138,3 +138,13 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Las tarjetas de estadísticas recuperaron jerarquía, espaciado, foco de teclado y animación al desplegarse.
 - En mobile, el perfil vuelve a una sola columna, las estadísticas se agrupan de a dos y los libros no generan desborde horizontal.
 - Estado: **✅ implementado y verificado localmente en PC y mobile; pendiente de aprobación de Lucas para publicar**.
+
+## 19. ✅ [PWM · Perfil/Calendario] Estadísticas persistentes + rankeadas + calendarios personales
+- Perfil: **Cómo puntuás** aparece antes de **Últimos 12 meses**. Cómo puntuás, Últimos 12 meses, Tus géneros y Medallas nacen desplegados.
+- El estado abierto/cerrado se guarda localmente por usuario y perfil visitado, así que los refrescos de Realtime o el polling ya no vuelven a cerrar los paneles.
+- **Mejor rankeadas** muestra dos filas completas y media tercera fila desenfocada, con un botón **Ver más** sobre el recorte; el botón superior **Ver todas / Ver menos** se mantiene.
+- Calendario: el mes queda centrado entre las flechas en PC y mobile.
+- Cada usuario recibe un **Mi calendario** personal. Las funciones nuevas se guardan ahí y las funciones ajenas aparecen solamente después de aceptar su invitación.
+- Los calendarios compartidos usan invitación pendiente: la otra persona no obtiene acceso hasta aceptar desde Notificaciones. PRB también reconoce estas notificaciones y abre PWM.
+- Los eventos existentes de `cal-main` no se mueven ni se borran; quedan accesibles para sus participantes como **Calendario anterior**.
+- Estado: **✅ implementado y verificado localmente en PC y mobile, sin escribir datos de prueba en Supabase; pendiente de aprobación de Lucas para publicar**.
