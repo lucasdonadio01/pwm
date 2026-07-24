@@ -224,6 +224,29 @@
   let profileUserId = null;
   let profileNavigationWired = false;
 
+  // Hash routing: reflect the current section in location.hash so F5/reload keeps you where you
+  // were and the browser's Back/Forward move between sections. (See correcciones.md #22.)
+  const ROUTES = ['home', 'selectos', 'leyendo', 'leidos', 'tier', 'perfil', 'config'];
+  let hashRoutingWired = false;
+  function routeFromHash() {
+    const r = (location.hash || '').replace(/^#/, '');
+    return ROUTES.includes(r) ? r : null;
+  }
+  function syncHash(r) {
+    if (routeFromHash() === r) return; // already reflected (incl. our own change) — no extra history entry
+    location.hash = r; // pushes a history entry so Back/Forward step through sections
+  }
+  function wireHashRouting() {
+    if (hashRoutingWired) return;
+    hashRoutingWired = true;
+    window.addEventListener('hashchange', () => {
+      if (!gate.hidden) return;        // no session yet — ignore
+      const r = routeFromHash();
+      if (!r || r === route) return;   // invalid, or our own programmatic change
+      setRoute(r);
+    });
+  }
+
   function activityCopy(item) {
     const actor = users[item.actor] || { name: item.actorName || 'Alguien' };
     if (item.type === 'review_like') return {
@@ -387,6 +410,7 @@
     K.motion.run(() => {
       route = r;
       profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
+      syncHash(r);
       document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
       window.scrollTo({ top: 0, behavior: 'auto' });
       renderRoute(); onScroll();
@@ -827,7 +851,13 @@
         renderLeyendo(document.getElementById('app'));
       }, { kind: 'shared', target: document.getElementById('app') });
     });
-    s.querySelector('#ly-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => { closeAddBook(); openSheet(b); }); });
+    s.querySelector('#ly-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => {
+      // Adding from "Leyendo" should actually put the book in Leyendo, not just in the library.
+      const u = currentUser();
+      const cur = store.getReading(b.id, u.id);
+      store.setReading(b.id, u.id, { status: 'reading', startedAt: cur.startedAt || todayISO() });
+      closeAddBook(); renderLeyendo(document.getElementById('app')); openSheet(b);
+    }, { allowExisting: true }); });
   }
   function readingCard(b) {
     const u = currentUser();
@@ -1141,7 +1171,7 @@
   function closePickSheet() { const el = document.getElementById('picksheet'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onPickKey); }
 
   /* ---------- add-book live search (Open Library) ---------- */
-  function openAddBook(onAdded) {
+  function openAddBook(onAdded, options = {}) {
     let el = document.getElementById('addbook'); if (!el) { el = document.createElement('div'); el.id = 'addbook'; el.className = 'addfilm'; document.body.appendChild(el); }
     el.innerHTML = `<div class="addfilm__scrim" data-aclose></div><div class="addfilm__panel"><div class="addfilm__head"><h3>Agregar libro</h3><button class="icon-btn" data-aclose aria-label="Cerrar">${icon('close')}</button></div><label class="search search--lg"><span class="material-symbols-rounded">search</span><input id="ab-input" type="search" placeholder="Buscar libro o autor…" autocomplete="off"></label><div class="addfilm__results" id="ab-results"><p class="addfilm__hint">Escribí un título para buscar.</p></div></div>`;
     el.hidden = false; document.body.style.overflow = 'hidden';
@@ -1156,11 +1186,16 @@
           if (!list.length) { results.innerHTML = `<p class="addfilm__hint">Sin resultados.</p>`; return; }
           results.innerHTML = '';
           list.forEach((it) => {
-            const already = books.some((b) => b.id === PRB.bookId(it.key));
-            const card = document.createElement('button'); card.className = 'af-res'; if (already) card.disabled = true;
-            card.innerHTML = `<div class="af-res__poster" style="background:${it.cover ? `#060c18 url(${it.cover}) center/cover` : 'var(--surface-2)'}"></div><div class="af-res__body"><div class="af-res__title">${escapeHtml(it.title)}</div><div class="af-res__meta">${escapeHtml(it.author || '')}${it.year ? ` · ${it.year}` : ''}</div></div><span class="af-res__add material-symbols-rounded">${already ? 'check_circle' : 'add_circle'}</span>`;
+            const existing = books.find((b) => b.id === PRB.bookId(it.key));
+            // allowExisting (used by "Leyendo") lets you pick a book already in the library
+            // so it can be marked as reading, instead of showing it as a done/disabled result.
+            const locked = existing && !options.allowExisting;
+            const card = document.createElement('button'); card.className = 'af-res'; if (locked) card.disabled = true;
+            card.innerHTML = `<div class="af-res__poster" style="background:${it.cover ? `#060c18 url(${it.cover}) center/cover` : 'var(--surface-2)'}"></div><div class="af-res__body"><div class="af-res__title">${escapeHtml(it.title)}</div><div class="af-res__meta">${escapeHtml(it.author || '')}${it.year ? ` · ${it.year}` : ''}</div></div><span class="af-res__add material-symbols-rounded">${locked ? 'check_circle' : 'add_circle'}</span>`;
             card.addEventListener('click', async () => {
-              if (card.disabled) return; card.disabled = true; card.querySelector('.af-res__add').textContent = 'hourglass_top';
+              if (card.disabled) return;
+              if (existing) { if (onAdded) onAdded(existing); return; } // already in library — just hand it back
+              card.disabled = true; card.querySelector('.af-res__add').textContent = 'hourglass_top';
               try { const book = await PRB.api.add(it); addExtraBook(book); card.querySelector('.af-res__add').textContent = 'check_circle'; if (onAdded) onAdded(book); }
               catch { card.disabled = false; card.querySelector('.af-res__add').textContent = 'error'; }
             });
@@ -1353,10 +1388,26 @@
       if (reviewLike) reviewLike.addEventListener('click', () => toggleReviewLike(b, reviewOwner, reviewLike));
     }
     sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
+    sheetCloseSeq++; sheet.classList.remove('sheet--closing'); // cancel any in-flight close animation
     sheet.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onSheetKey);
   }
   function onSheetKey(e) { if (e.key === 'Escape') closeSheet(); }
-  function closeSheet(refresh = true) { sheet.hidden = true; sheet.innerHTML = ''; document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKey); if (refresh) renderRoute(); }
+  let sheetCloseSeq = 0;
+  function closeSheet(refresh = true) {
+    document.removeEventListener('keydown', onSheetKey);
+    const seq = ++sheetCloseSeq;
+    const finish = () => {
+      if (seq !== sheetCloseSeq) return; // a reopen (or newer close) superseded this one
+      sheet.hidden = true; sheet.innerHTML = ''; sheet.classList.remove('sheet--closing');
+      document.body.style.overflow = '';
+      if (refresh) renderRoute();
+    };
+    const panel = sheet.querySelector('.sheet__panel');
+    if (sheet.hidden || K.motion.reduced() || !panel) return finish();
+    sheet.classList.add('sheet--closing'); // CSS animates panel + scrim out, then we hide
+    panel.addEventListener('animationend', finish, { once: true });
+    setTimeout(finish, 420); // fallback if animationend doesn't fire
+  }
   function mountStars(container, b, u, initial) {
     let value = typeof initial === 'number' ? initial : 0;
     container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="rate-num" style="margin-left:.7rem">${value ? value.toFixed(1) : '—'}</span>`;
@@ -1474,8 +1525,20 @@
     const max = top[0][1];
     return `<div class="prows">${top.map(([g, n]) => `<div class="prow"><span class="prow__l">${escapeHtml(g)}</span><span class="prow__t"><span class="prow__f" style="width:${Math.round((n / max) * 100)}%;--c:${color}"></span></span><b>${n}</b></div>`).join('')}</div>`;
   }
-  function profileDetail(iconName, title, insight, body, explanation, open = false) {
-    return `<details class="pcard pdetail"${open ? ' open' : ''}>` +
+  // Remembers which profile stat/chart cards the user opened, so a background remote
+  // re-render (store.onRemote / focus refresh) doesn't snap them shut. Persisted like PWM.
+  const PROFILE_DETAIL_STATE_KEY = 'prb.profileDetails';
+  let profileDetailState = {};
+  try { profileDetailState = JSON.parse(localStorage.getItem(PROFILE_DETAIL_STATE_KEY)) || {}; } catch { profileDetailState = {}; }
+  function profileDetailKey(profileId, title) { return `${(currentUser() || {}).id || 'anon'}:${profileId}:${title}`; }
+  function rememberProfileDetail(profileId, title, open) {
+    profileDetailState[profileDetailKey(profileId, title)] = !!open;
+    try { localStorage.setItem(PROFILE_DETAIL_STATE_KEY, JSON.stringify(profileDetailState)); } catch {}
+  }
+  function profileDetail(profileId, iconName, title, insight, body, explanation, open = false) {
+    const saved = profileDetailState[profileDetailKey(profileId, title)];
+    const isOpen = typeof saved === 'boolean' ? saved : open;
+    return `<details class="pcard pdetail" data-pdetail="${escapeHtml(title)}"${isOpen ? ' open' : ''}>` +
       `<summary class="pdetail__summary"><span class="pdetail__title">${icon(iconName)}<span><b>${title}</b><small>${escapeHtml(insight)}</small></span></span><span class="pdetail__toggle">${icon('expand_more')}</span></summary>` +
       `<div class="pdetail__body">${body}<p class="pdetail__explain">${explanation}</p></div></details>`;
   }
@@ -1551,12 +1614,13 @@
       `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><button class="profile-more" id="p-best-more" hidden></button></div><div class="profile-books" id="p-best"></div></section>` +
       `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
       `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}<p class="pdetail__explain">Los días marcados muestran cuándo terminaste o puntuaste una lectura durante el mes.</p></div>` +
-      profileDetail('bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos libros registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
-      profileDetail('star', 'Cómo puntuás', s.avg ? `${s.avg.toFixed(2)} de promedio` : 'Sin promedio', distChart(s.dist, u.color), 'Agrupa tus puntuaciones de media en media estrella para mostrar si sos más exigente o generoso al puntuar.') +
-      profileDetail('category', 'Tus géneros', topGenre, genreChart(s.genres, u.color), 'Cuenta los géneros presentes en los libros que leíste. Un libro puede sumar en más de un género.') +
-      profileDetail('workspace_premium', 'Medallas', `${medalsDone} de ${BOOK_MEDALS.length} logradas`, `<div class="pmedals">${medals}</div>`, 'Se desbloquean automáticamente con tu actividad. La barra muestra cuánto te falta para cada objetivo.') +
+      profileDetail(id, 'bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos libros registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
+      profileDetail(id, 'star', 'Cómo puntuás', s.avg ? `${s.avg.toFixed(2)} de promedio` : 'Sin promedio', distChart(s.dist, u.color), 'Agrupa tus puntuaciones de media en media estrella para mostrar si sos más exigente o generoso al puntuar.') +
+      profileDetail(id, 'category', 'Tus géneros', topGenre, genreChart(s.genres, u.color), 'Cuenta los géneros presentes en los libros que leíste. Un libro puede sumar en más de un género.') +
+      profileDetail(id, 'workspace_premium', 'Medallas', `${medalsDone} de ${BOOK_MEDALS.length} logradas`, `<div class="pmedals">${medals}</div>`, 'Se desbloquean automáticamente con tu actividad. La barra muestra cuánto te falta para cada objetivo.') +
       `</aside></div>`;
     app.appendChild(sec); app.appendChild(buildFooter());
+    sec.querySelectorAll('[data-pdetail]').forEach((d) => d.addEventListener('toggle', () => rememberProfileDetail(id, d.dataset.pdetail, d.open)));
     K.profileBackground.apply(sec, sec.querySelector('.phero'), acc, u.color);
     sec.querySelectorAll('[data-profile-rating]').forEach((button) => button.addEventListener('click', () => openRatingBreakdown(id, Number(button.dataset.profileRating), s.ratedList)));
     const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t);
@@ -1668,9 +1732,9 @@
     if (!reviewId) return;
     const b = byId(reviewId);
     if (b) openSheet(b, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
-    history.replaceState({}, '', location.pathname);
+    history.replaceState({}, '', location.pathname + location.hash);
   }
-  function startApp() { applyAccent(); wireProfileNavigation(); renderHeader(); setRoute('home'); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
+  function startApp() { applyAccent(); wireProfileNavigation(); wireHashRouting(); renderHeader(); setRoute(routeFromHash() || 'home'); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
   (async () => {
     await store.init();
     mergeExtras();

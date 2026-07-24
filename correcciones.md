@@ -160,3 +160,42 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Las portadas permanecen centradas aunque el título o los metadatos ocupen más ancho que la imagen.
 - La corrección aplica a todos los tamaños sin cambiar las dimensiones ni el recorte de la portada.
 - Estado: **✅ aprobado por Lucas y publicado en `main`**.
+
+## 22. 🚧 [Ambos · Ruteo] La sección queda en la URL (F5 / Atrás-Adelante)
+- `setRoute()` refleja la sección en `location.hash` (`#watchlist`, `#tier`, `#leyendo`, etc.).
+- Al recargar (F5) la app arranca en esa sección si hay sesión iniciada; **Atrás/Adelante** del navegador navegan entre secciones.
+- `openDeepLink()` ya no borra el `#` de sección al limpiar los `?query=`.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 23. 🚧 [PWM · Home] Chips "quién puntuó" con estrella + teaser desenfocado
+- Cada reseña del home muestra un chip por usuario con su fotito, la nota con **⭐** al lado y una marca si dejó reseña escrita.
+- Debajo, un teaser con las próximas reseñas **desenfocadas** y el botón **Ver N reseñas más** flotando encima; al tocarlo se despliegan todas.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 24. 🚧 [PWM · Watchlist] Numeración de lista filtrada empieza en 1
+- Al filtrar por un usuario (o buscar), la lista se numera 1..n en vez de mostrar la posición global compartida (Luke empezaba en 9).
+- Con filtro activo el número queda de solo lectura (el reordenamiento sigue deshabilitado, como ya era).
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 25. 🚧 [PRB · Reseñas] "Me gusta esta reseña" estilado y rojo
+- El botón de me gusta de reseña, que estaba sin estilo, ahora es una píldora; al dar like queda **rojo** (los corazones de PRB usan rojo, no el azul del acento).
+- Tocar la reseña de otra persona sigue mostrando **solo su reseña** (ya funcionaba).
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 26. 🚧 [PRB · Perfil] Las estadísticas ya no se cierran solas
+- El estado abierto/cerrado de los gráficos/stats se guarda por usuario y perfil (localStorage), así que un refresco remoto (Realtime/polling) no los vuelve a cerrar. Paridad con PWM (ítem 19).
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 27. 🚧 [PWM · Home] El desenfoque del teaser se tinta con el fondo de perfil
+- El degradado del teaser se funde hacia un tono oscuro similar al color de fondo de perfil del usuario activo; si usa un GIF/imagen de fondo, se funde a oscuro genérico.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 28. 🚧 [Ambos · Animación] Transiciones más suaves
+- Los cambios de sección animan un poco más largo y suave (leve blur + desplazamiento).
+- Al **cerrar overlays** (la ficha/sheet) el panel y el fondo se animan hacia afuera antes de ocultarse, en vez de desaparecer de golpe. Respeta `prefers-reduced-motion`.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 29. 🚧 [PRB · Leyendo] "Agregar libro" lo pone realmente en Leyendo
+- Agregar un libro desde **Leyendo** ahora lo marca como *leyendo* para el usuario activo y aparece al instante (antes solo lo sumaba a la biblioteca sin marcarlo, así que no se veía pero el re-agregado decía "ya está").
+- Si el libro ya está en la biblioteca, desde Leyendo se puede elegir igual para ponerlo en curso.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

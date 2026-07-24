@@ -259,6 +259,29 @@
   let profileUserId = null;
   let profileNavigationWired = false;
 
+  // Hash routing: reflect the current section in location.hash so F5/reload keeps you where you
+  // were and the browser's Back/Forward move between sections. (See correcciones.md #22.)
+  const ROUTES = ['home', 'watchlist', 'tier', 'movies', 'series', 'calendario', 'perfil', 'config'];
+  let hashRoutingWired = false;
+  function routeFromHash() {
+    const r = (location.hash || '').replace(/^#/, '');
+    return ROUTES.includes(r) ? r : null;
+  }
+  function syncHash(r) {
+    if (routeFromHash() === r) return; // already reflected (incl. our own change) — no extra history entry
+    location.hash = r; // pushes a history entry so Back/Forward step through sections
+  }
+  function wireHashRouting() {
+    if (hashRoutingWired) return;
+    hashRoutingWired = true;
+    window.addEventListener('hashchange', () => {
+      if (!gate.hidden) return;        // no session yet — ignore
+      const r = routeFromHash();
+      if (!r || r === route) return;   // invalid, or our own programmatic change
+      setRoute(r);
+    });
+  }
+
   function activityCopy(item) {
     const actor = users[item.actor] || { name: item.actorName || 'Alguien' };
     if (item.type === 'review_like') return {
@@ -461,6 +484,7 @@
       if (r === 'watchlist' && route !== 'watchlist') wlOwner = defaultWatchlistOwner();
       route = r;
       profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
+      syncHash(r);
       updateNavActive();
       window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       renderRoute();
@@ -527,7 +551,6 @@
     app.appendChild(buildTrending());
     app.appendChild(buildRecommender());
     app.appendChild(buildSecretCTA());
-    app.appendChild(buildWatched());
     app.appendChild(buildLatestReviews());
     app.appendChild(buildFooter());
     startHero();
@@ -756,40 +779,6 @@
   }
 
   /* ---------- watched ---------- */
-  function buildWatched() {
-    const s = document.createElement('section');
-    s.className = 'section';
-    const watched = movies.filter((f) => Object.values(users).some((u) => {
-      const v = verdictOf(f.id, u.id); return v.rating != null || v.review || v.liked;
-    }));
-    s.innerHTML =
-      `<div class="section__head"><div>` +
-      `<h3 class="section__title"><span class="accentbar">/</span> Ya vimos</h3>` +
-      `<p class="section__sub">Lo que vimos y puntuamos — de la app y de Letterboxd</p>` +
-      `</div></div>`;
-    if (!watched.length) {
-      const e = document.createElement('div');
-      e.className = 'empty';
-      e.innerHTML = `${icon('reviews')}<p>Todavía no puntuaron nada.<br>Abrí una peli y tirale estrellas — va a aparecer acá.</p>`;
-      s.appendChild(e);
-    } else {
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-      grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))';
-      watched
-        .sort((a, b) => latestTs(b.id) - latestTs(a.id))
-        .forEach((f) => grid.appendChild(watchedCard(f)));
-      s.appendChild(grid);
-    }
-    return s;
-  }
-  function latestTs(id) {
-    return Object.values(users).reduce((mx, u) => {
-      const t = store.get(id, u.id).updatedAt;
-      return t ? Math.max(mx, Date.parse(t)) : mx;
-    }, 0);
-  }
-
   function latestReviews() {
     const out = [];
     Object.values(users).forEach((u) => movies.forEach((f) => {
@@ -803,82 +792,86 @@
     return out.sort((a, b) => b.timestamp - a.timestamp);
   }
 
+  /* One card per FILM (not per review): if two people reviewed it, both verdicts show
+   * together in reduced form. Tapping opens the sheet in review mode, where they're readable. */
+  function latestReviewFilms() {
+    const byFilm = new Map();
+    latestReviews().forEach((r) => {
+      const cur = byFilm.get(r.f.id);
+      if (!cur) byFilm.set(r.f.id, { f: r.f, top: r, timestamp: r.timestamp });
+      else if (r.timestamp > cur.timestamp) { cur.top = r; cur.timestamp = r.timestamp; }
+    });
+    return [...byFilm.values()].sort((a, b) => b.timestamp - a.timestamp);
+  }
+  // Compact "who said what" strip: avatar + score (+ a mark when there's a written review).
+  function reviewPeopleHTML(f) {
+    return Object.values(users).map((u) => {
+      const e = verdictOf(f.id, u.id);
+      const rated = typeof e.rating === 'number';
+      const hasReview = !!(e.review || '').trim();
+      if (!rated && !hasReview) return '';
+      return `<span class="hrperson" title="${escapeHtml(u.name)}${rated ? ` · ${e.rating.toFixed(1)}` : ''}${hasReview ? ' · con reseña' : ''}">` +
+        avatarHTML(u, 'avatar hrperson__av') +
+        (rated ? `<b>${icon('star')}${e.rating.toFixed(1)}</b>` : `<b class="hrperson__none">—</b>`) +
+        (hasReview ? `<span class="hrperson__ic">${icon('rate_review')}</span>` : '') +
+        `</span>`;
+    }).join('');
+  }
+  // Card markup shared by the real reviews and the blurred "peek" teaser below the fold.
+  function reviewCardInnerHTML(f, top) {
+    return `<button class="home-review__poster" data-open-review aria-label="Ver las reseñas de ${escapeHtml(f.title)}" style="background:${posterArt(f)}"></button>` +
+      `<div class="home-review__body">` +
+      `<div class="home-review__people">${reviewPeopleHTML(f)}</div>` +
+      `<button class="home-review__copy" data-open-review><b>${escapeHtml(f.title)}</b>` +
+      `<small class="home-review__when">${top.watchedAt ? fmtDay(top.watchedAt) : 'Sin fecha cargada'}</small>` +
+      `<q>${escapeHtml(top.v.review)}</q></button></div>`;
+  }
   function buildLatestReviews() {
     const section = document.createElement('section');
     section.className = 'section home-reviews';
     section.innerHTML =
       `<div class="section__head"><div><h3 class="section__title"><span class="accentbar">/</span> Últimas reseñas</h3>` +
-      `<p class="section__sub">Lo último que estuvieron viendo y comentando.</p></div></div>` +
+      `<p class="section__sub">Lo último que estuvieron viendo y comentando · tocá una para leer las reseñas.</p></div></div>` +
       `<div class="home-reviews__grid"></div><div class="home-reviews__more"></div>`;
-    const reviews = latestReviews();
+    const films = latestReviewFilms();
     const grid = section.querySelector('.home-reviews__grid');
     const more = section.querySelector('.home-reviews__more');
     let visible = 4;
     const draw = () => {
       grid.innerHTML = '';
-      if (!reviews.length) {
+      more.innerHTML = '';
+      if (!films.length) {
         grid.innerHTML = `<div class="empty home-reviews__empty">${icon('rate_review')}<p>Todavía no hay reseñas para mostrar.</p></div>`;
-        more.innerHTML = '';
         return;
       }
-      reviews.slice(0, visible).forEach(({ f, u, v, watchedAt }) => {
+      films.slice(0, visible).forEach(({ f, top }) => {
         const card = document.createElement('article');
         card.className = 'home-review';
-        card.innerHTML =
-          `<button class="home-review__poster" data-open-review aria-label="Abrir reseña de ${escapeHtml(f.title)}" style="background:${posterArt(f)}"></button>` +
-          `<div class="home-review__body"><div class="home-review__by">${avatarHTML(u, 'avatar home-review__avatar')}` +
-          `<span>${profileLink(u.id, u.name)}<small>${watchedAt ? fmtDay(watchedAt) : 'Sin fecha cargada'}</small></span></div>` +
-          `<button class="home-review__copy" data-open-review><b>${escapeHtml(f.title)}</b>` +
-          `<span class="home-review__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<strong>${v.rating.toFixed(1)}</strong>` : ''}</span>` +
-          `<q>${escapeHtml(v.review)}</q></button></div>`;
-        card.querySelectorAll('[data-open-review]').forEach((button) => button.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id })));
-        grid.appendChild(K.motion.tag(card, `pwm-home-review-${u.id}-${f.id}`));
+        card.innerHTML = reviewCardInnerHTML(f, top);
+        card.querySelectorAll('[data-open-review]').forEach((button) => button.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: top.u.id })));
+        grid.appendChild(K.motion.tag(card, `pwm-home-review-${f.id}`));
       });
-      more.innerHTML = visible < reviews.length
-        ? `<button class="btn btn--soft" data-more-reviews>${icon('expand_more')} Ver más reseñas</button>`
-        : '';
-      const button = more.querySelector('[data-more-reviews]');
-      if (button) button.addEventListener('click', () => K.motion.run(() => {
-        visible = Math.min(reviews.length, visible + 4);
+      const remaining = films.length - visible;
+      if (remaining <= 0) return;
+      // Teaser: the next reviews rendered blurred + faded behind the "Ver más" button.
+      // Fade into a dark tone matching the viewer's profile background (just dark if they use a gif/image).
+      const acc = store.getAccounts()[currentUser().id] || {};
+      const validBgColor = /^#[0-9a-f]{6}$/i.test(acc.profileBgColor || '');
+      const peekTint = (acc.profileBg || !validBgColor) ? '#0d0303' : acc.profileBgColor;
+      const peekCards = films.slice(visible, visible + 2)
+        .map(({ f, top }) => `<article class="home-review">${reviewCardInnerHTML(f, top)}</article>`).join('');
+      more.innerHTML =
+        `<div class="home-reviews__peek" style="--peek-tint:${peekTint}">` +
+          `<div class="home-reviews__peek-grid" aria-hidden="true" inert>${peekCards}</div>` +
+          `<button class="btn btn--soft home-reviews__morebtn" data-more-reviews>${icon('expand_more')} Ver ${remaining} reseña${remaining === 1 ? '' : 's'} más</button>` +
+        `</div>`;
+      more.querySelector('[data-more-reviews]').addEventListener('click', () => K.motion.run(() => {
+        visible = films.length;
         draw();
-      }, { kind: 'shared', target: grid }));
+      }, { kind: 'shared', target: section }));
     };
     draw();
     return section;
-  }
-
-  function watchedCard(f) {
-    const card = document.createElement('article');
-    card.className = 'watched';
-    const verdicts = Object.values(users)
-      .map((u) => {
-        const e = verdictOf(f.id, u.id);
-        const rated = typeof e.rating === 'number';
-        const has = rated || e.review || e.liked;
-        if (!has) return '';
-        const stars = rated
-          ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>`
-          : `<span class="verdict__none">sin puntaje</span>`;
-        const heart = e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '';
-        const review = e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-film="${escapeHtml(f.id)}" data-review-user="${escapeHtml(u.id)}">“${escapeHtml(e.review)}”</button>` : '';
-        return (
-          `<div class="verdict">` +
-          avatarHTML(u, 'avatar verdict__avatar') +
-          `<div class="verdict__main"><div class="verdict__row">${profileLink(u.id, u.name, 'verdict__name')}${stars}${heart}</div>${review}${watchMetaLine(f, u.id)}</div>` +
-          `</div>`
-        );
-      })
-      .join('');
-    card.innerHTML =
-      `<div class="watched__poster"><div class="poster__img" style="background:${posterArt(f)}"></div></div>` +
-      `<div class="watched__body">` +
-      `<div class="watched__title">${f.title}</div>` +
-      `<div class="watched__year">${[f.year, f.director].filter(Boolean).join(' · ')}</div>` +
-      `<div class="verdicts">${verdicts || '<span class="verdict__none">Puntuada, sin reseña</span>'}</div>` +
-      `</div>`;
-    card.addEventListener('click', () => openSheet(f));
-    card.style.cursor = 'pointer';
-    return card;
   }
 
   /* ---------- grid views ---------- */
@@ -1071,10 +1064,13 @@
     plist.innerHTML = '';
     const hint = document.getElementById('pl-hint');
     const full = orderedWatchlist();
-    const rankOf = new Map(full.map((f, i) => [f.id, i + 1]));
     const q = wlQuery.trim().toLowerCase();
     let list = q ? full.filter((f) => f.title.toLowerCase().includes(q)) : full;
     if (wlOwner !== 'all') list = list.filter((f) => ownersOf(f).includes(wlOwner));
+    const filtered = wlFiltered();
+    // When filtered (by owner or search) reordering is off, so number the visible subset 1..n
+    // instead of leaking each film's global shared-priority position (e.g. Luke's list starting at 9).
+    const rankOf = new Map((filtered ? list : full).map((f, i) => [f.id, i + 1]));
     plist.classList.toggle('plist--grid', watchlistView === 'grid');
     if (hint) hint.innerHTML = watchlistView === 'grid'
       ? `${icon('grid_view')} En orden de prioridad. Para reordenar, cambiá a vista lista.`
@@ -1087,7 +1083,7 @@
       return;
     }
     if (watchlistView === 'grid') { list.forEach((f) => plist.appendChild(plGridCell(f, rankOf.get(f.id)))); return; }
-    list.forEach((f) => plist.appendChild(plRow(f, rankOf.get(f.id), full.length)));
+    list.forEach((f) => plist.appendChild(plRow(f, rankOf.get(f.id), filtered ? list.length : full.length, filtered)));
   }
   function plGridCell(f, rank) {
     const cell = document.createElement('button'); cell.className = 'plcell'; cell.dataset.id = f.id; cell.title = `${rank}. ${f.title}`;
@@ -1119,14 +1115,14 @@
     return u ? `<span class="${cls}" style="background:${u.color}" title="Lista de ${escapeHtml(u.name)}">${u.initial}</span>` : '';
   }
 
-  function plRow(f, rank, total) {
+  function plRow(f, rank, total, locked = false) {
     const row = document.createElement('div');
     row.className = 'plitem';
-    row.draggable = true;
+    row.draggable = !locked;
     row.dataset.id = f.id;
     K.motion.tag(row, `pwm-watchlist-${f.id}`);
     row.innerHTML =
-      `<input class="plitem__rankin" type="number" min="1" max="${total}" value="${rank}" title="Escribí la posición" aria-label="Posición de prioridad">` +
+      `<input class="plitem__rankin" type="number" min="1" max="${total}" value="${rank}"${locked ? ' readonly tabindex="-1"' : ''} title="${locked ? 'Sacá el filtro para reordenar' : 'Escribí la posición'}" aria-label="Posición de prioridad">` +
       `<div class="plitem__poster"><div class="chip__img" style="background:${posterArt(f)}"></div></div>` +
       `<div class="plitem__body"><div class="plitem__title">${f.title}</div>` +
       `<div class="plitem__meta"><span>${f.year || ''}</span>` +
@@ -2338,7 +2334,7 @@
     const existing = movies.find((x) => x.id === m.id);
     let on;
     if (existing && existing.extra && isWatchlist(existing)) {
-      existing.owner = 'extra'; // remove from watchlist (keep as extra so a rating still shows in "Ya vimos")
+      existing.owner = 'extra'; // remove from watchlist (keep as extra so a rating still shows in "Últimas reseñas")
       existing.owners = [];
       const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) { ex[i].owner = 'extra'; ex[i].owners = []; }
       on = false;
@@ -2572,6 +2568,8 @@
     });
 
     sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
+    sheetCloseSeq++; // cancel any in-flight close animation from a previous sheet
+    sheet.classList.remove('sheet--closing');
     sheet.hidden = false;
     sheet.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -2579,14 +2577,25 @@
   }
 
   function onSheetKey(e) { if (e.key === 'Escape') closeSheet(); }
+  let sheetCloseSeq = 0;
   function closeSheet(refresh = true) {
-    sheet.hidden = true;
-    sheet.setAttribute('aria-hidden', 'true');
-    sheet.innerHTML = '';
-    document.body.style.overflow = '';
     document.removeEventListener('keydown', onSheetKey);
-    if (refresh && route === 'home') { renderHome($('#app')); } // refresh "Ya vimos"
-    sheetFilm = null;
+    const seq = ++sheetCloseSeq;
+    const finish = () => {
+      if (seq !== sheetCloseSeq) return; // a reopen (or newer close) superseded this one
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+      sheet.innerHTML = '';
+      sheet.classList.remove('sheet--closing');
+      document.body.style.overflow = '';
+      if (refresh && route === 'home') { renderHome($('#app')); } // refresh "Últimas reseñas"
+      sheetFilm = null;
+    };
+    const panel = sheet.querySelector('.sheet__panel');
+    if (sheet.hidden || K.motion.reduced() || !panel) return finish();
+    sheet.classList.add('sheet--closing'); // CSS animates panel + scrim out, then we hide
+    panel.addEventListener('animationend', finish, { once: true });
+    setTimeout(finish, 420); // fallback if animationend doesn't fire
   }
 
   function mountInteractiveStars(container, f, u, initial) {
@@ -3331,14 +3340,15 @@
         openCalDay(C, date);
       }, 60);
     }
-    if (reviewId || calendarId || calendarShareId) history.replaceState({}, '', location.pathname);
+    if (reviewId || calendarId || calendarShareId) history.replaceState({}, '', location.pathname + location.hash);
   }
 
   function startApp() {
     applyAccent();
     wireProfileNavigation();
+    wireHashRouting();
     renderHeader();
-    setRoute('home');
+    setRoute(routeFromHash() || 'home');
     setTimeout(openDeepLink, 40);
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();

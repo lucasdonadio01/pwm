@@ -22,6 +22,7 @@
   --luke: #3d7bff;
   --imdb: #f5c518;
   --rt: #fa320a;
+  --like: #ff3b5c; /* hearts/likes are red regardless of the (blue) book accent */
 
   /* the active user's color drives interactive accents (set by JS) */
   --accent: var(--hot);
@@ -503,9 +504,24 @@ a { color: inherit; text-decoration: none; }
 }
 .like .material-symbols-rounded { font-size: 20px; transition: transform 0.25s var(--ease); }
 .like:hover { color: var(--ink-dim); }
-.like.is-liked { color: var(--hot); }
-.like.is-liked .material-symbols-rounded { font-variation-settings: 'FILL' 1; color: var(--hot); }
+.like.is-liked { color: var(--like); }
+.like.is-liked .material-symbols-rounded { font-variation-settings: 'FILL' 1; color: var(--like); }
 .like.pop .material-symbols-rounded { animation: likePop 0.22s var(--ease-out); }
+
+/* "Me gusta esta reseña" pill (was unstyled in PRB) — turns red when liked. */
+.review-like {
+  display: inline-flex; align-items: center; gap: .42rem; width: fit-content; margin-top: 1rem; padding: .5rem .72rem;
+  border: 1px solid var(--hairline-2); border-radius: var(--r-pill); color: var(--ink-dim);
+  font-size: .8rem; font-weight: 700; transition: color .16s, border-color .16s, background .16s, transform .16s;
+}
+.review-like:hover { color: var(--ink); border-color: color-mix(in srgb, var(--like) 58%, var(--hairline)); transform: translateY(-1px); }
+.review-like .material-symbols-rounded { font-size: 18px; }
+.review-like b { min-width: .65rem; color: var(--ink-faint); font: .7rem 'JetBrains Mono', monospace; }
+.review-like.is-liked { color: #ffdce7; border-color: color-mix(in srgb, var(--like) 62%, var(--hairline)); background: color-mix(in srgb, var(--like) 16%, transparent); }
+.review-like.is-liked .material-symbols-rounded { color: var(--like); font-variation-settings: 'FILL' 1; }
+.review-like.is-liked b { color: var(--like); }
+.review-like-summary { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1rem; color: var(--ink-dim); font-size: .78rem; }
+.review-like-summary .material-symbols-rounded { color: var(--like); font-size: 18px; font-variation-settings: 'FILL' 1; }
 
 /* ============================================================================
    Detail sheet (rate / review)
@@ -524,6 +540,14 @@ a { color: inherit; text-decoration: none; }
   .sheet { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .sheet__panel { border-left: none; border-top: 1px solid var(--hairline); border-radius: 20px 20px 0 0; max-height: 92svh; animation: slideUp 0.36s var(--ease); }
 }
+/* Smooth close: JS adds .sheet--closing, we animate panel + scrim out, then it hides. */
+.sheet--closing { pointer-events: none; }
+.sheet--closing .sheet__scrim { animation: sheetScrimOut 0.26s var(--ease) forwards; }
+.sheet--closing .sheet__panel { animation: sheetPanelOut 0.30s var(--ease-in-out) forwards; }
+@media (max-width: 620px) { .sheet--closing .sheet__panel { animation: sheetPanelOutDown 0.30s var(--ease-in-out) forwards; } }
+@keyframes sheetScrimOut { to { opacity: 0; } }
+@keyframes sheetPanelOut { to { transform: translateX(46px); opacity: 0; } }
+@keyframes sheetPanelOutDown { to { transform: translateY(60px); opacity: 0; } }
 .sheet__hero { position: relative; aspect-ratio: 16/9; }
 .sheet__hero .hero__bg { transform: none; }
 .sheet__hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, var(--surface), transparent 55%); }
@@ -644,11 +668,11 @@ a { color: inherit; text-decoration: none; }
 html[data-app-motion="route"] #app { view-transition-name: app-route; }
 html[data-app-motion="route"] .app-motion-item { view-transition-name: none !important; }
 html[data-app-motion="route"]::view-transition-old(app-route) {
-  animation: routeOut 0.14s var(--ease-out) both;
+  animation: routeOut 0.2s var(--ease-out) both;
   mix-blend-mode: normal;
 }
 html[data-app-motion="route"]::view-transition-new(app-route) {
-  animation: routeIn 0.26s var(--ease-out) both;
+  animation: routeIn 0.34s var(--ease-out) both;
   mix-blend-mode: normal;
 }
 html[data-app-motion="shared"]::view-transition-group(*) {
@@ -677,8 +701,8 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fill { from { width: 0; } to { width: 100%; } }
 @keyframes kenburns { from { transform: scale(1.12); } to { transform: scale(1.0); } }
-@keyframes routeOut { to { opacity: 0; transform: translateY(-4px); } }
-@keyframes routeIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes routeOut { to { opacity: 0; transform: translateY(-6px); filter: blur(2px); } }
+@keyframes routeIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } }
 @keyframes contentFallbackIn {
   from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
   to { opacity: 1; transform: translateY(0); filter: blur(0); }

@@ -565,6 +565,14 @@ a { color: inherit; text-decoration: none; }
   .sheet { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .sheet__panel { border-left: none; border-top: 1px solid var(--hairline); border-radius: 20px 20px 0 0; max-height: 92svh; animation: slideUp 0.36s var(--ease); }
 }
+/* Smooth close: JS adds .sheet--closing, we animate panel + scrim out, then it hides. */
+.sheet--closing { pointer-events: none; }
+.sheet--closing .sheet__scrim { animation: sheetScrimOut 0.26s var(--ease) forwards; }
+.sheet--closing .sheet__panel { animation: sheetPanelOut 0.30s var(--ease-in-out) forwards; }
+@media (max-width: 620px) { .sheet--closing .sheet__panel { animation: sheetPanelOutDown 0.30s var(--ease-in-out) forwards; } }
+@keyframes sheetScrimOut { to { opacity: 0; } }
+@keyframes sheetPanelOut { to { transform: translateX(46px); opacity: 0; } }
+@keyframes sheetPanelOutDown { to { transform: translateY(60px); opacity: 0; } }
 .sheet__hero { position: relative; aspect-ratio: 16/9; }
 .sheet__hero .hero__bg { transform: none; }
 .sheet__hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, var(--surface), transparent 55%); }
@@ -721,11 +729,11 @@ a { color: inherit; text-decoration: none; }
 html[data-app-motion="route"] #app { view-transition-name: app-route; }
 html[data-app-motion="route"] .app-motion-item { view-transition-name: none !important; }
 html[data-app-motion="route"]::view-transition-old(app-route) {
-  animation: routeOut 0.14s var(--ease-out) both;
+  animation: routeOut 0.2s var(--ease-out) both;
   mix-blend-mode: normal;
 }
 html[data-app-motion="route"]::view-transition-new(app-route) {
-  animation: routeIn 0.26s var(--ease-out) both;
+  animation: routeIn 0.34s var(--ease-out) both;
   mix-blend-mode: normal;
 }
 html[data-app-motion="shared"]::view-transition-group(*) {
@@ -754,8 +762,8 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fill { from { width: 0; } to { width: 100%; } }
 @keyframes kenburns { from { transform: scale(1.12); } to { transform: scale(1.0); } }
-@keyframes routeOut { to { opacity: 0; transform: translateY(-4px); } }
-@keyframes routeIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes routeOut { to { opacity: 0; transform: translateY(-6px); filter: blur(2px); } }
+@keyframes routeIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } }
 @keyframes contentFallbackIn {
   from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
@@ -1615,17 +1623,38 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 .home-review:hover { border-color: color-mix(in srgb, var(--accent) 38%, var(--hairline)); transform: translateY(-2px); }
 .home-review__poster { min-height: 150px; background-size: cover !important; background-position: center !important; }
 .home-review__body { min-width: 0; padding: .72rem; }
-.home-review__by { display: flex; align-items: center; gap: .48rem; min-width: 0; margin-bottom: .55rem; }
-.home-review__avatar { flex: none; width: 29px; height: 29px; font-size: .68rem; }
-.home-review__by > span:last-child { display: grid; min-width: 0; }
-.home-review__by .profile-link { width: fit-content; max-width: 100%; overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
-.home-review__by small { margin-top: .05rem; color: var(--ink-faint); font: .56rem 'JetBrains Mono', monospace; }
+/* compact "who rated it" strip — one chip per user, so a shared film shows both verdicts */
+.home-review__people { display: flex; flex-wrap: wrap; align-items: center; gap: .32rem .4rem; min-width: 0; margin-bottom: .5rem; }
+.hrperson { display: inline-flex; align-items: center; gap: .26rem; padding: .12rem .4rem .12rem .12rem; border: 1px solid var(--hairline); border-radius: 999px; background: var(--surface-2); }
+.hrperson__av { flex: none; width: 22px; height: 22px; font-size: .58rem; }
+.hrperson b { display: inline-flex; align-items: center; gap: .12rem; color: var(--accent); font: .68rem 'JetBrains Mono', monospace; }
+.hrperson b .material-symbols-rounded { font-size: 13px; font-variation-settings: 'FILL' 1; }
+.hrperson__none { color: var(--ink-faint) !important; }
+.hrperson__ic { display: inline-flex; color: var(--ink-faint); }
+.hrperson__ic .material-symbols-rounded { font-size: 13px; }
+.home-review__when { color: var(--ink-faint); font: .56rem 'JetBrains Mono', monospace; }
 .home-review__copy { display: grid; width: 100%; min-width: 0; gap: .3rem; color: var(--ink); text-align: left; }
 .home-review__copy > b { overflow: hidden; font-size: .92rem; text-overflow: ellipsis; white-space: nowrap; }
 .home-review__stars { display: flex; align-items: center; gap: .28rem; min-width: 0; }
 .home-review__stars strong { color: var(--accent); font: .65rem 'JetBrains Mono', monospace; }
 .home-review__copy q { display: -webkit-box; overflow: hidden; color: var(--ink-dim); font-size: .75rem; line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.home-reviews__more { display: flex; justify-content: center; padding-top: 1rem; }
+.home-reviews__more { display: block; }
+.home-reviews__more:empty { display: none; }
+/* Teaser: extra reviews shown blurred + masked, with the "Ver más" button floating on top. */
+.home-reviews__peek { position: relative; margin-top: .85rem; --peek-tint: var(--ground); }
+.home-reviews__peek-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem;
+  max-height: 168px; overflow: hidden; filter: blur(3px); opacity: .55; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / .35) 55%, transparent 94%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / .35) 55%, transparent 94%);
+}
+/* Fade the blurred teaser into a dark tint that matches the viewer's profile background. */
+.home-reviews__peek::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(to bottom, transparent 0%, transparent 28%,
+    color-mix(in srgb, var(--peek-tint) 60%, transparent) 66%, var(--peek-tint) 100%);
+}
+.home-reviews__morebtn { position: absolute; left: 50%; top: 50%; z-index: 2; transform: translate(-50%, -50%); }
 .home-reviews__empty { grid-column: 1 / -1; }
 
 /* Personal profile canvas: shared by PWM and PRB through account data. */
@@ -1745,6 +1774,7 @@ html[data-app-motion="shared"]::view-transition-new(*) {
   .profile-customizer__group--wide { grid-column: auto; }
   .profile-gif-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-reviews__grid { grid-template-columns: 1fr; }
+  .home-reviews__peek-grid { grid-template-columns: 1fr; }
   .pbar__count { opacity: 1; transform: none; }
 }
 @media (max-width: 520px) {

@@ -32,7 +32,7 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-24 · Codex
-- Lucas approved and published items 18–21: PRB desktop profile parity; PWM personal/shared calendars and persistent profile stats; compact mobile profile previews; own-user Watchlist default; centered Modo relámpago posters.
-- Final responsive verification covered 1280×720, 390×844 and 320×568 without Supabase test writes. Assets v26; PWM 1.14 / PRB 1.14.
-- Working tree is expected clean and synchronized with `origin/main`.
+### 2026-07-24 · Claude
+- Items 22–29 (see `correcciones.md`): hash routing (F5 + Back/Forward) both apps; PWM home "quién puntuó" chips with star + blurred teaser tinted by profile bg; PWM watchlist filtered numbering starts at 1; PRB review-like pill turns red; PRB profile stat cards persist open/closed (parity with PWM item 19); smoother section + overlay-close animations both apps; PRB "Agregar libro" from Leyendo marks the book as reading (and can pick a book already in the library).
+- NOTE for whoever picks this up: I inherited an uncommitted, working "quién puntuó" home-reviews feature in `css/styles.css` + `js/app.js` (not mine) and finished it (item 23) — it's bundled in this commit with Lucas's OK.
+- Assets bumped to v27; PWM 1.15 / PRB 1.15. Verified in a local server (guest, no Supabase test writes): no console errors; the Leyendo add-flow was code-reviewed, not run end-to-end (needs a real login + Open Library network).
