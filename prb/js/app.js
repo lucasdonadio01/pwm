@@ -89,27 +89,32 @@
   function showGate() {
     $('#site-header').hidden = true; $('#app').hidden = true;
     const wrap = $('#gate-profiles'); wrap.innerHTML = '';
+    // Real users up top, neon-lit in their own colour; secondary options below.
+    const usersRow = document.createElement('div'); usersRow.className = 'gate__users';
     Object.values(users).forEach((u) => {
       const btn = document.createElement('button');
       btn.className = 'profile'; btn.style.setProperty('--c', u.color);
       btn.innerHTML = avatarHTML(u, 'profile__avatar') + `<span class="profile__name">${u.name}</span><span class="profile__handle">@${u.handle}</span>`;
       btn.addEventListener('click', () => askPin(u, () => enterAs(u.id)));
-      wrap.appendChild(btn);
+      usersRow.appendChild(btn);
     });
+    wrap.appendChild(usersRow);
+    const altRow = document.createElement('div'); altRow.className = 'gate__alt';
     const guest = document.createElement('button');
     guest.className = 'profile profile--alt';
     guest.style.setProperty('--c', '#8A8A92');
     guest.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:#8A8A92">${icon('visibility')}</span>` +
       `<span class="profile__name">Invitado</span><span class="profile__handle">solo mirar</span>`;
     guest.addEventListener('click', () => enterAs('guest'));
-    wrap.appendChild(guest);
+    altRow.appendChild(guest);
     const create = document.createElement('button');
     create.className = 'profile profile--alt profile--new';
     create.style.setProperty('--c', 'var(--lime)');
     create.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:var(--lime)">${icon('person_add')}</span>` +
       `<span class="profile__name">Crear usuario</span><span class="profile__handle">nuevo perfil</span>`;
     create.addEventListener('click', () => openSignup());
-    wrap.appendChild(create);
+    altRow.appendChild(create);
+    wrap.appendChild(altRow);
     gate.hidden = false;
   }
 
@@ -1542,20 +1547,72 @@
       `<summary class="pdetail__summary"><span class="pdetail__title">${icon(iconName)}<span><b>${title}</b><small>${escapeHtml(insight)}</small></span></span><span class="pdetail__toggle">${icon('expand_more')}</span></summary>` +
       `<div class="pdetail__body">${body}<p class="pdetail__explain">${explanation}</p></div></details>`;
   }
-  function profileExpandable(host, button, items, initialCount, renderItem, emptyText) {
+  // Blurred "peek" preview: shows a couple of rows, veils the rest with a fade + "Ver más"
+  // button, and expands in place. Ported from PWM for profile parity.
+  function profileContentPreview(wrapper, host, topButton, bottomButton, items, renderItem, emptyText, options = {}) {
     let expanded = false;
-    const draw = () => {
-      host.innerHTML = '';
-      if (!items.length) host.innerHTML = `<p class="addfilm__hint">${emptyText}</p>`;
-      (expanded ? items : items.slice(0, initialCount)).forEach((item, index) => host.appendChild(renderItem(item, index)));
-      button.hidden = items.length <= initialCount;
-      button.innerHTML = expanded
+    let hasOverflow = false;
+    let measureFrame = 0;
+    let observer = null;
+    const mobileQuery = window.matchMedia('(max-width: 520px)');
+    host.innerHTML = '';
+    if (!items.length) host.innerHTML = `<p class="addfilm__hint">${emptyText}</p>`;
+    items.forEach((item, index) => host.appendChild(renderItem(item, index)));
+    const cards = () => [...host.children].filter((node) => !node.classList.contains('addfilm__hint'));
+    const syncButtons = () => {
+      const usesInlinePreview = mobileQuery.matches || !!options.desktopRows;
+      if (topButton) topButton.hidden = true; // "Ver todas" removed — the peek button is the only toggle
+      bottomButton.hidden = !hasOverflow || !usesInlinePreview;
+      bottomButton.innerHTML = expanded
         ? `${icon('unfold_less')} Ver menos`
-        : `${icon('unfold_more')} Ver todas <span>${items.length}</span>`;
-      button.setAttribute('aria-expanded', String(expanded));
+        : `${icon('unfold_more')} Ver más`;
+      bottomButton.setAttribute('aria-expanded', String(expanded));
     };
-    button.addEventListener('click', () => K.motion.run(() => { expanded = !expanded; draw(); }, { kind: 'shared', target: host }));
-    draw();
+    const resetCards = () => cards().forEach((node) => { node.hidden = false; node.inert = false; });
+    const measure = () => {
+      if (!wrapper.isConnected || expanded) return;
+      const nodes = cards();
+      resetCards();
+      wrapper.classList.remove('has-preview');
+      wrapper.style.removeProperty('--profile-preview-height');
+      const previewRows = mobileQuery.matches ? 1 : Number(options.desktopRows || 0);
+      if (previewRows) {
+        const tops = [...new Set(nodes.map((node) => node.offsetTop))].sort((a, b) => a - b);
+        hasOverflow = tops.length > previewRows;
+        if (hasOverflow) {
+          const clippedTop = tops[previewRows];
+          const clippedCard = nodes.find((node) => node.offsetTop === clippedTop);
+          wrapper.style.setProperty('--profile-preview-height', `${Math.round(clippedTop + (clippedCard ? clippedCard.offsetHeight * .52 : 120))}px`);
+          nodes.forEach((node) => { node.inert = node.offsetTop >= clippedTop; });
+          wrapper.classList.add('has-preview');
+        }
+      } else {
+        const desktopCount = Number(options.desktopCount || items.length);
+        hasOverflow = items.length > desktopCount;
+        nodes.forEach((node, index) => { const concealed = index >= desktopCount; node.hidden = concealed; node.inert = concealed; });
+      }
+      syncButtons();
+    };
+    const scheduleMeasure = () => { cancelAnimationFrame(measureFrame); measureFrame = requestAnimationFrame(measure); };
+    const handleBreakpointChange = () => {
+      if (!wrapper.isConnected) { mobileQuery.removeEventListener('change', handleBreakpointChange); if (observer) observer.disconnect(); return; }
+      scheduleMeasure();
+    };
+    const setExpanded = (next) => {
+      K.motion.run(() => {
+        expanded = next;
+        wrapper.classList.toggle('is-expanded', expanded);
+        if (expanded) { resetCards(); wrapper.classList.remove('has-preview'); wrapper.style.removeProperty('--profile-preview-height'); }
+        else { scheduleMeasure(); }
+        syncButtons();
+      }, { kind: 'shared', target: host });
+    };
+    if (topButton) topButton.hidden = true;
+    bottomButton.addEventListener('click', () => setExpanded(!expanded));
+    observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { if (!wrapper.isConnected) return observer.disconnect(); scheduleMeasure(); }) : null;
+    if (observer) observer.observe(host);
+    if (mobileQuery.addEventListener) mobileQuery.addEventListener('change', handleBreakpointChange);
+    scheduleMeasure();
   }
   function profileBookCard(b, uid) {
     const v = verdictOf(b.id, uid);
@@ -1610,8 +1667,12 @@
       (mine ? `<button class="linklike" id="p-editbio">${icon('edit')} Editar descripción</button>` : '') + `</div></div>` +
       `<div class="ptiles ptiles--overview">${statTile(s.read, 'libros leídos')}${statTile(s.thisYear, 'este año', year)}${statTile(s.reading, 'leyendo ahora')}${statTile(s.reviews, 'reseñas')}${statTile(s.likes, 'me gusta')}${statTile(s.avg ? s.avg.toFixed(2) : '—', 'promedio', 'de 5')}</div></div>` +
       `<div class="profile-layout"><div class="profile-main">` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" hidden></button></div><div class="pgrid pgrid--wide" id="p-reviews"></div></section>` +
-      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><button class="profile-more" id="p-best-more" hidden></button></div><div class="profile-books" id="p-best"></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><button class="profile-more" id="p-reviews-more" aria-controls="p-reviews" hidden></button></div>` +
+      `<div class="profile-poster-preview" id="p-reviews-preview"><div class="pgrid pgrid--wide" id="p-reviews"></div><span class="profile-poster-preview__veil" aria-hidden="true"></span>` +
+      `<button class="profile-poster-preview__more" id="p-reviews-peek" aria-controls="p-reviews" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
+      `<section class="profile-block"><div class="profile-block__head"><h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><button class="profile-more" id="p-best-more" aria-controls="p-best" hidden></button></div>` +
+      `<div class="profile-poster-preview" id="p-best-preview"><div class="profile-books" id="p-best"></div><span class="profile-poster-preview__veil" aria-hidden="true"></span>` +
+      `<button class="profile-poster-preview__more" id="p-best-peek" aria-controls="p-best" hidden>${icon('unfold_more')} Ver más</button></div></section>` +
       `</div><aside class="profile-rail" aria-label="Actividad y estadísticas">` +
       `<div class="pcard profile-calendar"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}<p class="pdetail__explain">Los días marcados muestran cuándo terminaste o puntuaste una lectura durante el mes.</p></div>` +
       profileDetail(id, 'bar_chart', 'Últimos 12 meses', `${s.thisYear} en ${year}`, yearStrip(s.byMonth, u.color), 'Cada barra representa cuántos libros registraste en ese mes. Sirve para ver tus épocas más activas.', true) +
@@ -1625,16 +1686,16 @@
     sec.querySelectorAll('[data-profile-rating]').forEach((button) => button.addEventListener('click', () => openRatingBreakdown(id, Number(button.dataset.profileRating), s.ratedList)));
     const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t);
     const rw = sec.querySelector('#p-reviews');
-    profileExpandable(rw, sec.querySelector('#p-reviews-more'), revs, 4, ({ b }) => {
+    profileContentPreview(sec.querySelector('#p-reviews-preview'), rw, sec.querySelector('#p-reviews-more'), sec.querySelector('#p-reviews-peek'), revs, ({ b }) => {
       const v = verdictOf(b.id, id), c = document.createElement('button'); c.className = 'prev';
       c.innerHTML = `<span class="prev__poster" style="background:${coverArt(b)}"></span><span class="prev__b"><b>${escapeHtml(b.title)}</b><span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span><span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
       c.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: id }));
       return K.motion.tag(c, `prb-profile-review-${id}-${b.id}`);
-    }, 'Todavía sin reseñas.');
+    }, 'Todavía sin reseñas.', { desktopRows: 1 });
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
-    profileExpandable(bw, sec.querySelector('#p-best-more'), best, 12, (b) =>
-      K.motion.tag(profileBookCard(b, id), `prb-profile-best-${id}-${b.id}`), 'Puntuá un libro y aparece acá.');
+    profileContentPreview(sec.querySelector('#p-best-preview'), bw, sec.querySelector('#p-best-more'), sec.querySelector('#p-best-peek'), best, (b) =>
+      K.motion.tag(profileBookCard(b, id), `prb-profile-best-${id}-${b.id}`), 'Puntuá un libro y aparece acá.', { desktopRows: 2 });
     if (mine) {
       sec.querySelector('#p-photo').addEventListener('click', () => K.pickPhoto((data) => { K.accounts.patch(store, id, { photo: data }); refreshUsers(); renderHeader(); renderPerfil(app); K.toast('Foto actualizada ✓'); }));
       sec.querySelector('#p-editbio').addEventListener('click', () => openBioEditor(app, id, bio));

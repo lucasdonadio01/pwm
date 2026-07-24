@@ -147,6 +147,9 @@
     $('#app').hidden = true;
     const wrap = $('#gate-profiles');
     wrap.innerHTML = '';
+    // Real users up top, neon-lit in their own colour; secondary options below.
+    const usersRow = document.createElement('div');
+    usersRow.className = 'gate__users';
     Object.values(users).forEach((u) => {
       const btn = document.createElement('button');
       btn.className = 'profile';
@@ -156,15 +159,19 @@
         `<span class="profile__name">${u.name}</span>` +
         `<span class="profile__handle">@${u.handle}</span>`;
       btn.addEventListener('click', () => askPin(u, () => enterAs(u.id)));
-      wrap.appendChild(btn);
+      usersRow.appendChild(btn);
     });
+    wrap.appendChild(usersRow);
+
+    const altRow = document.createElement('div');
+    altRow.className = 'gate__alt';
     const guest = document.createElement('button');
     guest.className = 'profile profile--alt';
     guest.style.setProperty('--c', '#8A8A92');
     guest.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:#8A8A92">${icon('visibility')}</span>` +
       `<span class="profile__name">Invitado</span><span class="profile__handle">solo mirar</span>`;
     guest.addEventListener('click', () => enterAs('guest'));
-    wrap.appendChild(guest);
+    altRow.appendChild(guest);
 
     const create = document.createElement('button');
     create.className = 'profile profile--alt profile--new';
@@ -172,7 +179,8 @@
     create.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:var(--lime)">${icon('person_add')}</span>` +
       `<span class="profile__name">Crear usuario</span><span class="profile__handle">nuevo perfil</span>`;
     create.addEventListener('click', () => openSignup());
-    wrap.appendChild(create);
+    altRow.appendChild(create);
+    wrap.appendChild(altRow);
 
     gate.hidden = false;
   }
@@ -2962,12 +2970,11 @@
     const cards = () => [...host.children].filter((node) => !node.classList.contains('addfilm__hint'));
     const syncButtons = () => {
       const usesInlinePreview = mobileQuery.matches || !!options.desktopRows;
-      topButton.hidden = !hasOverflow;
-      bottomButton.hidden = expanded || !hasOverflow || !usesInlinePreview;
-      topButton.innerHTML = expanded
+      if (topButton) topButton.hidden = true; // "Ver todas" removed — the peek button is the only toggle
+      bottomButton.hidden = !hasOverflow || !usesInlinePreview;
+      bottomButton.innerHTML = expanded
         ? `${icon('unfold_less')} Ver menos`
-        : `${icon('unfold_more')} Ver todas <span>${items.length}</span>`;
-      topButton.setAttribute('aria-expanded', String(expanded));
+        : `${icon('unfold_more')} Ver más`;
       bottomButton.setAttribute('aria-expanded', String(expanded));
     };
     const resetCards = () => cards().forEach((node) => {
@@ -3029,8 +3036,8 @@
         syncButtons();
       }, { kind: 'shared', target: host });
     };
-    topButton.addEventListener('click', () => setExpanded(!expanded));
-    bottomButton.addEventListener('click', () => setExpanded(true));
+    if (topButton) topButton.hidden = true;
+    bottomButton.addEventListener('click', () => setExpanded(!expanded));
     observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
       if (!wrapper.isConnected) return observer.disconnect();
       scheduleMeasure();
@@ -3173,7 +3180,7 @@
           `<span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
         c.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: id }));
         return K.motion.tag(c, `pwm-profile-review-${id}-${f.id}`);
-      }, 'Todavía sin reseñas.', { desktopCount: 4 });
+      }, 'Todavía sin reseñas.', { desktopRows: 1 });
 
     const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating);
     const bw = sec.querySelector('#p-best');
@@ -3183,7 +3190,7 @@
     const watchlist = orderedWatchlist().filter((f) => ownersOf(f).includes(id));
     const ww = sec.querySelector('#p-watchlist');
     profileContentPreview(sec.querySelector('#p-watchlist-preview'), ww, sec.querySelector('#p-watchlist-more'), sec.querySelector('#p-watchlist-peek'), watchlist, (f) =>
-      K.motion.tag(posterCard(f), `pwm-profile-watchlist-${id}-${f.id}`), `${escapeHtml(u.name)} todavía no tiene títulos en su watchlist.`, { desktopCount: 12 });
+      K.motion.tag(posterCard(f), `pwm-profile-watchlist-${id}-${f.id}`), `${escapeHtml(u.name)} todavía no tiene títulos en su watchlist.`, { desktopRows: 2 });
 
     if (mine) {
       sec.querySelector('#p-photo').addEventListener('click', () => K.pickPhoto((data) => {

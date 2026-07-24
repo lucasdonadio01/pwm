@@ -119,7 +119,11 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: -0.02em;
   margin-bottom: 2.6rem;
 }
-.gate__profiles { display: flex; gap: clamp(1.5rem, 6vw, 3.5rem); justify-content: center; flex-wrap: wrap; }
+.gate__profiles { display: flex; flex-direction: column; align-items: center; gap: clamp(1.5rem, 4vw, 2.4rem); }
+.gate__users { display: flex; gap: clamp(1.5rem, 6vw, 3.5rem); justify-content: center; flex-wrap: wrap; }
+/* Secondary options (Invitado + Crear usuario) sit below the real users, same level. */
+.gate__alt { display: flex; gap: clamp(1.4rem, 5vw, 2.6rem); justify-content: center; flex-wrap: wrap; align-items: flex-start;
+  width: min(100%, 460px); padding-top: clamp(1.3rem, 3vw, 1.9rem); border-top: 1px solid var(--hairline); }
 .gate__hint { margin-top: 3rem; color: var(--ink-faint); font-size: 0.9rem; }
 
 .profile { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
@@ -138,10 +142,15 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 85%, #fff), 0 0 0 7px color-mix(in srgb, var(--c) 28%, transparent), 0 14px 40px rgba(0, 0, 0, 0.5);
   transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
 }
+/* Real users (not the alt options) glow in their own neon colour, always on. */
+.profile:not(.profile--alt) .profile__avatar {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 90%, #fff), 0 0 0 7px color-mix(in srgb, var(--c) 30%, transparent),
+    0 0 32px color-mix(in srgb, var(--c) 55%, transparent), 0 0 60px color-mix(in srgb, var(--c) 32%, transparent), 0 14px 40px rgba(0, 0, 0, 0.5);
+}
 .profile:hover .profile__avatar,
 .profile:focus-visible .profile__avatar {
   transform: translateY(-6px) scale(1.04);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 85%, #fff), 0 0 0 9px color-mix(in srgb, var(--c) 45%, transparent), 0 0 46px color-mix(in srgb, var(--c) 55%, transparent), 0 20px 50px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 85%, #fff), 0 0 0 9px color-mix(in srgb, var(--c) 45%, transparent), 0 0 54px color-mix(in srgb, var(--c) 62%, transparent), 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 .profile__name { font-weight: 800; font-size: 1.15rem; }
 .profile__handle { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--ink-faint); letter-spacing: 0.04em; }
@@ -1308,6 +1317,15 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 .prev__stars { display: flex; align-items: center; gap: .2rem; margin-top: .25rem; }
 .prev__txt { margin-top: .2rem; color: var(--ink-dim); font-size: .73rem; }
 .profile-books { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: .65rem; }
+/* Blurred "peek" preview for profile reviews/best (ported from PWM). */
+.profile-poster-preview { position: relative; overflow: hidden; max-height: var(--profile-preview-height, none); }
+.profile-poster-preview.is-expanded { max-height: none; padding-bottom: 3.4rem; }
+.profile-poster-preview__veil { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; display: none; height: clamp(110px, 22vw, 180px); pointer-events: none; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--ground) 88%, transparent) 72%, var(--ground)); backdrop-filter: blur(3px); mask-image: linear-gradient(to bottom, transparent, #000 42%); }
+.profile-poster-preview.has-preview:not(.is-expanded) .profile-poster-preview__veil { display: block; }
+.profile-poster-preview__more { position: absolute; z-index: 2; right: 50%; bottom: 1rem; display: inline-flex; align-items: center; gap: .38rem; min-height: 40px; padding: .55rem 1rem; transform: translateX(50%); border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--hairline)); border-radius: var(--r-pill); color: var(--ink); background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 12px 28px rgba(0,0,0,.34); backdrop-filter: blur(10px); font-size: .78rem; font-weight: 800; }
+.profile-poster-preview__more:hover { border-color: var(--accent); background: var(--surface-2); }
+.profile-poster-preview__more:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.profile-poster-preview__more .material-symbols-rounded { font-size: 18px; }
 .pbook { display: grid; grid-template-columns: 48px 1fr; gap: .65rem; min-width: 0; padding: .52rem; border: 1px solid var(--hairline); border-radius: 12px; color: var(--ink); text-align: left; background: var(--surface); }
 .pbook__cover { width: 48px; height: 72px; border-radius: 6px; background-size: cover !important; background-position: center !important; }
 .pbook__body { min-width: 0; display: flex; flex-direction: column; gap: .15rem; }

@@ -199,3 +199,14 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Agregar un libro desde **Leyendo** ahora lo marca como *leyendo* para el usuario activo y aparece al instante (antes solo lo sumaba a la biblioteca sin marcarlo, así que no se veía pero el re-agregado decía "ya está").
 - Si el libro ya está en la biblioteca, desde Leyendo se puede elegir igual para ponerlo en curso.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 30. 🚧 [Ambos · Perfil] Reseñas y watchlist con teaser desenfocado, sin "Ver todas"
+- En el perfil, **Últimas reseñas** y **Watchlist** ahora usan el mismo recorte desenfocado que **Mejor rankeadas** (media fila extra borrosa + **Ver más** encima). Se portó el sistema a PRB (reseñas y mejor rankeados) para paridad con PWM.
+- Se sacó el botón **"Ver todas"** de arriba de cada sección; el **Ver más** del recorte es ahora el único control (se convierte en **Ver menos** al expandir).
+- Reseñas muestra **2 y la tercera ya entra en el desenfoque** (media fila).
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 31. 🚧 [Ambos · Entrar] Gate "¿Quién sos?" con users destacados en neón
+- Los usuarios reales van arriba, con **glow neón permanente en el color que cada uno eligió**.
+- **Invitado** y **Crear usuario** quedan agrupados abajo, en una fila secundaria de la misma jerarquía, separados por una línea.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
