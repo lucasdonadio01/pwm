@@ -1,5 +1,10 @@
 # Correcciones PWM + PRB — lote 3
 
+> ## ✅ LOTE CERRADO — no rehacer
+> Los **11 puntos** de este archivo fueron implementados en el commit `522e4e8` (ChatGPT) y **verificados en código** (Claude, 2026-07-23).
+> Cambios respecto del spec: el export de tier se hizo con **canvas dibujado a mano**, no `html2canvas`. El sync en vivo usa **Supabase Realtime + polling de 20s** de respaldo.
+> Este archivo queda como **referencia histórica**. Las correcciones nuevas van en un **lote 4** abajo (o en un archivo nuevo).
+
 MODO sugerido: implementá el lote completo y probá 1 sola vez al final (browser). PWM = raíz (`js/`), PRB = `prb/`. Datos nuevos van en blobs JSON de `settings` (sincronizan por Supabase, no tocar el esquema). Al final: bump `?v=` en los dos `index.html` + subir `version`/`built` en `js/data.js` y `prb/js/data.js`.
 
 Leyenda de tamaño: 🟢 chico · 🟡 medio · 🔴 grande/decisión.
