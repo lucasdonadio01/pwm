@@ -1,35 +1,40 @@
-# AGENTS.md — léeme antes de tocar nada
+# AGENTS.md — read me before touching anything
 
-Repo trabajado por varios asistentes (Claude Code y ChatGPT/cowork) + Lucas.
-**Mantené este archivo corto.** Se lee en cada sesión: si crece, cuesta tokens a todos.
+This repo is worked on by several assistants (Claude Code, ChatGPT/cowork) plus **Lucas**, the owner.
+**Keep this file short.** It's read every session — if it grows, it costs everyone tokens.
+These docs are in English for token efficiency. **This changes nothing about the app: all UI text stays in Rioplatense Spanish.** Lucas speaks Spanish — talk to him in Spanish.
 
-## Qué es
-Dos apps hermanas, sitio estático vanilla (**sin build**), un repo:
-- **PWM** (pelis/series) → `index.html`, `js/`
-- **PRB** (libros) → `prb/index.html`, `prb/js/`
+## What this is
+Two sibling apps, static vanilla site (**no build step**), one repo:
+- **PWM** (movies/series) → `index.html`, `js/`
+- **PRB** (books) → `prb/index.html`, `prb/js/`
 
-En vivo: `lucasdonadio01.github.io/pwm/` y `/pwm/prb/` (Pages, se publica al pushear a `main`).
+Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes on push to `main`).
 
-## Reglas de oro
-1. **Código común → `js/shared.js` (`APPKIT`)**, que cargan las dos apps (cuentas+PIN, cropper, filas de tier, export de imagen, toast). No dupliques.
-2. **Datos nuevos → blobs JSON en la tabla `settings`.** No se cambia el esquema. Claves: `reading`, `watchmeta`, `tierlists`, `tierdata`, `tierrows`, `calendars`, `calevents`, `accounts`, `extra_films`, `extra_books`, `order`.
-3. **Hay datos REALES en Supabase.** Nunca borres en masa. Si escribís probando, limpialo.
-4. **Cache-bust:** tocaste JS/CSS → subí `?v=N` en **los dos** `index.html`. (Si no, se sirve lo viejo: ya rompió el layout de "Leyendo".)
-5. **Versión del footer:** `WM.build`/`PRB.build` en `js/data.js` y `prb/js/data.js`.
-6. **Todo gratis**, sin build ni npm en runtime. UI en **español rioplatense**.
+## Golden rules
+1. **Shared code → `js/shared.js` (`APPKIT`)**, loaded by both apps: accounts + PIN, photo cropper, tier-row config, image export, toast. Don't duplicate it in either `app.js`.
+2. **New data → JSON blobs in the `settings` table.** Never change the Supabase schema. Keys in use: `reading`, `watchmeta`, `tierlists`, `tierdata`, `tierrows`, `calendars`, `calevents`, `accounts`, `extra_films`, `extra_books`, `order`.
+3. **There is REAL user data in Supabase.** Never bulk-delete `reviews`/`settings`. If you write while testing, clean it up afterwards.
+4. **Cache-bust:** touched JS or CSS → bump `?v=N` in **both** `index.html` files. Otherwise stale assets ship (this already broke the "Leyendo" layout once).
+5. **Footer version stamp:** `WM.build` / `PRB.build` in `js/data.js` and `prb/js/data.js`.
+6. **Everything must stay free.** No build step, no npm at runtime, no paid services.
+7. **All user-facing UI text is Rioplatense Spanish** (vos / mirá / elegí).
 
-## Handoff
-**Al terminar:** commiteá (no dejes trabajo a medias sin commitear) · marcá estado en `correcciones.md` (✅/🚧/⛔) · **reemplazá** la entrada de la Bitácora · si Lucas debe hacer algo a mano, anotalo abajo (el otro no ve tu chat).
-**Al empezar:** leé este archivo · `git log --oneline -10` + `git status` · si hay cambios sin commitear que no son tuyos, **no los toques**, preguntá.
+## Handoff protocol
+**When you finish:** commit (never leave half-done work uncommitted) · mark status in `correcciones.md` (✅ / 🚧 / ⛔) · **replace** the Log entry below with yours · if Lucas must do something by hand, write it under "Needs Lucas" — the other assistant cannot see your chat.
 
-## Pendiente de Lucas
-- (nada)
+**When you start:** read this file · run `git log --oneline -10` and `git status` · if there are uncommitted changes that aren't yours, **don't touch them** — ask first.
 
-## Bitácora — SOLO la última entrada. Reemplazala, no acumules (el historial está en `git log`).
+`correcciones.md` is Lucas's spec file and stays in Spanish.
+
+## Needs Lucas
+- (nothing pending)
+
+## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-23 · Claude
-- Me puse al día con `522e4e8` (ChatGPT): los 11 puntos de `correcciones.md` están implementados y verificados en código.
-- Nuevo módulo compartido `js/shared.js` (`APPKIT`). El export de tier es **canvas dibujado a mano**, no html2canvas. Sync en vivo por **Supabase Realtime** con polling de 20s de respaldo. Action pasó a **diario**.
-- Lucas ya corrió el `alter publication supabase_realtime add table settings, reviews;` ✅
-- Creé `AGENTS.md` + `CLAUDE.md`. `correcciones.md` sigue **sin marcar** qué quedó hecho.
-- Quedaban sin commitear (de otra sesión): `PRODUCT.md`, `css/styles.css`.
+- Caught up with `522e4e8` (ChatGPT): all 11 items in `correcciones.md` are implemented and verified in code.
+- New shared module `js/shared.js` (`APPKIT`). Tier export is a **hand-drawn canvas**, not html2canvas. Live sync uses **Supabase Realtime** with a 20s polling fallback. The data Action moved to **daily**.
+- Lucas ran `alter publication supabase_realtime add table settings, reviews;` ✅
+- Added `AGENTS.md` + `CLAUDE.md`; marked lote 3 as closed in `correcciones.md`.
+- Uncommitted at that moment (another session's work, left untouched): `PRODUCT.md`, `css/styles.css`, `js/app.js`, `js/shared.js`, `prb/js/app.js`.

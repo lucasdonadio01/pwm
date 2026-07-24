@@ -1,5 +1,7 @@
-# Contexto del proyecto
+# Project context
 
-**Leé `AGENTS.md` antes de tocar nada.** Ahí están las reglas de oro (módulo compartido `APPKIT`, datos en blobs de `settings`, cache-bust `?v=N`, datos reales en Supabase), el protocolo de handoff entre asistentes y la Bitácora de quién hizo qué.
+**Read `AGENTS.md` before touching anything.** It has the golden rules (shared `APPKIT` module, data as `settings` blobs, `?v=N` cache-bust, real user data in Supabase), the handoff protocol between assistants, and the Log.
 
-Al terminar tu turno: commiteá, marcá estado en `correcciones.md` y **dejá tu entrada en la Bitácora de `AGENTS.md`**.
+Note: docs are in English, but **all app UI text is Rioplatense Spanish**, and Lucas (the owner) is spoken to in Spanish.
+
+When you finish: commit, mark status in `correcciones.md`, and **replace** the Log entry in `AGENTS.md`.
