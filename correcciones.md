@@ -125,9 +125,16 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - PWM y PRB: las barras de **Cómo puntuás** muestran cantidades y abren un detalle táctil/clickeable con las obras exactas de cada puntaje.
 - Perfil: la búsqueda de GIF permite cargar y scrollear más resultados. Los fondos GIF se renderizan como imagen animada tanto en portada como en toda la vista.
 - PWM: **Mejor rankeadas** y **Watchlist** crecen hacia abajo en una grilla responsive, sin carrusel lateral.
-- Estado: **✅ implementado y verificado localmente; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
 
 ## 17. ✅ [Ambos · Cuentas/Notificaciones] Aviso de usuario nuevo
 - Al crear un perfil desde PWM o PRB se genera una sola actividad compartida para todos los usuarios que ya existían.
 - El aviso dice **“¡[usuario] se ha unido!”**, no se envía al propio usuario nuevo y al tocarlo abre su perfil.
-- Estado: **✅ implementado y verificado sin crear cuentas reales; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
+
+## 18. ✅ [PRB · Perfil] Estructura de escritorio alineada con PWM
+- Se restauró la cabecera compacta con identidad, descripción y estadísticas dentro del mismo panel.
+- En PC, reseñas y libros rankeados ocupan la columna principal del 70%; calendario, gráficos y medallas quedan ordenados en una columna lateral del 30%.
+- Las tarjetas de estadísticas recuperaron jerarquía, espaciado, foco de teclado y animación al desplegarse.
+- En mobile, el perfil vuelve a una sola columna, las estadísticas se agrupan de a dos y los libros no generan desborde horizontal.
+- Estado: **✅ implementado y verificado localmente en PC y mobile; pendiente de aprobación de Lucas para publicar**.

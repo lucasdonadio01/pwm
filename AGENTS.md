@@ -33,7 +33,7 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-24 · Codex
-- New accounts now create one shared `user_joined` activity targeted at all pre-existing users, excluding the new account and guests.
-- PWM and PRB show “¡[usuario] se ha unido!” in notifications; opening it navigates to the new public profile.
-- Verified with an isolated in-memory store; no Supabase accounts or activity were created. Assets v21; PWM 1.10 / PRB 1.9.
-- Local branch also contains the previous unpushed mobile/profile batch. Waiting for Lucas approval before push.
+- Published the approved mobile/profile improvements and new-user notification batch through commit `5617642`.
+- Restored PRB profile CSS parity with PWM: compact identity/stats header, desktop 70/30 main/rail layout, structured expandable stats and single-column mobile layout.
+- Verified locally at 1280×720 and 390×844 with no horizontal overflow. Assets v22; PWM 1.10 / PRB 1.10.
+- PRB profile fix is committed locally and awaits Lucas approval before push.
