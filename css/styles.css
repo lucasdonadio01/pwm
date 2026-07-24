@@ -1001,6 +1001,7 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 .swiper__arrow--next { right: clamp(10px, 3vw, 40px); }
 .swiper__arrow .material-symbols-rounded { font-size: 32px; }
 .swiper__main { display: flex; align-items: center; gap: clamp(1.5rem, 4vw, 3rem); animation: overlayIn 0.3s var(--ease-out); }
+.swiper__card { display: flex; min-width: 0; flex-direction: column; align-items: center; }
 .swiper__poster { width: clamp(240px, 42vh, 360px); aspect-ratio: 2 / 3; border-radius: 18px; background-size: cover; background-position: center; border: 1px solid var(--hairline-2); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7); }
 .swiper__meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: center; margin-top: 1rem; max-width: clamp(240px, 42vh, 360px); }
 .swiper__t { width: 100%; text-align: center; font-weight: 900; font-size: 1.4rem; line-height: 1.05; letter-spacing: -0.02em; margin-top: 0.3rem; }

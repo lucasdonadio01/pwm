@@ -155,3 +155,8 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - El selector mantiene **Todos** como primera opción y después permite elegir cualquier usuario, incluso si todavía no tiene títulos.
 - Al salir y volver a entrar en Watchlist se recupera nuevamente la lista propia; el modo Invitado empieza en **Todos**.
 - Estado: **✅ implementado localmente; pendiente de aprobación de Lucas para publicar**.
+
+## 21. ✅ [PWM · Modo relámpago] Portadas centradas en mobile
+- Las portadas permanecen centradas aunque el título o los metadatos ocupen más ancho que la imagen.
+- La corrección aplica a todos los tamaños sin cambiar las dimensiones ni el recorte de la portada.
+- Estado: **✅ implementado localmente; pendiente de aprobación de Lucas para publicar**.

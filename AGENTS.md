@@ -33,6 +33,6 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
 ### 2026-07-24 · Codex
-- PRB profile parity, PWM personal calendars/profile stats and mobile profile previews remain committed locally in `8466cd6`, `de0bf2c` and `05a1738`, awaiting approval.
-- PWM Watchlist now defaults to the active user's list on route entry. The picker orders Todos first, then every account (including empty lists), and guests default to Todos.
-- Verified locally as Bian: default Bian, switch to Todos/Luke, leave and re-enter resets to Bian. No Supabase writes. Assets v25; PWM 1.13 / PRB 1.13. Current batch awaits Lucas approval before push.
+- Four prior corrections remain committed locally through `51e536a`, awaiting approval.
+- PWM Modo relámpago now centers its poster independently of title/meta width, fixing the left shift caused by long titles on mobile.
+- Verified across 12 short/long titles at 390×844 and at 320×568: poster/card center delta is 0 px, with no viewport overflow or Supabase writes. Assets v26; PWM 1.14 / PRB 1.14. Current batch awaits Lucas approval before push.
