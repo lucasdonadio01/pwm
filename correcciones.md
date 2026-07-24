@@ -97,7 +97,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Las reseñas propias muestran **Editar**. Recién al tocarlo aparecen puntaje, texto y los datos opcionales de fecha/lugar o lectura.
 - Las reseñas ajenas son de solo lectura y mantienen debajo las opiniones de los demás usuarios.
 - Los nombres de usuario visibles en reseñas, perfiles, tiers y calendario llevan al perfil público con sus estadísticas.
-- Estado: **✅ implementado y verificado localmente en PWM y PRB; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
 
 ## 14. ✅ [Ambos · Actividad/Calendario/Cuentas] Invitaciones dirigidas + notificaciones + GIF
 - Calendario: cada función permite elegir exactamente a quién invitar; una función también puede quedar sin invitados.
@@ -107,7 +107,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - En PRB, la vista enfocada de una reseña ajena muestra solamente esa reseña y el botón de like; la propia mantiene **Editar** y todos sus campos.
 - Las cuentas aceptan fotos recortables y GIF animados de hasta 1MB, visibles también en Perfil y “¿Quién sos?”.
 - Se eliminó de Supabase la cuenta de prueba `bob` y su única referencia de calendario, sin tocar la función ni datos ajenos.
-- Estado: **✅ implementado y verificado localmente; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
 
 ## 15. ✅ [Ambos · Perfil/Motion] Fondo personal + listas completas + transiciones
 - Perfil: fondo personalizable por usuario con color, contraste e imagen o GIF ultrawide; se puede aplicar solo a la portada o a toda la vista.
@@ -116,4 +116,4 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Últimas reseñas y mejores rankeadas permiten **Ver todas / Ver menos** sin abandonar el perfil. PRB conserva el mismo comportamiento para reseñas y libros rankeados.
 - Rutas, filtros y cambios lista/grilla ahora mantienen continuidad visual. Se usan View Transitions cuando están disponibles y Web Animations como respaldo, con soporte para `prefers-reduced-motion`.
 - Los overlays rutinarios ya no aparecen desde escalas exageradas y las estadísticas desplegables del perfil tienen una apertura breve y legible.
-- Estado: **✅ implementado y verificado localmente en PWM y PRB; pendiente de aprobación de Lucas para publicar**.
+- Estado: **✅ aprobado por Lucas y publicado en `main`**.
