@@ -1,8 +1,15 @@
 /* PRB — Project Read Books — app controller (vanilla) */
 (function () {
   'use strict';
-  const users = PRB.users;
   const store = PRB.store;
+  const K = window.APPKIT;
+  const users = {};
+  function refreshUsers() {
+    const merged = K.accounts.all(store, PRB.users);
+    Object.keys(users).forEach((k) => { if (!merged[k]) delete users[k]; });
+    Object.assign(users, merged);
+  }
+  refreshUsers();
   const books = PRB.books.slice();
   const root = document.documentElement;
 
@@ -22,8 +29,9 @@
 
   // avatars are shared with PWM (one level up)
   const PHOTOS = { bian: '../assets/bian.jpg', luke: '../assets/luke.jpg' };
+  const photoOf = (uid) => (users[uid] && users[uid].photo) || PHOTOS[uid] || null;
   function avatarHTML(u, cls = 'avatar') {
-    const p = PHOTOS[u.id];
+    const p = u.photo || photoOf(u.id);
     const img = p ? `<img class="avatar__img" src="${p}" alt="" onerror="this.remove()">` : '';
     return `<span class="${cls}" style="--c:${u.color}">${u.initial}${img}</span>`;
   }
@@ -40,7 +48,24 @@
   }
   const coverArt = art;
 
-  const currentUser = () => users[store.getUser()] || null;
+  const isGuest = () => store.getUser() === 'guest';
+  const currentUser = () => (isGuest() ? K.accounts.guest() : users[store.getUser()] || null);
+  function guestBlock(action = 'guardar cambios') {
+    if (!isGuest()) return false;
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-account-close></div><div class="confirm__card account-required">` +
+      `<span class="account-required__icon">${icon('lock_person')}</span><div class="confirm__title">Necesitás una cuenta</div>` +
+      `<p class="confirm__text">Para ${escapeHtml(action)} y sincronizarlo, creá tu perfil o iniciá sesión.</p>` +
+      `<ul class="account-required__benefits"><li>${icon('sync')} Tus cambios quedan guardados</li><li>${icon('group')} Podés compartir tiers y lecturas</li></ul>` +
+      `<div class="confirm__actions confirm__actions--stack"><button class="btn btn--accent" id="account-create">${icon('person_add')} Crear usuario</button>` +
+      `<button class="btn btn--soft" id="account-login">${icon('login')} Iniciar sesión</button><button class="linklike account-required__cancel" data-account-close>Cancelar</button></div></div>`;
+    el.querySelectorAll('[data-account-close]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#account-create').addEventListener('click', () => openSignup());
+    el.querySelector('#account-login').addEventListener('click', () => { el.hidden = true; store.setUser(null); showGate(); });
+    el.hidden = false;
+    return true;
+  }
   function applyAccent() { const u = currentUser(); root.style.setProperty('--accent', u ? u.color : 'var(--hot)'); }
 
   function starsMarkup(value, size = 'sm') {
@@ -54,6 +79,7 @@
 
   /* ============================================================= GATE */
   const gate = $('#gate');
+  function enterAs(id) { store.setUser(id); refreshUsers(); applyAccent(); gate.hidden = true; startApp(); }
   function showGate() {
     $('#site-header').hidden = true; $('#app').hidden = true;
     const wrap = $('#gate-profiles'); wrap.innerHTML = '';
@@ -61,10 +87,88 @@
       const btn = document.createElement('button');
       btn.className = 'profile'; btn.style.setProperty('--c', u.color);
       btn.innerHTML = avatarHTML(u, 'profile__avatar') + `<span class="profile__name">${u.name}</span><span class="profile__handle">@${u.handle}</span>`;
-      btn.addEventListener('click', () => { showPassword(u, () => { store.setUser(u.id); applyAccent(); gate.hidden = true; startApp(); }); });
+      btn.addEventListener('click', () => askPin(u, () => enterAs(u.id)));
       wrap.appendChild(btn);
     });
+    const guest = document.createElement('button');
+    guest.className = 'profile profile--alt';
+    guest.style.setProperty('--c', '#8A8A92');
+    guest.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:#8A8A92">${icon('visibility')}</span>` +
+      `<span class="profile__name">Invitado</span><span class="profile__handle">solo mirar</span>`;
+    guest.addEventListener('click', () => enterAs('guest'));
+    wrap.appendChild(guest);
+    const create = document.createElement('button');
+    create.className = 'profile profile--alt profile--new';
+    create.style.setProperty('--c', 'var(--lime)');
+    create.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:var(--lime)">${icon('person_add')}</span>` +
+      `<span class="profile__name">Crear usuario</span><span class="profile__handle">nuevo perfil</span>`;
+    create.addEventListener('click', () => openSignup());
+    wrap.appendChild(create);
     gate.hidden = false;
+  }
+
+  function askPin(u, onOk) {
+    K.pinPad({
+      avatar: avatarHTML(u, 'profile__avatar'), name: u.name, color: u.color,
+      label: K.accounts.hasPin(store, u.id) ? 'Ingresá tu contraseña' : 'Contraseña (por defecto 1234)',
+      async onDone(pin, ctl) {
+        if (await K.accounts.checkPin(store, u.id, pin)) { ctl.close(); onOk(); return; }
+        ctl.fail('Contraseña incorrecta');
+      },
+    });
+  }
+
+  const NEW_COLORS = ['#22D3EE', '#3D7BFF', '#2E7BFF', '#BBEF1F', '#7C5CFF', '#FF2E9A', '#3DDC97', '#F5C518'];
+  function openSignup(onDone) {
+    let photo = null;
+    let color = NEW_COLORS[Math.floor(Math.random() * NEW_COLORS.length)];
+    const el = $('#confirm');
+    const draw = () => {
+      el.innerHTML =
+        `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+        `<div class="confirm__title">Crear usuario</div>` +
+        `<div class="su-photo"><button class="su-photo__btn" id="su-pic" style="--c:${color}">` +
+        (photo ? `<img src="${photo}" alt="">` : icon('add_a_photo')) + `</button>` +
+        `<div class="su-photo__txt"><b>Foto de perfil</b><small>Elegí una foto y recortala. Se comparte con PWM.</small>` +
+        (photo ? `<button class="linklike" id="su-picoff">Sacar la foto</button>` : '') + `</div></div>` +
+        `<label class="tl-field"><span>Nombre</span><input id="su-name" type="text" maxlength="24" placeholder="Cómo te llamás" autocomplete="off"></label>` +
+        `<label class="tl-field"><span>Usuario de Letterboxd <small>(opcional)</small></span><input id="su-lb" type="text" maxlength="40" placeholder="tuusuario" autocomplete="off"></label>` +
+        `<p class="confirm__text confirm__text--tight">La cuenta, la foto y la contraseña sirven tanto en PRB como en PWM.</p>` +
+        `<div class="su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c === color ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div>` +
+        `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button>` +
+        `<button class="btn btn--accent" id="su-ok">${icon('arrow_forward')} Elegir contraseña</button></div></div>`;
+      el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+      el.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => { color = b.dataset.c; draw(); }));
+      el.querySelector('#su-pic').addEventListener('click', () => K.pickPhoto((data) => { photo = data; draw(); }));
+      const off = el.querySelector('#su-picoff'); if (off) off.addEventListener('click', () => { photo = null; draw(); });
+      el.querySelector('#su-ok').addEventListener('click', () => {
+        const name = el.querySelector('#su-name').value.trim();
+        const lb = el.querySelector('#su-lb').value.trim().replace(/^@/, '');
+        if (!name) { el.querySelector('#su-name').focus(); K.toast('Poné un nombre.', 'bad'); return; }
+        el.hidden = true;
+        choosePin(name, color, photo, async (pin) => {
+          const acc = await K.accounts.create(store, { name, color, lb, photo, pin });
+          refreshUsers();
+          K.toast(`¡Listo, ${K.esc(acc.name)}! Tu usuario ya está.`);
+          if (onDone) onDone(acc); else enterAs(acc.id);
+        }, () => { el.hidden = false; draw(); });
+      });
+      setTimeout(() => { const n = el.querySelector('#su-name'); if (n) n.focus(); }, 40);
+    };
+    draw();
+    el.hidden = false;
+  }
+  function choosePin(name, color, photo, onOk, onCancel) {
+    let first = null;
+    const av = `<span class="profile__avatar" style="--c:${color}">${(name || '?').charAt(0).toUpperCase()}${photo ? `<img class="avatar__img" src="${photo}" alt="">` : ''}</span>`;
+    K.pinPad({
+      avatar: av, name, color, label: 'Elegí una contraseña de 4 números', onCancel,
+      async onDone(pin, ctl) {
+        if (first == null) { first = pin; ctl.next('Repetila para confirmar'); return; }
+        if (pin !== first) { first = null; ctl.next('No coinciden — elegí una de nuevo'); return; }
+        ctl.close(); onOk(pin);
+      },
+    });
   }
 
   /* ---------- password gate (numeric keypad) ---------- */
@@ -120,14 +224,36 @@
       `<a class="logo" href="#home" aria-label="PRB — Project Read Books"><b>PRB</b><span class="dot">.</span></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}` +
       `<a class="nav__x" href="../index.html">${icon('movie')} Pelis</a></nav>` +
-      `<div class="header__right"><button class="user-chip" id="user-chip" title="Cambiar de usuario">` +
+      `<div class="header__right"><button class="user-chip" id="user-chip" title="Tu cuenta" aria-haspopup="true">` +
       `<span class="user-chip__name">${u ? u.name : ''}</span>` + (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
       `</button></div>`;
     header.querySelectorAll('[data-route]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setRoute(a.dataset.route); $('#nav', header).classList.remove('nav--open'); }));
     $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
     $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
-    $('#user-chip', header).addEventListener('click', openConfirm);
+    $('#user-chip', header).addEventListener('click', openUserMenu);
     header.hidden = false;
+  }
+  function openUserMenu() {
+    const u = currentUser();
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-cancel></div>` +
+      `<div class="usermenu"><div class="usermenu__head">${avatarHTML(u, 'avatar usermenu__av')}<div><b>${K.esc(u.name)}</b>` +
+      `<small>${u.guest ? 'modo invitado' : '@' + K.esc(u.handle || u.id)}</small></div></div>` +
+      (u.guest
+        ? `<button class="usermenu__item" data-act="signup">${icon('person_add')} Crear usuario</button>`
+        : `<button class="usermenu__item" data-act="perfil">${icon('person')} Perfil</button>` +
+          `<button class="usermenu__item" data-act="config">${icon('settings')} Configuraciones</button>`) +
+      `<button class="usermenu__item usermenu__item--danger" data-act="out">${icon('logout')} Cerrar sesión</button></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => {
+      const a = b.dataset.act; el.hidden = true;
+      if (a === 'perfil') setRoute('perfil');
+      else if (a === 'config') setRoute('config');
+      else if (a === 'signup') openSignup();
+      else if (a === 'out') { stopHero(); store.clearUser(); showGate(); }
+    }));
   }
   function onScroll() { $('#site-header').classList.toggle('header--solid', route !== 'home' || window.scrollY > 60); }
 
@@ -146,6 +272,8 @@
     if (route === 'leyendo') return renderLeyendo(app);
     if (route === 'leidos') return renderLeidos(app);
     if (route === 'tier') return renderTier(app);
+    if (route === 'perfil') return renderPerfil(app);
+    if (route === 'config') return renderConfig(app);
   }
 
   /* ---------- reading helpers ---------- */
@@ -284,19 +412,79 @@
   }
 
   /* ---------- Leídos ---------- */
+  let readOwner = 'all';
+  let readView = 'list';
+  function readByOwner() {
+    return books.filter((b) => {
+      const ids = readOwner === 'all' ? Object.keys(users) : [readOwner];
+      return ids.some((uid) => {
+        const v = verdictOf(b.id, uid);
+        const r = store.getReading(b.id, uid);
+        return v.rating != null || v.review || v.liked || r.status === 'read';
+      });
+    });
+  }
   function buildRead(title) {
     const s = document.createElement('section'); s.className = 'section';
-    const read = books.filter((b) => Object.values(users).some((u) => { const v = verdictOf(b.id, u.id); return v.rating != null || v.review || v.liked; }));
-    s.innerHTML = `<div class="section__head section__head--search"><div><h3 class="section__title"><span class="accentbar">/</span> ${title}</h3><p class="section__sub">Lo que leímos y puntuamos</p></div><button class="btn btn--soft" id="read-add">${icon('add_circle')} Agregar libro</button></div>`;
-    if (!read.length) { const e = document.createElement('div'); e.className = 'empty'; e.innerHTML = `${icon('menu_book')}<p>Todavía no puntuaron ningún libro.<br>Tocá <b>Agregar libro</b>, o abrí uno y tirale estrellas.</p>`; s.appendChild(e); }
-    else { const grid = document.createElement('div'); grid.className = 'grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))'; read.forEach((b) => grid.appendChild(readCard(b))); s.appendChild(grid); }
-    s.querySelector('#read-add').addEventListener('click', () => openAddBook((b) => { closeAddBook(); openSheet(b); }));
+    s.innerHTML =
+      `<div class="section__head section__head--search"><div><h3 class="section__title"><span class="accentbar">/</span> ${title}</h3>` +
+      `<p class="section__sub">Filtrá por lector y elegí lista o portadas</p></div>` +
+      `<div class="section__tools"><div class="viewtoggle" id="read-view" role="group" aria-label="Cómo verlo">` +
+      `<button class="vtbtn${readView === 'list' ? ' is-on' : ''}" data-rview="list" title="Lista">${icon('view_list')}</button>` +
+      `<button class="vtbtn${readView === 'grid' ? ' is-on' : ''}" data-rview="grid" title="Grilla">${icon('grid_view')}</button></div>` +
+      `<button class="btn btn--soft" id="read-add">${icon('add_circle')} Agregar libro</button></div></div>` +
+      `<div class="read-ownerbar" id="read-ownerbar"><button class="read-owner${readOwner === 'all' ? ' is-on' : ''}" data-owner="all">${icon('groups')} Todos</button>` +
+      Object.values(users).map((u) => `<button class="read-owner${readOwner === u.id ? ' is-on' : ''}" data-owner="${u.id}">${avatarHTML(u, 'avatar read-owner__av')}${escapeHtml(u.name)}</button>`).join('') +
+      `</div><div id="read-results"></div>`;
+    const fill = () => {
+      const wrap = s.querySelector('#read-results');
+      const read = readByOwner();
+      wrap.innerHTML = '';
+      if (!read.length) {
+        wrap.innerHTML = `<div class="empty">${icon('menu_book')}<p>No hay libros leídos con este filtro.<br>Abrí uno y marcá <b>Terminado</b> o puntuá con estrellas.</p></div>`;
+        return;
+      }
+      const grid = document.createElement('div');
+      grid.className = readView === 'grid' ? 'read-grid' : 'grid read-list';
+      if (readView === 'list') grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))';
+      read.forEach((b) => grid.appendChild(readView === 'grid' ? readGridCell(b) : readCard(b)));
+      wrap.appendChild(grid);
+    };
+    s.querySelector('#read-ownerbar').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-owner]'); if (!b) return;
+      readOwner = b.dataset.owner;
+      s.querySelectorAll('.read-owner').forEach((x) => x.classList.toggle('is-on', x.dataset.owner === readOwner));
+      fill();
+    });
+    s.querySelector('#read-view').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rview]'); if (!b) return;
+      readView = b.dataset.rview;
+      s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.rview === readView));
+      fill();
+    });
+    s.querySelector('#read-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => { closeAddBook(); openSheet(b); }); });
+    fill();
     return s;
+  }
+  function readGridCell(b) {
+    const card = document.createElement('button'); card.className = 'readcell';
+    const people = (readOwner === 'all' ? Object.values(users) : [users[readOwner]]).filter(Boolean);
+    const scores = people.map((u) => {
+      const v = verdictOf(b.id, u.id);
+      if (v.rating == null) return '';
+      return `<span class="readcell__score">${avatarHTML(u, 'avatar readcell__av')}<b>${v.rating.toFixed(1)}</b>${icon('star')}</span>`;
+    }).join('');
+    card.innerHTML =
+      `<span class="readcell__cover" style="background:${coverArt(b)}"></span>` +
+      `<span class="readcell__body"><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.author || '')}${b.year ? ` · ${b.year}` : ''}</small>` +
+      `<span class="readcell__scores">${scores || '<span class="readcell__done">Terminado</span>'}</span></span>`;
+    card.addEventListener('click', () => openSheet(b));
+    return card;
   }
   function readCard(b) {
     const card = document.createElement('article'); card.className = 'watched'; card.style.cursor = 'pointer';
     const verdicts = Object.values(users).map((u) => {
-      const e = verdictOf(b.id, u.id); const rated = typeof e.rating === 'number'; if (!(rated || e.review || e.liked)) return '';
+      const e = verdictOf(b.id, u.id); const rated = typeof e.rating === 'number'; const read = store.getReading(b.id, u.id).status === 'read'; if (!(rated || e.review || e.liked || read)) return '';
       const stars = rated ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`;
       const heart = e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '';
       const review = e.review ? `<p class="verdict__review">“${escapeHtml(e.review)}”</p>` : '';
@@ -349,6 +537,7 @@
     return cell;
   }
   function setPriority(id, newPos) {
+    if (guestBlock()) return;
     const cur = orderedBooks().map((b) => b.id); const from = cur.indexOf(id); if (from < 0) return;
     cur.splice(from, 1); const to = Math.max(0, Math.min(cur.length, (parseInt(newPos, 10) || 1) - 1)); cur.splice(to, 0, id);
     store.setOrder(cur); fillPlist();
@@ -370,7 +559,7 @@
     let dragEl = null;
     container.addEventListener('dragstart', (e) => { if (wlQuery.trim()) { e.preventDefault(); return; } const it = e.target.closest('.plitem'); if (!it) return; dragEl = it; it.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', it.dataset.id); } catch {} });
     container.addEventListener('dragover', (e) => { if (!dragEl) return; e.preventDefault(); const after = dragAfter(container, e.clientY); if (after == null) container.appendChild(dragEl); else container.insertBefore(dragEl, after); });
-    container.addEventListener('dragend', () => { if (!dragEl) return; dragEl.classList.remove('dragging'); dragEl.dataset.dragged = '1'; const el = dragEl; setTimeout(() => delete el.dataset.dragged, 60); dragEl = null; const rows = [...container.querySelectorAll('.plitem')]; store.setOrder(rows.map((n) => n.dataset.id)); rows.forEach((n, i) => { const inp = n.querySelector('.plitem__rankin'); if (inp) inp.value = i + 1; }); });
+    container.addEventListener('dragend', () => { if (!dragEl) return; dragEl.classList.remove('dragging'); dragEl.dataset.dragged = '1'; const el = dragEl; setTimeout(() => delete el.dataset.dragged, 60); dragEl = null; if (guestBlock()) return fillPlist(); const rows = [...container.querySelectorAll('.plitem')]; store.setOrder(rows.map((n) => n.dataset.id)); rows.forEach((n, i) => { const inp = n.querySelector('.plitem__rankin'); if (inp) inp.value = i + 1; }); });
   }
   function dragAfter(container, y) { const els = [...container.querySelectorAll('.plitem:not(.dragging)')]; return els.reduce((c, ch) => { const box = ch.getBoundingClientRect(); const off = y - box.top - box.height / 2; return off < 0 && off > c.offset ? { offset: off, element: ch } : c; }, { offset: -Infinity, element: null }).element; }
 
@@ -402,7 +591,7 @@
     }
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#ly-view').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; leyendoView = b.dataset.view; renderLeyendo(document.getElementById('app')); });
-    s.querySelector('#ly-add').addEventListener('click', () => openAddBook((b) => { closeAddBook(); openSheet(b); }));
+    s.querySelector('#ly-add').addEventListener('click', () => { if (!guestBlock()) openAddBook((b) => { closeAddBook(); openSheet(b); }); });
   }
   function readingCard(b) {
     const u = currentUser();
@@ -439,14 +628,15 @@
       const page = card.querySelector('[data-rc="page"]').value;
       const total = card.querySelector('[data-rc="pageTotal"]').value;
       const chap = card.querySelector('[data-rc="chapter"]').value.trim();
+      if (guestBlock()) return;
       store.setReading(b.id, u.id, { page: page === '' ? null : +page, pageTotal: total === '' ? null : +total, chapter: chap || null });
       const r2 = store.getReading(b.id, u.id);
       card.querySelector('.reading__fill').style.width = (readingPercent(r2) != null ? readingPercent(r2) : 0) + '%';
       card.querySelector('[data-rc-stat]').innerHTML = statLine(r2);
     };
     card.querySelectorAll('[data-rc]').forEach((i) => i.addEventListener('change', save));
-    const done = card.querySelector('[data-rc-done]'); if (done) done.addEventListener('click', () => { store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
-    const start = card.querySelector('[data-rc-start]'); if (start) start.addEventListener('click', () => { store.setReading(b.id, u.id, { status: 'reading', startedAt: store.getReading(b.id, u.id).startedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
+    const done = card.querySelector('[data-rc-done]'); if (done) done.addEventListener('click', () => { if (guestBlock()) return; store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
+    const start = card.querySelector('[data-rc-start]'); if (start) start.addEventListener('click', () => { if (guestBlock()) return; store.setReading(b.id, u.id, { status: 'reading', startedAt: store.getReading(b.id, u.id).startedAt || todayISO() }); renderLeyendo(document.getElementById('app')); });
     card.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => openSheet(b)));
     return card;
   }
@@ -477,27 +667,31 @@
   }
 
   /* ============================================================= TIER */
-  const TIERS = [
-    { id: 'prime', label: 'PRIME', sub: 'lo mejor', color: '#22D3EE' },
-    { id: 'buena', label: 'Muy bueno', sub: '', color: '#3D7BFF' },
-    { id: 'nifu', label: 'Buena', sub: '', color: '#8B7BFF' },
-    { id: 'meh', label: 'Ni fu ni fa', sub: 'del montón', color: '#B06BE0' },
-    { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF4D6D' },
+  const TIER_DEFAULTS = [
+    { id: 'prime', label: 'PRIME', sub: 'lo mejor' },
+    { id: 'buena', label: 'Muy bueno', sub: '' },
+    { id: 'nifu', label: 'Buena', sub: '' },
+    { id: 'meh', label: 'Ni fu ni fa', sub: 'del montón' },
+    { id: 'basura', label: 'Basura', sub: 'ni ahí' },
   ];
+  const TIER_RAMP = ['#22D3EE', '#3D7BFF', '#8B7BFF', '#B06BE0', '#FF4D6D'];
+  const rowsOf = (B) => K.tierRows(store, B.id, TIER_DEFAULTS, TIER_RAMP);
+  const rawRowsOf = (B) => store.getTierRows(B.id) || TIER_DEFAULTS.map((d) => ({ id: d.id, label: d.label, sub: d.sub || '', color: null }));
   /* ---------- tier boards (default per-user + custom/shared lists) ---------- */
   let tierBoardId = null;
   function currentBoards() {
     const me = currentUser();
     const others = Object.values(users).filter((x) => x.id !== me.id);
-    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, members: [me.id], name: 'Mi tier', editable: true }];
+    const list = [];
+    if (!me.guest) list.push({ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, members: [me.id], name: 'Mi tier', editable: true });
     others.forEach((o) => list.push({ id: 'def:' + o.id, type: 'default', kind: 'personal', owner: o.id, members: [o.id], name: 'Tier de ' + o.name, editable: false }));
     store.getTierlists().forEach((l) => {
       const members = l.kind === 'shared' ? (Array.isArray(l.members) && l.members.length ? l.members : Object.values(users).map((u) => u.id)) : [l.owner];
-      list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, members, name: l.name, editable: members.includes(me.id) });
+      list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, members, name: l.name, editable: !me.guest && members.includes(me.id) });
     });
     return list;
   }
-  function userThumb(uid) { const p = PHOTOS[uid]; return p ? `#060c18 url(${p}) center/cover` : ((users[uid] || {}).color || 'var(--surface-2)'); }
+  function userThumb(uid) { const p = photoOf(uid); return p ? `#060c18 url(${p}) center/cover` : ((users[uid] || {}).color || 'var(--surface-2)'); }
   function openTierOthers(app, others) {
     openPickSheet('Tier lists de otros', () => others.map((b) => ({
       thumb: userThumb(b.owner),
@@ -508,10 +702,17 @@
   }
   function boardGet(B, id) { return B.type === 'default' ? store.getTier(id, B.owner) : store.getListTier(B.id, id); }
   function boardSet(B, id, tier) { if (B.type === 'default') store.setTier(id, B.owner, tier); else store.setListTier(B.id, id, tier); }
+  function userHasRead(b, uid) {
+    const v = verdictOf(b.id, uid);
+    return v.rating != null || v.review || v.liked || store.getReading(b.id, uid).status === 'read';
+  }
   function boardEligible(B) {
     const placed = (b) => boardGet(B, b.id);
-    if (B.kind === 'shared') { const mem = B.members || Object.values(users).map((u) => u.id); return books.filter((b) => mem.some((uid) => verdictOf(b.id, uid).rating != null) || b.extra || placed(b)); }
-    return books.filter((b) => verdictOf(b.id, B.owner).rating != null || (B.type === 'default' && store.getTier(b.id, B.owner)) || b.extra || placed(b));
+    if (B.kind === 'shared') {
+      const mem = B.members || Object.values(users).map((u) => u.id);
+      return books.filter((b) => mem.some((uid) => userHasRead(b, uid)) || placed(b));
+    }
+    return books.filter((b) => userHasRead(b, B.owner) || placed(b));
   }
   const ownerName = (uid) => (users[uid] || {}).name || '';
   function renderTier(app) {
@@ -526,6 +727,7 @@
     const sub = B.type === 'default'
       ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
       : (B.kind === 'shared' ? `Tier <b>compartida</b> — la editan ${B.members.map(ownerName).join(' y ')}${B.editable ? '' : ' · vos solo mirás'}` : `Tier <b>personal</b> de ${ownerName(B.owner)}${B.editable ? '' : ' · solo lectura'}`);
+    const rows = rowsOf(B);
     s.innerHTML =
       `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
       `<div class="tier-switch" id="tier-switch">` +
@@ -533,24 +735,103 @@
       `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button>` +
       (others.length ? `<button class="tswitch tswitch--others${!B.editable ? ' is-on' : ''}" id="tier-others">${icon('visibility')} ${!B.editable ? escapeHtml(B.name) : 'Ver tier de otros'}</button>` : '') +
       `</div>` +
-      (B.type === 'custom' && B.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button></div>` : '') +
+      `<div class="tier-toolbar">` +
+      (B.editable ? `<button class="btn btn--soft btn--xs" id="tl-rows">${icon('table_rows')} Editar filas</button>` : '') +
+      (B.type === 'custom' && B.editable ? `<button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button>` : '') +
+      `<button class="btn btn--soft btn--xs tl-share" id="tl-share">${icon('ios_share')} Compartir</button></div>` +
       (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué libro poner; tocá uno puesto para moverlo.' : 'Arrastrá los libros al tier que merezcan (o tocá uno para moverlo).'}</p>` : '') +
-      `<div class="tier-board" id="tier-board">${TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('')}</div>` +
-      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${B.kind === 'shared' ? 'lo que leyó cualquiera de los dos' : (B.editable ? 'los que ya puntuaste o agregaste' : `los que ${ownerName(B.owner)} leyó`)}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
+      `<div class="tier-board" id="tier-board">${rows.map((t, i) =>
+        (i ? `<button class="tier-insert" data-tier-insert="${i}" aria-label="Agregar una fila entre ${escapeHtml(rows[i - 1].label)} y ${escapeHtml(t.label)}">${icon('add')}</button>` : '') +
+        `<div class="tier"><button class="tier__label${B.editable ? ' tier__label--editable' : ''}" data-tier-row="${escapeHtml(t.id)}" style="--c:${t.color}"${B.editable ? ` title="Editar nombre y color de ${escapeHtml(t.label)}"` : ' disabled'}><b>${escapeHtml(t.label)}</b>${t.sub ? `<small>${escapeHtml(t.sub)}</small>` : ''}</button><div class="tier__drop" data-tier="${escapeHtml(t.id)}"></div></div>`
+      ).join('')}</div>` +
+      `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${B.kind === 'shared' ? 'lo que leyó cualquiera de los miembros' : (B.editable ? 'solo los libros que leíste' : `solo lo que leyó ${ownerName(B.owner)}`)}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
       (B.editable ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar libro</button></div>` : '');
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#tier-switch').addEventListener('click', (e) => { const btn = e.target.closest('[data-board]'); if (!btn) return; tierBoardId = btn.dataset.board; renderTier(app); });
-    s.querySelector('#tier-new').addEventListener('click', () => openTierlistModal(app, null));
+    s.querySelector('#tier-new').addEventListener('click', () => { if (!guestBlock()) openTierlistModal(app, null); });
     const othersBtn = s.querySelector('#tier-others'); if (othersBtn) othersBtn.addEventListener('click', () => openTierOthers(app, others));
     const rn = s.querySelector('#tl-rename'); if (rn) rn.addEventListener('click', () => openTierlistModal(app, B));
     const dl = s.querySelector('#tl-del'); if (dl) dl.addEventListener('click', () => deleteTierlist(app, B));
-    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddBook(() => { closeAddBook(); fillTier(B); }));
+    const rw = s.querySelector('#tl-rows'); if (rw) rw.addEventListener('click', () => openRowsEditor(app, B));
+    if (B.editable) {
+      s.querySelectorAll('[data-tier-row]').forEach((label) => label.addEventListener('click', () => beginInlineTierEdit(app, B, label)));
+      s.querySelectorAll('[data-tier-insert]').forEach((btn) => btn.addEventListener('click', () => insertTierRow(app, B, +btn.dataset.tierInsert)));
+    }
+    s.querySelector('#tl-share').addEventListener('click', () => shareTier(B));
+    if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => { if (!guestBlock()) openAddBook(() => { closeAddBook(); fillTier(B); }); });
     if (B.editable && isTouch()) {
       s.querySelectorAll('.tier__drop').forEach((drop) => drop.addEventListener('click', (e) => { if (e.target.closest('.chip')) return; openTierPicker(drop.dataset.tier, B); }));
       s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip) openChipMenu(chip.dataset.id, B); });
     } else { s.addEventListener('click', (e) => { const chip = e.target.closest('.chip'); if (chip && !chip.classList.contains('dragging')) { const b = byId(chip.dataset.id); if (b) openSheet(b); } }); }
     fillTier(B);
     if (B.editable && !isTouch()) enableTierDnD(B);
+  }
+  function beginInlineTierEdit(app, B, label) {
+    if (label.classList.contains('is-editing') || guestBlock()) return;
+    const rows = rawRowsOf(B);
+    const i = rows.findIndex((r) => r.id === label.dataset.tierRow);
+    if (i < 0) return;
+    const row = rows[i];
+    const resolved = rowsOf(B).find((r) => r.id === row.id);
+    let color = row.color || (resolved && resolved.color) || TIER_RAMP[Math.min(i, TIER_RAMP.length - 1)];
+    let colorTouched = !!row.color;
+    label.classList.add('is-editing');
+    label.innerHTML =
+      `<input class="tier-inline__name" type="text" maxlength="28" value="${escapeHtml(row.label)}" aria-label="Nombre de la fila">` +
+      `<span class="tier-inline__tools"><label class="tier-inline__color" title="Color"><input type="color" value="${color}" aria-label="Color de la fila"><span style="--row-color:${color}"></span></label>` +
+      `<span class="tier-inline__done" role="button" tabindex="0" aria-label="Guardar">${icon('check')}</span></span>`;
+    const name = label.querySelector('.tier-inline__name');
+    const picker = label.querySelector('input[type="color"]');
+    const done = label.querySelector('.tier-inline__done');
+    const save = () => {
+      const next = name.value.trim();
+      if (!next) { name.focus(); return; }
+      rows[i] = { ...row, label: next, color: colorTouched ? color : row.color || null };
+      store.saveTierRows(B.id, rows); renderTier(app);
+    };
+    picker.addEventListener('input', () => { color = picker.value; colorTouched = true; label.style.setProperty('--c', color); label.querySelector('.tier-inline__color span').style.setProperty('--row-color', color); });
+    name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') { e.preventDefault(); renderTier(app); } });
+    done.addEventListener('click', (e) => { e.stopPropagation(); save(); });
+    done.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); save(); } });
+    setTimeout(() => { name.focus(); name.select(); }, 20);
+  }
+  function insertTierRow(app, B, index) {
+    if (guestBlock()) return;
+    const rows = rawRowsOf(B);
+    const id = 'row-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    rows.splice(index, 0, { id, label: 'Nueva fila', sub: '', color: null });
+    store.saveTierRows(B.id, rows); renderTier(app);
+    setTimeout(() => { const label = document.querySelector(`[data-tier-row="${id}"]`); if (label) beginInlineTierEdit(app, B, label); }, 30);
+  }
+  function openRowsEditor(app, B) {
+    if (guestBlock()) return;
+    K.openRowEditor({
+      host: $('#confirm'), boardName: B.name, ramp: TIER_RAMP,
+      rows: rawRowsOf(B).map((r) => ({ ...r, rawColor: r.color || null })),
+      onReset: () => { store.clearTierRows(B.id); renderTier(app); },
+      onSave: (rows, gone) => {
+        store.saveTierRows(B.id, rows);
+        if (gone.length) boardEligible(B).forEach((b) => { if (gone.includes(boardGet(B, b.id))) boardSet(B, b.id, null); });
+        renderTier(app);
+      },
+    });
+  }
+  function shareTier(B) {
+    const rows = rowsOf(B);
+    const me = currentUser();
+    const title = B.type === 'default' ? (B.editable ? `Tier de ${me.name}` : `Tier de ${ownerName(B.owner)}`) : B.name;
+    const subtitle = B.type === 'default' ? 'Ranking personal' : (B.kind === 'shared' ? `Compartida · ${B.members.map(ownerName).join(' y ')}` : `Personal · ${ownerName(B.owner)}`);
+    K.openShareBoard($('#confirm'), () => {
+      const byRow = {};
+      rows.forEach((r) => (byRow[r.id] = []));
+      boardEligible(B).forEach((b) => { const t = boardGet(B, b.id); if (t && byRow[t]) byRow[t].push({ title: b.title, img: b.cover || null }); });
+      return {
+        brand: 'PRB', title, subtitle,
+        bg: '#060c18', ink: '#eff8ff', accent: '#22D3EE',
+        rows: rows.map((r) => ({ label: r.label, color: r.color, items: byRow[r.id] })),
+        fileName: 'prb-' + title,
+      };
+    });
   }
   /* ---------- tier list create / rename / delete ---------- */
   function openTierlistModal(app, B) {
@@ -657,12 +938,12 @@
   function onAddBookKey(e) { if (e.key === 'Escape') closeAddBook(); }
   function closeAddBook() { const el = document.getElementById('addbook'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onAddBookKey); }
   function openTierPicker(tierId, B) {
-    const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
-    openPickSheet(`Poné en ${label}`, () => boardEligible(B).filter((b) => (boardGet(B, b.id) || null) !== tierId).map((b) => ({ thumb: coverArt(b), label: b.title, onClick: (render) => { boardSet(B, b.id, tierId); fillTier(B); render(); } })));
+    const label = (rowsOf(B).find((t) => t.id === tierId) || {}).label || '';
+    openPickSheet(`Poné en ${label}`, () => boardEligible(B).filter((b) => (boardGet(B, b.id) || null) !== tierId).map((b) => ({ thumb: coverArt(b), label: b.title, onClick: (render) => { if (guestBlock()) return; boardSet(B, b.id, tierId); fillTier(B); render(); } })));
   }
   function openChipMenu(id, B) {
     const b = byId(id); if (!b) return;
-    openPickSheet(b.title, () => { const cur = boardGet(B, id); return [...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { boardSet(B, id, t.id); fillTier(B); closePickSheet(); } })), { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { boardSet(B, id, null); fillTier(B); closePickSheet(); } }, { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(b); } }]; });
+    openPickSheet(b.title, () => { const cur = boardGet(B, id); return [...rowsOf(B).map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { if (guestBlock()) return; boardSet(B, id, t.id); fillTier(B); closePickSheet(); } })), { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { if (guestBlock()) return; boardSet(B, id, null); fillTier(B); closePickSheet(); } }, { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(b); } }]; });
   }
 
   /* ---------- reading block (used inside the sheet) ---------- */
@@ -697,6 +978,7 @@
   }
   function wireReadingBlock(scope, b, u) {
     scope.querySelectorAll('[data-rb-set]').forEach((btn) => btn.addEventListener('click', () => {
+      if (guestBlock()) return;
       const v = btn.dataset.rbSet;
       if (v === 'reading') store.setReading(b.id, u.id, { status: 'reading', startedAt: store.getReading(b.id, u.id).startedAt || todayISO() });
       else if (v === 'read') store.setReading(b.id, u.id, { status: 'read', finishedAt: store.getReading(b.id, u.id).finishedAt || todayISO() });
@@ -704,6 +986,7 @@
       openSheet(b); // re-render so buttons/labels reflect the new status
     }));
     scope.querySelectorAll('[data-rb]').forEach((inp) => inp.addEventListener('change', () => {
+      if (guestBlock()) return;
       const k = inp.dataset.rb;
       let val;
       if (k === 'page' || k === 'pageTotal') val = inp.value === '' ? null : +inp.value;
@@ -737,9 +1020,9 @@
       `</div></div>`;
     mountStars($('#rate-stars', sheet), b, u, me.rating);
     wireReadingBlock(sheet, b, u);
-    $('#rate-clear', sheet).addEventListener('click', () => { store.setRating(b.id, u.id, null); openSheet(b); });
-    $('#save-review', sheet).addEventListener('click', () => { store.setReview(b.id, u.id, $('#review', sheet).value.trim()); const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600); });
-    $('#review', sheet).addEventListener('blur', (e) => store.setReview(b.id, u.id, e.target.value.trim()));
+    $('#rate-clear', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setRating(b.id, u.id, null); openSheet(b); });
+    $('#save-review', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setReview(b.id, u.id, $('#review', sheet).value.trim()); const f = $('#saved-flag', sheet); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1600); });
+    $('#review', sheet).addEventListener('blur', (e) => { if (!isGuest()) store.setReview(b.id, u.id, e.target.value.trim()); });
     $('#sheet-like', sheet).addEventListener('click', (e) => toggleLike(b, e.currentTarget, true));
     sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
     sheet.hidden = false; document.body.style.overflow = 'hidden'; document.addEventListener('keydown', onSheetKey);
@@ -757,10 +1040,217 @@
     widget.addEventListener('pointerleave', () => setV(value));
     widget.addEventListener('pointerdown', (e) => { value = fromX(e.clientX); commit(); });
     widget.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { value = Math.min(5, value + 0.5); commit(); e.preventDefault(); } if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { value = Math.max(0, value - 0.5); commit(); e.preventDefault(); } });
-    function commit() { setV(value); store.setRating(b.id, u.id, value || null); const c = $('#rate-clear', sheet); if (c) c.hidden = !value; }
+    function commit() { if (guestBlock()) return setV(typeof initial === 'number' ? initial : 0); setV(value); store.setRating(b.id, u.id, value || null); const c = $('#rate-clear', sheet); if (c) c.hidden = !value; }
   }
 
-  function toggleLike(b, btn, relabel) { const u = currentUser(); store.toggleLike(b.id, u.id); const liked = store.get(b.id, u.id).liked; btn.classList.toggle('is-liked', liked); btn.classList.add('pop'); setTimeout(() => btn.classList.remove('pop'), 360); if (relabel) btn.innerHTML = `${icon('favorite')} ${liked ? 'Te gusta' : 'Me gusta'}`; }
+  function toggleLike(b, btn, relabel) { if (guestBlock()) return; const u = currentUser(); store.toggleLike(b.id, u.id); const liked = store.get(b.id, u.id).liked; btn.classList.toggle('is-liked', liked); btn.classList.add('pop'); setTimeout(() => btn.classList.remove('pop'), 360); if (relabel) btn.innerHTML = `${icon('favorite')} ${liked ? 'Te gusta' : 'Me gusta'}`; }
+
+  /* ============================================================= PERFIL */
+  const PROFILE_MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const PROFILE_WEEKDAYS = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
+  const profileISO = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  function readDate(b, uid) {
+    const r = store.getReading(b.id, uid);
+    if (r.finishedAt) return r.finishedAt;
+    const t = store.get(b.id, uid).updatedAt;
+    return t ? String(t).slice(0, 10) : null;
+  }
+  const isoWeek = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return `${t.getUTCFullYear()}-W${Math.ceil(((t - y0) / 86400000 + 1) / 7)}`;
+  };
+  function profileStats(uid) {
+    const read = books.filter((b) => userHasRead(b, uid));
+    const rated = books.filter((b) => verdictOf(b.id, uid).rating != null);
+    const reviews = books.filter((b) => (verdictOf(b.id, uid).review || '').trim());
+    const likes = books.filter((b) => verdictOf(b.id, uid).liked);
+    const reading = books.filter((b) => store.getReading(b.id, uid).status === 'reading');
+    const year = String(new Date().getFullYear());
+    const byDay = {}, byMonth = {}, byWeek = {};
+    read.forEach((b) => {
+      const d = readDate(b, uid); if (!d) return;
+      (byDay[d] = byDay[d] || []).push(b);
+      byMonth[d.slice(0, 7)] = (byMonth[d.slice(0, 7)] || 0) + 1;
+      const w = isoWeek(d); (byWeek[w] = byWeek[w] || new Set()).add(d);
+    });
+    const dist = {};
+    rated.forEach((b) => { const r = verdictOf(b.id, uid).rating; dist[r] = (dist[r] || 0) + 1; });
+    const genres = {};
+    read.forEach((b) => (b.genres || []).forEach((g) => (genres[g] = (genres[g] || 0) + 1)));
+    const sum = rated.reduce((a, b) => a + verdictOf(b.id, uid).rating, 0);
+    const rows = K.tierRows(store, 'def:' + uid, TIER_DEFAULTS, TIER_RAMP);
+    const placed = {};
+    books.forEach((b) => { const t = store.getTier(b.id, uid); if (t) placed[t] = (placed[t] || 0) + 1; });
+    return {
+      read: read.length, thisYear: read.filter((b) => (readDate(b, uid) || '').startsWith(year)).length,
+      reading: reading.length, reviews: reviews.length, likes: likes.length,
+      avg: rated.length ? sum / rated.length : 0,
+      byDay, byMonth, byWeek, dist, genres,
+      bestMonth: Math.max(0, ...Object.values(byMonth)),
+      bestWeek: Math.max(0, ...Object.values(byWeek).map((s) => s.size)),
+      topRow: placed[(rows[0] || {}).id] || 0,
+      tierFull: rows.length > 0 && rows.every((r) => placed[r.id]),
+      ratedList: rated, reviewList: reviews,
+    };
+  }
+  const BOOK_MEDALS = [
+    { icon: 'rate_review', name: 'Primera reseña', desc: 'Escribí una reseña', goal: 1, get: (s) => s.reviews },
+    { icon: 'menu_book', name: 'Lector', desc: '10 libros leídos', goal: 10, get: (s) => s.read },
+    { icon: 'auto_stories', name: 'Devoralibros', desc: '25 libros leídos', goal: 25, get: (s) => s.read },
+    { icon: 'workspace_premium', name: 'Biblioteca viva', desc: '100 libros leídos', goal: 100, get: (s) => s.read },
+    { icon: 'edit_note', name: 'Crítico', desc: '10 reseñas escritas', goal: 10, get: (s) => s.reviews },
+    { icon: 'favorite', name: 'Favoritos', desc: '25 me gusta', goal: 25, get: (s) => s.likes },
+    { icon: 'table_rows', name: 'Tier completa', desc: 'Un libro en cada fila', goal: 1, get: (s) => (s.tierFull ? 1 : 0) },
+    { icon: 'calendar_month', name: 'Mes intenso', desc: '5 libros en un mes', goal: 5, get: (s) => s.bestMonth },
+    { icon: 'bolt', name: 'Semana lectora', desc: '3 días de lectura en una semana', goal: 3, get: (s) => s.bestWeek },
+    { icon: 'star', name: 'Amante del PRIME', desc: '10 libros en la fila de arriba', goal: 10, get: (s) => s.topRow },
+  ];
+  function statTile(n, label, sub) { return `<div class="ptile"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`; }
+  function miniCalendar(byDay, color) {
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    const start = (new Date(y, m, 1).getDay() + 6) % 7;
+    const days = new Date(y, m + 1, 0).getDate();
+    let html = PROFILE_WEEKDAYS.map((w) => `<span class="pmc__h">${w[0]}</span>`).join('');
+    for (let i = 0; i < start; i++) html += `<span class="pmc__d pmc__d--out"></span>`;
+    for (let d = 1; d <= days; d++) {
+      const iso = profileISO(y, m, d), n = (byDay[iso] || []).length, today = d === now.getDate();
+      html += `<span class="pmc__d${n ? ' is-on' : ''}${today ? ' is-today' : ''}"${n ? ` style="--c:${color}" title="${n} el ${d}"` : ''}>${d}</span>`;
+    }
+    return `<div class="pmc"><div class="pmc__title">${PROFILE_MONTHS[m]} ${y}</div><div class="pmc__grid">${html}</div></div>`;
+  }
+  function yearStrip(byMonth, color) {
+    const out = [], now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      out.push({ label: PROFILE_MONTHS[d.getMonth()].slice(0, 3), n: byMonth[key] || 0 });
+    }
+    const max = Math.max(1, ...out.map((o) => o.n));
+    return `<div class="pbars">${out.map((o) => `<div class="pbar" title="${o.n} en ${o.label}"><span class="pbar__fill" style="height:${Math.round((o.n / max) * 100)}%;--c:${color}"></span><small>${o.label}</small></div>`).join('')}</div>`;
+  }
+  function distChart(dist, color) {
+    const steps = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+    const max = Math.max(1, ...steps.map((s) => dist[s] || 0));
+    return `<div class="pbars pbars--dist">${steps.map((s) => `<div class="pbar" title="${dist[s] || 0} con ${s}★"><span class="pbar__fill" style="height:${Math.round(((dist[s] || 0) / max) * 100)}%;--c:${color}"></span><small>${s}</small></div>`).join('')}</div>`;
+  }
+  function genreChart(genres, color) {
+    const top = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    if (!top.length) return `<p class="addfilm__hint">Todavía sin datos.</p>`;
+    const max = top[0][1];
+    return `<div class="prows">${top.map(([g, n]) => `<div class="prow"><span class="prow__l">${escapeHtml(g)}</span><span class="prow__t"><span class="prow__f" style="width:${Math.round((n / max) * 100)}%;--c:${color}"></span></span><b>${n}</b></div>`).join('')}</div>`;
+  }
+  function profileBookCard(b, uid) {
+    const v = verdictOf(b.id, uid);
+    const c = document.createElement('button'); c.className = 'pbook';
+    c.innerHTML = `<span class="pbook__cover" style="background:${coverArt(b)}"></span><span class="pbook__body"><b>${escapeHtml(b.title)}</b>` +
+      `<small>${escapeHtml(b.author || '')}</small>${v.rating != null ? `<span>${starsMarkup(v.rating, 'sm')} <b>${v.rating.toFixed(1)}</b></span>` : ''}</span>`;
+    c.addEventListener('click', () => openSheet(b));
+    return c;
+  }
+  function renderPerfil(app, uid) {
+    const me = currentUser();
+    if (me.guest) { store.clearUser(); return showGate(); }
+    const id = uid || me.id, u = users[id] || me, mine = id === me.id;
+    const s = profileStats(id), acc = store.getAccounts()[id] || {}, bio = acc.bio || '';
+    app.innerHTML = '';
+    const sec = document.createElement('section'); sec.className = 'section'; sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    sec.innerHTML =
+      `<div class="phero" style="--c:${u.color}"><button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'}>${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
+      `<div class="phero__body"><h2 class="phero__name">${escapeHtml(u.name)}</h2><p class="phero__handle">@${escapeHtml(u.lb || u.handle || u.id)}</p>` +
+      `<p class="phero__bio">${bio ? escapeHtml(bio) : (mine ? '<i>Sin descripción — podés agregar una.</i>' : '<i>Sin descripción.</i>')}</p>` +
+      (mine ? `<button class="linklike" id="p-editbio">${icon('edit')} Editar descripción</button>` : '') + `</div></div>` +
+      `<div class="ptiles">${statTile(s.read, 'libros leídos')}${statTile(s.thisYear, 'este año', String(new Date().getFullYear()))}${statTile(s.reading, 'leyendo ahora')}${statTile(s.reviews, 'reseñas')}${statTile(s.likes, 'me gusta')}${statTile(s.avg ? s.avg.toFixed(2) : '—', 'promedio', 'de 5')}</div>` +
+      `<div class="pgrid"><div class="pcard"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}</div>` +
+      `<div class="pcard"><h4>${icon('bar_chart')} Últimos 12 meses</h4>${yearStrip(s.byMonth, u.color)}</div>` +
+      `<div class="pcard"><h4>${icon('star')} Cómo puntuás</h4>${distChart(s.dist, u.color)}</div>` +
+      `<div class="pcard"><h4>${icon('category')} Tus géneros</h4>${genreChart(s.genres, u.color)}</div></div>` +
+      `<h3 class="section__title psub"><span class="accentbar">/</span> Medallas</h3>` +
+      `<div class="pmedals">${BOOK_MEDALS.map((md) => { const have = md.get(s), done = have >= md.goal, pct = Math.min(100, Math.round((have / md.goal) * 100)); return `<div class="pmedal${done ? ' is-done' : ''}" style="--c:${u.color}"><span class="pmedal__ic">${icon(md.icon)}</span><div class="pmedal__b"><b>${md.name}</b><small>${md.desc}</small><span class="pmedal__bar"><span style="width:${pct}%"></span></span><span class="pmedal__n">${Math.min(have, md.goal)} / ${md.goal}</span></div>${done ? `<span class="pmedal__check">${icon('check_circle')}</span>` : ''}</div>`; }).join('')}</div>` +
+      `<h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><div class="pgrid pgrid--wide" id="p-reviews"></div>` +
+      `<h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeados</h3><div class="profile-books" id="p-best"></div>`;
+    app.appendChild(sec); app.appendChild(buildFooter());
+    const revs = s.reviewList.map((b) => ({ b, t: Date.parse(store.get(b.id, id).updatedAt || 0) || 0 })).sort((a, b) => b.t - a.t).slice(0, 4);
+    const rw = sec.querySelector('#p-reviews');
+    if (!revs.length) rw.innerHTML = `<p class="addfilm__hint">Todavía sin reseñas.</p>`;
+    revs.forEach(({ b }) => {
+      const v = verdictOf(b.id, id), c = document.createElement('button'); c.className = 'prev';
+      c.innerHTML = `<span class="prev__poster" style="background:${coverArt(b)}"></span><span class="prev__b"><b>${escapeHtml(b.title)}</b><span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span><span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
+      c.addEventListener('click', () => openSheet(b)); rw.appendChild(c);
+    });
+    const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating).slice(0, 12);
+    const bw = sec.querySelector('#p-best');
+    if (!best.length) bw.innerHTML = `<p class="addfilm__hint">Puntuá un libro y aparece acá.</p>`;
+    best.forEach((b) => bw.appendChild(profileBookCard(b, id)));
+    if (mine) {
+      sec.querySelector('#p-photo').addEventListener('click', () => K.pickPhoto((data) => { K.accounts.patch(store, id, { photo: data }); refreshUsers(); renderHeader(); renderPerfil(app); K.toast('Foto actualizada ✓'); }));
+      sec.querySelector('#p-editbio').addEventListener('click', () => openBioEditor(app, id, bio));
+    }
+  }
+  function openBioEditor(app, id, bio) {
+    const el = $('#confirm');
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card"><div class="confirm__title">Tu descripción</div>` +
+      `<div class="review-field"><textarea id="bio-txt" maxlength="240" placeholder="Contá algo tuyo…">${escapeHtml(bio)}</textarea></div>` +
+      `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="bio-ok">${icon('check')} Guardar</button></div></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#bio-ok').addEventListener('click', () => { K.accounts.patch(store, id, { bio: el.querySelector('#bio-txt').value.trim() }); refreshUsers(); el.hidden = true; renderPerfil(app); });
+    setTimeout(() => el.querySelector('#bio-txt').focus(), 40);
+  }
+
+  /* ============================================================= CONFIGURACIONES */
+  function renderConfig(app) {
+    const me = currentUser();
+    if (me.guest) { store.clearUser(); return showGate(); }
+    const acc = store.getAccounts()[me.id] || {};
+    app.innerHTML = '';
+    const sec = document.createElement('section'); sec.className = 'section'; sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    sec.innerHTML =
+      `<div class="section__head"><div><h3 class="section__title">Configuraciones</h3><p class="section__sub">Tu cuenta — es la misma para <b>PRB</b> y <b>PWM</b>.</p></div></div>` +
+      `<div class="cfg">` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('account_circle')}<div><b>Foto de perfil</b><small>Se recorta y se comparte en las dos apps.</small></div></div><div class="cfg__r">${avatarHTML(me, 'avatar cfg__av')}<button class="btn btn--soft btn--xs" id="cfg-photo">${icon('photo_camera')} Cambiar</button>${acc.photo ? `<button class="btn btn--soft btn--xs" id="cfg-photo-off">${icon('delete')} Sacar</button>` : ''}</div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('badge')}<div><b>Nombre</b><small>Cómo te ven en la app.</small></div></div><div class="cfg__r"><input class="cfg__in" id="cfg-name" maxlength="24" value="${escapeHtml(me.name)}"></div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('palette')}<div><b>Tu color</b><small>Pinta tus puntajes y acentos.</small></div></div><div class="cfg__r su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c.toLowerCase() === String(me.color).toLowerCase() ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('link')}<div><b>Usuario de Letterboxd</b><small>Se usa en PWM para sincronizar tus películas.</small></div></div><div class="cfg__r"><input class="cfg__in" id="cfg-lb" maxlength="40" placeholder="tuusuario" value="${escapeHtml(acc.lb || me.lb || me.handle || '')}"></div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('lock')}<div><b>Contraseña</b><small>4 números. ${K.accounts.hasPin(store, me.id) ? 'Ya tenés una propia.' : 'Todavía usás la de fábrica (1234).'}</small></div></div><div class="cfg__r"><button class="btn btn--soft btn--xs" id="cfg-pin">${icon('key')} Cambiar contraseña</button></div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('logout')}<div><b>Cerrar sesión</b><small>Volvés a la pantalla de “¿Quién sos?”.</small></div></div><div class="cfg__r"><button class="btn btn--soft btn--xs cfg__danger" id="cfg-out">${icon('logout')} Cerrar sesión</button></div></div></div>` +
+      `<div class="cfg__actions"><button class="btn btn--accent" id="cfg-save">${icon('save')} Guardar cambios</button><span class="saved-flag" id="cfg-flag">guardado ✓</span></div>`;
+    app.appendChild(sec); app.appendChild(buildFooter());
+    let color = me.color;
+    sec.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => { color = b.dataset.c; sec.querySelectorAll('.su-color').forEach((x) => x.classList.toggle('is-on', x === b)); }));
+    sec.querySelector('#cfg-photo').addEventListener('click', () => K.pickPhoto((data) => { K.accounts.patch(store, me.id, { photo: data }); refreshUsers(); renderHeader(); renderConfig(app); K.toast('Foto actualizada ✓'); }));
+    const off = sec.querySelector('#cfg-photo-off'); if (off) off.addEventListener('click', () => { K.accounts.patch(store, me.id, { photo: null }); refreshUsers(); renderHeader(); renderConfig(app); });
+    sec.querySelector('#cfg-pin').addEventListener('click', () => changePin(me));
+    sec.querySelector('#cfg-out').addEventListener('click', () => { stopHero(); store.clearUser(); showGate(); });
+    sec.querySelector('#cfg-save').addEventListener('click', () => {
+      const name = sec.querySelector('#cfg-name').value.trim() || me.name;
+      const lb = sec.querySelector('#cfg-lb').value.trim().replace(/^@/, '');
+      K.accounts.patch(store, me.id, { name, color, lb, initial: name.charAt(0).toUpperCase() });
+      refreshUsers(); applyAccent(); renderHeader();
+      const flag = sec.querySelector('#cfg-flag'); flag.classList.add('show'); setTimeout(() => flag.classList.remove('show'), 1600);
+      renderConfig(app);
+    });
+  }
+  function changePin(u) {
+    const hasOwn = K.accounts.hasPin(store, u.id);
+    let stage = hasOwn ? 'old' : 'new', first = null;
+    K.pinPad({
+      avatar: avatarHTML(u, 'profile__avatar'), name: u.name, color: u.color,
+      label: hasOwn ? 'Contraseña actual' : 'Elegí tu nueva contraseña',
+      async onDone(pin, ctl) {
+        if (stage === 'old') {
+          if (!(await K.accounts.checkPin(store, u.id, pin))) return ctl.fail('Esa no es la actual');
+          stage = 'new'; return ctl.next('Nueva contraseña');
+        }
+        if (stage === 'new') { first = pin; stage = 'rep'; return ctl.next('Repetila'); }
+        if (pin !== first) { stage = 'new'; first = null; return ctl.next('No coinciden — probá de nuevo'); }
+        await K.accounts.setPin(store, u.id, pin); ctl.close(); K.toast('Contraseña cambiada ✓');
+        if (route === 'config') renderConfig($('#app'));
+      },
+    });
+  }
 
   /* ============================================================= CONFIRM */
   function openConfirm() {
@@ -784,9 +1274,22 @@
   (async () => {
     await store.init();
     mergeExtras();
+    refreshUsers();
     const uid = store.getUser();
-    if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
+    if (uid && (users[uid] || uid === 'guest')) { applyAccent(); startApp(); } else { showGate(); }
+    let painting = false;
+    store.onRemote(() => {
+      if (painting || !store.getUser() || !gate.hidden) return;
+      painting = true;
+      requestAnimationFrame(() => {
+        painting = false; mergeExtras(); refreshUsers();
+        const busy = !$('#sheet').hidden || $('#confirm').hidden === false || document.getElementById('picksheet')?.hidden === false || document.getElementById('addbook')?.hidden === false;
+        renderHeader();
+        if (!busy) renderRoute();
+      });
+    });
+    store.startLive();
     let refreshing = false;
-    window.addEventListener('focus', async () => { if (refreshing || !store.getUser()) return; refreshing = true; await store.refresh(); mergeExtras(); refreshing = false; if ($('#sheet').hidden) renderRoute(); });
+    window.addEventListener('focus', async () => { if (refreshing || !store.getUser()) return; refreshing = true; await store.refresh(); mergeExtras(); refreshUsers(); refreshing = false; if ($('#sheet').hidden) renderRoute(); });
   })();
 })();

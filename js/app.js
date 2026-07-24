@@ -1,9 +1,19 @@
 /* WatchMovies — app controller (vanilla, no build step) */
 (function () {
   'use strict';
-  const users = WM.users;
   const trending = WM.trending;
   const store = WM.store;
+  const K = window.APPKIT;
+
+  // Users = the built-ins from data.js merged with the accounts anyone created (shared with PRB).
+  // The object identity never changes, so every closure that captured `users` keeps working.
+  const users = {};
+  function refreshUsers() {
+    const merged = K.accounts.all(store, WM.users);
+    Object.keys(users).forEach((k) => { if (!merged[k]) delete users[k]; });
+    Object.assign(users, merged);
+  }
+  refreshUsers();
 
   // Watchlist films + any films the users added by hand (persisted locally, Supabase-ready).
   const movies = WM.movies.slice();
@@ -16,13 +26,24 @@
     const ex = store.getSetting('extra_films') || []; ex.push(f); store.setSetting('extra_films', ex);
     return true;
   }
-  // Watchlist = films that live on a Letterboxd watchlist (not the already-watched imports/extras).
-  const isWatchlist = (f) => ['bian', 'luke', 'both'].includes(f.owner);
+  // New pipeline builds keep every owner in `owners`; old data only has owner/both.
+  function ownersOf(f) {
+    if (Array.isArray(f.owners)) return f.owners.filter((id) => users[id]);
+    if (f.owner === 'both') return ['bian', 'luke'].filter((id) => users[id]);
+    return users[f.owner] ? [f.owner] : [];
+  }
+  // Watchlist = films that live on at least one Letterboxd/user watchlist.
+  const isWatchlist = (f) => ownersOf(f).length > 0;
   const watchlistFilms = () => movies.filter(isWatchlist);
 
   // Merge in-app verdicts (store) with the Letterboxd baseline (rating/like/review from WM.letterboxd).
   const lbData = () => WM.letterboxd || {};
   function lbVerdict(fid, uid) { const u = lbData()[uid]; return (u && u[fid]) || null; }
+  function watchMetaOf(fid, uid) {
+    const local = store.getWatchMeta(fid, uid);
+    const lb = lbVerdict(fid, uid);
+    return { ...local, date: local.date || (lb && lb.date) || null };
+  }
   function verdictOf(fid, uid) {
     const e = store.get(fid, uid);
     const lb = lbVerdict(fid, uid);
@@ -38,10 +59,12 @@
   const icon = (n) => `<span class="material-symbols-rounded">${n}</span>`;
   const byId = (id) => movies.find((m) => m.id === id) || trending.find((t) => t.id === id);
 
-  // Photo avatars: drop files at assets/<id>.jpg. If missing/broken, the initial letter shows.
+  // Photo avatars: the account's own photo wins; otherwise the file at assets/<id>.jpg.
+  // If both are missing (or the file 404s) the initial letter shows.
   const PHOTOS = { bian: 'assets/bian.jpg', luke: 'assets/luke.jpg' };
+  const photoOf = (uid) => (users[uid] && users[uid].photo) || PHOTOS[uid] || null;
   function avatarHTML(u, cls = 'avatar') {
-    const p = PHOTOS[u.id];
+    const p = u.photo || photoOf(u.id);
     const img = p ? `<img class="avatar__img" src="${p}" alt="" onerror="this.remove()">` : '';
     return `<span class="${cls}" style="--c:${u.color}">${u.initial}${img}</span>`;
   }
@@ -72,7 +95,27 @@
   const kindLabel = (k) => (k === 'series' ? 'Serie' : 'Película');
 
   /* ---------- active user ---------- */
-  const currentUser = () => users[store.getUser()] || null;
+  const isGuest = () => store.getUser() === 'guest';
+  const currentUser = () => (isGuest() ? K.accounts.guest() : users[store.getUser()] || null);
+  /** Guests can look at everything but write nothing. Returns true when the action must stop. */
+  function guestBlock(action = 'guardar cambios') {
+    if (!isGuest()) return false;
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-account-close></div><div class="confirm__card account-required">` +
+      `<span class="account-required__icon">${icon('lock_person')}</span>` +
+      `<div class="confirm__title">Necesitás una cuenta</div>` +
+      `<p class="confirm__text">Para ${escapeHtml(action)} y sincronizarlo con la otra persona, creá tu perfil o iniciá sesión.</p>` +
+      `<ul class="account-required__benefits"><li>${icon('sync')} Tus cambios quedan guardados</li><li>${icon('group')} Podés compartir tiers y calendarios</li></ul>` +
+      `<div class="confirm__actions confirm__actions--stack"><button class="btn btn--accent" id="account-create">${icon('person_add')} Crear usuario</button>` +
+      `<button class="btn btn--soft" id="account-login">${icon('login')} Iniciar sesión</button>` +
+      `<button class="linklike account-required__cancel" data-account-close>Cancelar</button></div></div>`;
+    el.querySelectorAll('[data-account-close]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelector('#account-create').addEventListener('click', () => openSignup());
+    el.querySelector('#account-login').addEventListener('click', () => { el.hidden = true; store.setUser(null); showGate(); });
+    el.hidden = false;
+    return true;
+  }
   function applyAccent() {
     const u = currentUser();
     root.style.setProperty('--accent', u ? u.color : 'var(--hot)');
@@ -92,6 +135,7 @@
 
   /* ============================================================= GATE */
   const gate = $('#gate');
+  function enterAs(id) { store.setUser(id); refreshUsers(); applyAccent(); gate.hidden = true; startApp(); }
   function showGate() {
     $('#site-header').hidden = true;
     $('#app').hidden = true;
@@ -105,55 +149,103 @@
         avatarHTML(u, 'profile__avatar') +
         `<span class="profile__name">${u.name}</span>` +
         `<span class="profile__handle">@${u.handle}</span>`;
-      btn.addEventListener('click', () => {
-        showPassword(u, () => { store.setUser(u.id); applyAccent(); gate.hidden = true; startApp(); });
-      });
+      btn.addEventListener('click', () => askPin(u, () => enterAs(u.id)));
       wrap.appendChild(btn);
     });
+    const guest = document.createElement('button');
+    guest.className = 'profile profile--alt';
+    guest.style.setProperty('--c', '#8A8A92');
+    guest.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:#8A8A92">${icon('visibility')}</span>` +
+      `<span class="profile__name">Invitado</span><span class="profile__handle">solo mirar</span>`;
+    guest.addEventListener('click', () => enterAs('guest'));
+    wrap.appendChild(guest);
+
+    const create = document.createElement('button');
+    create.className = 'profile profile--alt profile--new';
+    create.style.setProperty('--c', 'var(--lime)');
+    create.innerHTML = `<span class="profile__avatar profile__avatar--ic" style="--c:var(--lime)">${icon('person_add')}</span>` +
+      `<span class="profile__name">Crear usuario</span><span class="profile__handle">nuevo perfil</span>`;
+    create.addEventListener('click', () => openSignup());
+    wrap.appendChild(create);
+
     gate.hidden = false;
   }
 
-  /* ---------- password gate (numeric keypad) ---------- */
-  const PIN = '1234';
-  let passKeyHandler = null;
-  function showPassword(u, onOk) {
-    let el = document.getElementById('passgate');
-    if (!el) { el = document.createElement('div'); el.id = 'passgate'; el.className = 'passgate'; document.body.appendChild(el); }
-    el.style.setProperty('--c', u.color);
-    let entered = '';
-    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'ok'];
-    function draw(err) {
-      el.innerHTML =
-        `<button class="passgate__back" data-pgback aria-label="Volver">${icon('arrow_back')}</button>` +
-        `<div class="passgate__inner">` + avatarHTML(u, 'profile__avatar') +
-        `<div class="passgate__name" style="color:${u.color}">${u.name}</div>` +
-        `<div class="passgate__label">Ingresá la contraseña</div>` +
-        `<div class="passgate__dots${err ? ' shake' : ''}">${[0, 1, 2, 3].map((i) => `<span class="pdot${i < entered.length ? ' on' : ''}"></span>`).join('')}</div>` +
-        `<div class="passgate__keys">` + keys.map((k) => k === 'back' ? `<button class="pkey pkey--fn" data-k="back" aria-label="Borrar">${icon('backspace')}</button>` : k === 'ok' ? `<button class="pkey pkey--fn" data-k="ok" aria-label="Aceptar">${icon('check')}</button>` : `<button class="pkey" data-k="${k}">${k}</button>`).join('') + `</div>` +
-        `<div class="passgate__err"${err ? '' : ' style="visibility:hidden"'}>Contraseña incorrecta</div></div>`;
-      el.querySelector('[data-pgback]').addEventListener('click', closePassword);
-      el.querySelectorAll('.pkey').forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
-    }
-    function press(k) {
-      if (k === 'back') { entered = entered.slice(0, -1); return draw(); }
-      if (k === 'ok') return check();
-      if (entered.length >= 4) return;
-      entered += k; draw();
-      if (entered.length === 4) setTimeout(check, 180);
-    }
-    function check() { if (entered === PIN) { closePassword(); onOk(); } else { entered = ''; draw(true); } }
-    passKeyHandler = (e) => { if (/^[0-9]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('back'); else if (e.key === 'Enter') press('ok'); else if (e.key === 'Escape') closePassword(); };
-    document.addEventListener('keydown', passKeyHandler);
-    draw(); el.hidden = false;
+  /* ---------- password gate (numeric keypad, via APPKIT) ---------- */
+  function askPin(u, onOk) {
+    K.pinPad({
+      avatar: avatarHTML(u, 'profile__avatar'), name: u.name, color: u.color,
+      label: K.accounts.hasPin(store, u.id) ? 'Ingresá tu contraseña' : 'Contraseña (por defecto 1234)',
+      async onDone(pin, ctl) {
+        if (await K.accounts.checkPin(store, u.id, pin)) { ctl.close(); onOk(); return; }
+        ctl.fail('Contraseña incorrecta');
+      },
+    });
   }
-  function closePassword() { const el = document.getElementById('passgate'); if (el) { el.hidden = true; el.innerHTML = ''; } if (passKeyHandler) { document.removeEventListener('keydown', passKeyHandler); passKeyHandler = null; } }
+
+  /* ---------- create user ---------- */
+  const NEW_COLORS = ['#FF2E9A', '#FF2D2D', '#BBEF1F', '#22D3EE', '#7C5CFF', '#FF8A3D', '#3DDC97', '#F5C518'];
+  function openSignup(onDone) {
+    let photo = null;
+    let color = NEW_COLORS[Math.floor(Math.random() * NEW_COLORS.length)];
+    const el = $('#confirm');
+    const draw = () => {
+      el.innerHTML =
+        `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+        `<div class="confirm__title">Crear usuario</div>` +
+        `<div class="su-photo"><button class="su-photo__btn" id="su-pic" style="--c:${color}">` +
+        (photo ? `<img src="${photo}" alt="">` : icon('add_a_photo')) + `</button>` +
+        `<div class="su-photo__txt"><b>Foto de perfil</b><small>Elegí una de la galería (hasta 10MB) y recortala. Se guarda chiquita.</small>` +
+        (photo ? `<button class="linklike" id="su-picoff">Sacar la foto</button>` : '') + `</div></div>` +
+        `<label class="tl-field"><span>Nombre</span><input id="su-name" type="text" maxlength="24" placeholder="Cómo te llamás" autocomplete="off"></label>` +
+        `<label class="tl-field"><span>Usuario de Letterboxd <small>(opcional)</small></span><input id="su-lb" type="text" maxlength="40" placeholder="tuusuario" autocomplete="off"></label>` +
+        `<p class="confirm__text confirm__text--tight">Con eso importamos tus reseñas, likes, estrellas, watchlist y vistas en la próxima corrida del robot (máx. 24h).</p>` +
+        `<div class="su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c === color ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div>` +
+        `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button>` +
+        `<button class="btn btn--accent" id="su-ok">${icon('arrow_forward')} Elegir contraseña</button></div></div>`;
+      el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+      el.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => { color = b.dataset.c; draw(); }));
+      el.querySelector('#su-pic').addEventListener('click', () => K.pickPhoto((data) => { photo = data; draw(); }));
+      const off = el.querySelector('#su-picoff'); if (off) off.addEventListener('click', () => { photo = null; draw(); });
+      el.querySelector('#su-ok').addEventListener('click', () => {
+        const name = el.querySelector('#su-name').value.trim();
+        const lb = el.querySelector('#su-lb').value.trim().replace(/^@/, '');
+        if (!name) { el.querySelector('#su-name').focus(); K.toast('Poné un nombre.', 'bad'); return; }
+        el.hidden = true;
+        choosePin(name, color, photo, async (pin) => {
+          const acc = await K.accounts.create(store, { name, color, lb, photo, pin });
+          refreshUsers();
+          K.toast(`¡Listo, ${K.esc(acc.name)}! Tu usuario ya está.`);
+          if (onDone) onDone(acc); else enterAs(acc.id);
+        }, () => { el.hidden = false; draw(); });
+      });
+      setTimeout(() => { const n = el.querySelector('#su-name'); if (n) n.focus(); }, 40);
+    };
+    draw();
+    el.hidden = false;
+  }
+  /** Two-step "escribí la contraseña / repetila" on the same keypad. */
+  function choosePin(name, color, photo, onOk, onCancel) {
+    let first = null;
+    const av = `<span class="profile__avatar" style="--c:${color}">${(name || '?').charAt(0).toUpperCase()}${photo ? `<img class="avatar__img" src="${photo}" alt="">` : ''}</span>`;
+    K.pinPad({
+      avatar: av, name, color, label: 'Elegí una contraseña de 4 números',
+      onCancel,
+      async onDone(pin, ctl) {
+        if (first == null) { first = pin; ctl.next('Repetila para confirmar'); return; }
+        if (pin !== first) { first = null; ctl.next('No coinciden — elegí una de nuevo'); return; }
+        ctl.close();
+        onOk(pin);
+      },
+    });
+  }
 
   /* ============================================================= HEADER */
+  // Calendario ya vive en el ícono del header (al lado del ⚡), así que no ocupa lugar en el nav.
   const NAV = [
     { id: 'home', label: 'Home' },
     { id: 'watchlist', label: 'Watchlist' },
     { id: 'tier', label: 'Tier' },
-    { id: 'calendario', label: 'Calendario' },
     { id: 'movies', label: 'Movies' },
     { id: 'series', label: 'Series' },
   ];
@@ -162,14 +254,16 @@
   function renderHeader() {
     const u = currentUser();
     const header = $('#site-header');
+    const pend = pendingInvites().length;
     header.innerHTML =
       `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
       `<a class="logo" href="#home" aria-label="PWM — Project Watch Movies, inicio"><b>PWM</b><span class="dot">.</span></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}<a class="nav__x" href="prb/index.html">${icon('menu_book')} Libritos</a></nav>` +
       `<div class="header__right">` +
       `<button class="icon-btn hdr-bolt" id="hdr-bolt" title="Modo relámpago" aria-label="Modo relámpago">${icon('bolt')}</button>` +
-      `<button class="icon-btn hdr-cal" id="hdr-cal" title="Calendario" aria-label="Calendario">${icon('calendar_month')}</button>` +
-      `<button class="user-chip" id="user-chip" title="Cambiar de usuario">` +
+      `<button class="icon-btn hdr-cal" id="hdr-cal" title="Calendario" aria-label="Calendario${pend ? ` · ${pend} invitación(es) nueva(s)` : ''}">${icon('calendar_month')}` +
+      (pend ? `<span class="hdr-badge">+${pend}</span>` : '') + `</button>` +
+      `<button class="user-chip" id="user-chip" title="Tu cuenta" aria-haspopup="true">` +
       `<span class="user-chip__name">${u ? u.name : ''}</span>` +
       (u ? avatarHTML(u) : `<span class="avatar" style="--c:var(--hot)">?</span>`) +
       `</button></div>`;
@@ -180,9 +274,37 @@
     $('.logo', header).addEventListener('click', (e) => { e.preventDefault(); setRoute('home'); $('#nav', header).classList.remove('nav--open'); });
     $('#hamburger', header).addEventListener('click', () => $('#nav', header).classList.toggle('nav--open'));
     $('#hdr-bolt', header).addEventListener('click', openSwiper);
-    $('#hdr-cal', header).addEventListener('click', () => setRoute('calendario'));
-    $('#user-chip', header).addEventListener('click', openConfirm);
+    $('#hdr-cal', header).addEventListener('click', () => {
+      setRoute('calendario');
+      if (pendingInvites().length) setTimeout(openInviteOverlay, 80);
+    });
+    $('#user-chip', header).addEventListener('click', openUserMenu);
     header.hidden = false;
+  }
+
+  /* ---------- account menu (avatar) ---------- */
+  function openUserMenu() {
+    const u = currentUser();
+    const el = $('#confirm');
+    el.innerHTML =
+      `<div class="confirm__scrim" data-cancel></div>` +
+      `<div class="usermenu"><div class="usermenu__head">${avatarHTML(u, 'avatar usermenu__av')}<div><b>${K.esc(u.name)}</b>` +
+      `<small>${u.guest ? 'modo invitado' : '@' + K.esc(u.handle || u.id)}</small></div></div>` +
+      (u.guest
+        ? `<button class="usermenu__item" data-act="signup">${icon('person_add')} Crear usuario</button>`
+        : `<button class="usermenu__item" data-act="perfil">${icon('person')} Perfil</button>` +
+          `<button class="usermenu__item" data-act="config">${icon('settings')} Configuraciones</button>`) +
+      `<button class="usermenu__item usermenu__item--danger" data-act="out">${icon('logout')} Cerrar sesión</button></div>`;
+    el.hidden = false;
+    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
+    el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => {
+      const a = b.dataset.act;
+      el.hidden = true;
+      if (a === 'perfil') setRoute('perfil');
+      else if (a === 'config') setRoute('config');
+      else if (a === 'signup') openSignup();
+      else if (a === 'out') { stopHero(); store.clearUser(); showGate(); }
+    }));
   }
 
   function updateNavActive() {
@@ -211,6 +333,8 @@
     if (route === 'watchlist') return renderWatchlist(app);
     if (route === 'tier') return renderTier(app);
     if (route === 'calendario') return renderCalendario(app);
+    if (route === 'perfil') return renderPerfil(app);
+    if (route === 'config') return renderConfig(app);
     const cfg = {
       movies: { title: 'Movies', sub: 'Solo películas', list: watchlistFilms().filter((m) => m.kind === 'movie') },
       series: { title: 'Series', sub: 'Series de la watchlist + trending del momento', list: seriesList() },
@@ -386,8 +510,10 @@
       .filter(Boolean)
       .map((x, idx) => (idx === 0 ? `<span class="eyebrow" style="color:var(--lime)">${x}</span>` : `<span>${x}</span>`))
       .join('<span class="dot-sep">·</span>');
-    const ownerU = users[f.owner];
-    const ownerTag = ownerU ? `<span class="dot-sep">·</span><span style="color:${ownerU.color}">En la lista de ${ownerU.name}</span>` : '';
+    const ownerUs = ownersOf(f).map((id) => users[id]).filter(Boolean);
+    const ownerTag = ownerUs.length
+      ? `<span class="dot-sep">·</span><span style="color:${ownerUs[0].color}">En ${ownerUs.length > 1 ? 'las listas' : 'la lista'} de ${ownerUs.map((u) => u.name).join(' y ')}</span>`
+      : '';
     return (
       `<div class="hero__slide ${i === 0 ? 'is-active' : ''}" data-index="${i}">` +
       `<div class="hero__bg" style="background:${art(f)}"></div>` +
@@ -542,8 +668,10 @@
     app.appendChild(buildFooter());
   }
 
-  /* ---------- catalog (Movies / Series) with genre filters ---------- */
+  /* ---------- catalog (Movies / Series) with genre filters + discover ---------- */
   const catState = { movies: 'Todos', series: 'Todos' };
+  const catSource = { movies: 'watchlist', series: 'watchlist' };   // 'watchlist' | 'discover'
+  const catPage = { movies: 1, series: 1 };
   function renderCatalog(app, cfg, key) {
     app.innerHTML = '';
     const s = document.createElement('section');
@@ -555,23 +683,75 @@
     const hasAnime = cfg.list.some((f) => (f.genres || []).includes('Animación') && f.lang === 'ja');
     const chips = ['Todos', ...(hasAnime ? ['Anime'] : []), ...genres];
     if (!chips.includes(catState[key])) catState[key] = 'Todos';
+    const discovering = () => catSource[key] === 'discover';
     s.innerHTML =
-      `<div class="section__head"><div><h3 class="section__title">${cfg.title}</h3>` +
-      `<p class="section__sub">${cfg.sub} · ${cfg.list.length} títulos</p></div></div>` +
+      `<div class="section__head section__head--search"><div><h3 class="section__title">${cfg.title}</h3>` +
+      `<p class="section__sub" id="cat-sub">${cfg.sub} · ${cfg.list.length} títulos</p></div>` +
+      `<div class="section__tools"><div class="srctoggle" id="cat-src" role="group" aria-label="De dónde">` +
+      `<button class="srcbtn${!discovering() ? ' is-on' : ''}" data-src="watchlist">${icon('bookmark')} Watchlist</button>` +
+      `<button class="srcbtn${discovering() ? ' is-on' : ''}" data-src="discover">${icon('travel_explore')} Descubrir nuevos</button>` +
+      `</div></div></div>` +
       `<div class="genrebar" id="genrebar">${chips.map((g) => `<button class="genre${catState[key] === g ? ' is-on' : ''}" data-g="${escapeHtml(g)}">${g}</button>`).join('')}</div>` +
-      `<div class="grid" id="grid"></div>`;
+      `<div class="grid" id="grid"></div><div class="cat-more" id="cat-more" hidden></div>`;
     app.appendChild(s);
     app.appendChild(buildFooter());
     const grid = s.querySelector('#grid');
-    const fill = () => {
+    const sub = s.querySelector('#cat-sub');
+    const more = s.querySelector('#cat-more');
+
+    const fillLocal = () => {
+      more.hidden = true;
       grid.innerHTML = '';
       const g = catState[key];
       let list = cfg.list;
       if (g === 'Anime') list = cfg.list.filter((f) => (f.genres || []).includes('Animación') && f.lang === 'ja');
       else if (g !== 'Todos') list = cfg.list.filter((f) => (f.genres || []).includes(g));
+      sub.textContent = `${cfg.sub} · ${list.length} títulos`;
       if (!list.length) { grid.innerHTML = `<div class="empty">${icon('theaters')}<p>Nada en “${g}”.</p></div>`; return; }
       list.forEach((f) => grid.appendChild(posterCard(f)));
     };
+
+    let loading = false;
+    const fillDiscover = async (append) => {
+      if (loading) return;
+      if (!(WM.api && WM.api.available)) { grid.innerHTML = `<div class="empty">${icon('cloud_off')}<p>Descubrir necesita la API de TMDB.</p></div>`; return; }
+      loading = true;
+      if (!append) { catPage[key] = 1; grid.innerHTML = `<div class="empty">${icon('travel_explore')}<p>Buscando ${cfg.title.toLowerCase()} nuevas…</p></div>`; }
+      more.hidden = true;
+      try {
+        const list = await WM.api.discoverCatalog({ kind: key === 'series' ? 'series' : 'movie', genre: catState[key], page: catPage[key] });
+        // don't re-show what's already on the watchlist / already imported
+        const fresh = list.filter((f) => !movies.some((m) => m.id === f.id || (m.tmdb && m.tmdb === f.tmdb && m.kind === f.kind)));
+        if (!append) grid.innerHTML = '';
+        if (!fresh.length && !append) { grid.innerHTML = `<div class="empty">${icon('travel_explore')}<p>No encontré nada nuevo en “${catState[key]}”.</p></div>`; }
+        fresh.forEach((f) => grid.appendChild(posterCard(f)));
+        sub.textContent = `Títulos nuevos de TMDB${catState[key] !== 'Todos' ? ` · ${catState[key]}` : ''} · página ${catPage[key]}`;
+        more.hidden = false;
+        more.innerHTML = `<button class="btn btn--soft" id="cat-more-btn">${icon('expand_more')} Traer más</button>`;
+        more.querySelector('#cat-more-btn').addEventListener('click', () => { catPage[key]++; fillDiscover(true); });
+      } catch {
+        if (!append) grid.innerHTML = `<div class="empty">${icon('error')}<p>Error hablando con TMDB. Probá de nuevo.</p></div>`;
+      }
+      loading = false;
+    };
+
+    const fill = () => (discovering() ? fillDiscover(false) : fillLocal());
+    const swapSource = () => {
+      grid.classList.add('catalog-grid--out');
+      setTimeout(() => {
+        fill();
+        grid.classList.remove('catalog-grid--out');
+        grid.classList.add('catalog-grid--in');
+        setTimeout(() => grid.classList.remove('catalog-grid--in'), 420);
+      }, 150);
+    };
+    s.querySelector('#cat-src').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-src]'); if (!b) return;
+      if (b.dataset.src === catSource[key]) return;
+      catSource[key] = b.dataset.src;
+      s.querySelectorAll('.srcbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.src === catSource[key]));
+      swapSource();
+    });
     s.querySelector('#genrebar').addEventListener('click', (e) => {
       const b = e.target.closest('.genre'); if (!b) return;
       catState[key] = b.dataset.g;
@@ -589,6 +769,20 @@
 
   let wlQuery = '';
   let watchlistView = 'list';   // 'list' | 'grid'
+  let wlOwner = 'all';          // 'all' | <user id> — 'both' films always show
+  /** Who can own a watchlist entry: the users that actually appear as owners, in user order. */
+  function watchlistOwners() {
+    const present = new Set(watchlistFilms().flatMap(ownersOf));
+    return Object.values(users).filter((u) => present.has(u.id));
+  }
+  function ownerFilterHTML() {
+    const owners = watchlistOwners();
+    if (owners.length < 2) return '';
+    return `<div class="genrebar ownerbar" id="wl-owner">` +
+      `<button class="genre${wlOwner === 'all' ? ' is-on' : ''}" data-own="all">Todas</button>` +
+      owners.map((u) => `<button class="genre${wlOwner === u.id ? ' is-on' : ''}" data-own="${u.id}" style="--c:${u.color}">${escapeHtml(u.name)}</button>`).join('') +
+      `</div>`;
+  }
   function renderWatchlist(app) {
     app.innerHTML = '';
     const s = document.createElement('section');
@@ -604,6 +798,7 @@
       `<button class="vtbtn${watchlistView === 'grid' ? ' is-on' : ''}" data-view="grid" title="Grilla">${icon('grid_view')}</button></div>` +
       `<label class="search"><span class="material-symbols-rounded">search</span>` +
       `<input id="wl-search" type="search" placeholder="Buscar en la watchlist…" value="${escapeHtml(wlQuery)}"></label></div></div>` +
+      ownerFilterHTML() +
       `<p class="plist__hint" id="pl-hint"></p>` +
       `<div class="plist" id="plist"></div>`;
     app.appendChild(s);
@@ -611,10 +806,13 @@
     const input = s.querySelector('#wl-search');
     input.addEventListener('input', () => { wlQuery = input.value; fillPlist(); });
     s.querySelector('#view-toggle').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; watchlistView = b.dataset.view; s.querySelectorAll('.vtbtn').forEach((x) => x.classList.toggle('is-on', x.dataset.view === watchlistView)); fillPlist(); });
+    const ob = s.querySelector('#wl-owner');
+    if (ob) ob.addEventListener('click', (e) => { const b = e.target.closest('[data-own]'); if (!b) return; wlOwner = b.dataset.own; ob.querySelectorAll('.genre').forEach((x) => x.classList.toggle('is-on', x.dataset.own === wlOwner)); fillPlist(); });
     enableReorder(s.querySelector('#plist'));
     fillPlist();
   }
 
+  const wlFiltered = () => wlQuery.trim() !== '' || wlOwner !== 'all';
   function fillPlist() {
     const plist = document.getElementById('plist'); if (!plist) return;
     plist.innerHTML = '';
@@ -622,12 +820,19 @@
     const full = orderedWatchlist();
     const rankOf = new Map(full.map((f, i) => [f.id, i + 1]));
     const q = wlQuery.trim().toLowerCase();
-    const list = q ? full.filter((f) => f.title.toLowerCase().includes(q)) : full;
+    let list = q ? full.filter((f) => f.title.toLowerCase().includes(q)) : full;
+    if (wlOwner !== 'all') list = list.filter((f) => ownersOf(f).includes(wlOwner));
     plist.classList.toggle('plist--grid', watchlistView === 'grid');
     if (hint) hint.innerHTML = watchlistView === 'grid'
       ? `${icon('grid_view')} En orden de prioridad. Para reordenar, cambiá a vista lista.`
-      : `${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición. El orden lo comparten Bian & Luke.`;
-    if (!list.length) { plist.innerHTML = `<div class="empty">${icon('search_off')}<p>Nada con “${escapeHtml(wlQuery)}”.</p></div>`; return; }
+      : wlFiltered()
+        ? `${icon('filter_alt')} Filtrada — sacá el filtro para poder reordenar.`
+        : `${icon('drag_indicator')} Arrastrá para ordenar, o tocá el número y escribí la posición. El orden es compartido.`;
+    if (!list.length) {
+      const who = wlOwner !== 'all' ? ` de ${escapeHtml(ownerName(wlOwner))}` : '';
+      plist.innerHTML = `<div class="empty">${icon('search_off')}<p>Nada${q ? ` con “${escapeHtml(wlQuery)}”` : ''}${who}.</p></div>`;
+      return;
+    }
     if (watchlistView === 'grid') { list.forEach((f) => plist.appendChild(plGridCell(f, rankOf.get(f.id)))); return; }
     list.forEach((f) => plist.appendChild(plRow(f, rankOf.get(f.id), full.length)));
   }
@@ -640,6 +845,7 @@
   }
 
   function setPriority(filmId, newPos, total) {
+    if (guestBlock()) { fillPlist(); return; }
     const cur = orderedWatchlist().map((f) => f.id);
     const from = cur.indexOf(filmId); if (from < 0) return;
     cur.splice(from, 1);
@@ -650,9 +856,13 @@
   }
 
   function ownerBadge(f, cls) {
-    if (f.owner === 'both') return `<span class="${cls}" style="background:linear-gradient(135deg,var(--bian),var(--luke))" title="En las dos listas">✦</span>`;
-    const u = users[f.owner];
-    return u ? `<span class="${cls}" style="background:${u.color}" title="Lista de ${u.name}">${u.initial}</span>` : '';
+    const own = ownersOf(f).map((id) => users[id]).filter(Boolean);
+    if (own.length > 1) {
+      const a = own[0].color, b = (own[1] || own[0]).color;
+      return `<span class="${cls}" style="background:linear-gradient(135deg,${a},${b})" title="Listas de ${own.map((u) => escapeHtml(u.name)).join(' y ')}">✦</span>`;
+    }
+    const u = own[0];
+    return u ? `<span class="${cls}" style="background:${u.color}" title="Lista de ${escapeHtml(u.name)}">${u.initial}</span>` : '';
   }
 
   function plRow(f, rank, total) {
@@ -680,7 +890,7 @@
   function enableReorder(container) {
     let dragEl = null;
     container.addEventListener('dragstart', (e) => {
-      if (wlQuery.trim()) { e.preventDefault(); return; } // no reorder while filtering
+      if (wlFiltered() || isGuest()) { e.preventDefault(); return; } // no reorder while filtering (or as guest)
       const item = e.target.closest('.plitem'); if (!item) return;
       dragEl = item; item.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -713,14 +923,21 @@
     }, { offset: -Infinity, element: null }).element;
   }
 
-  /* ============================================================= TIER LIST */
-  const TIERS = [
-    { id: 'prime', label: 'PRIME', sub: 'lo mejor', color: '#BBEF1F' },
-    { id: 'buena', label: 'Muy buena', sub: '', color: '#8BE04A' },
-    { id: 'nifu', label: 'Buena', sub: '', color: '#F5C518' },
-    { id: 'meh', label: 'Ni fu ni fa', sub: 'del montón', color: '#FF8A3D' },
-    { id: 'basura', label: 'Basura', sub: 'ni ahí', color: '#FF2D2D' },
+  /* ============================================================= TIER LIST
+   * Rows are per-board config now (rename / add / remove / recolor), stored in settings.tierrows.
+   * A board with nothing saved falls back to these defaults, coloured by the lime→red ramp. */
+  const TIER_DEFAULTS = [
+    { id: 'prime', label: 'PRIME', sub: 'lo mejor' },
+    { id: 'buena', label: 'Muy buena', sub: '' },
+    { id: 'nifu', label: 'Buena', sub: '' },
+    { id: 'meh', label: 'Ni fu ni fa', sub: 'del montón' },
+    { id: 'basura', label: 'Basura', sub: 'ni ahí' },
   ];
+  const TIER_RAMP = ['#BBEF1F', '#8BE04A', '#F5C518', '#FF8A3D', '#FF2D2D'];
+  /** Resolved rows (colors filled in) for a board. */
+  const rowsOf = (B) => K.tierRows(store, B.id, TIER_DEFAULTS, TIER_RAMP);
+  /** Raw rows as saved (color:null = automatic) — what the editor needs. */
+  const rawRowsOf = (B) => store.getTierRows(B.id) || TIER_DEFAULTS.map((d) => ({ id: d.id, label: d.label, sub: d.sub || '', color: null }));
   let tierFilter = 'all';
   const TIER_FILTERS = [{ id: 'all', label: 'Todas' }, { id: 'r3', label: '3★ o más' }, { id: 'r4', label: '4★ o más' }, { id: 'likes', label: 'Solo ❤' }];
   function passesTierFilter(f, B) {
@@ -741,11 +958,13 @@
   function currentBoards() {
     const me = currentUser();
     const others = Object.values(users).filter((x) => x.id !== me.id);
-    const list = [{ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, members: [me.id], name: 'Mi tier', editable: true }];
+    const list = [];
+    // a guest has no board of their own — they get everyone else's, read-only
+    if (!me.guest) list.push({ id: 'def:' + me.id, type: 'default', kind: 'personal', owner: me.id, members: [me.id], name: 'Mi tier', editable: true });
     others.forEach((o) => list.push({ id: 'def:' + o.id, type: 'default', kind: 'personal', owner: o.id, members: [o.id], name: 'Tier de ' + o.name, editable: false }));
     store.getTierlists().forEach((l) => {
       const members = l.kind === 'shared' ? (Array.isArray(l.members) && l.members.length ? l.members : Object.values(users).map((u) => u.id)) : [l.owner];
-      list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, members, name: l.name, editable: members.includes(me.id) });
+      list.push({ id: l.id, type: 'custom', kind: l.kind, owner: l.owner || null, members, name: l.name, editable: !me.guest && members.includes(me.id) });
     });
     return list;
   }
@@ -780,6 +999,7 @@
     const sub = B.type === 'default'
       ? (B.editable ? `El ranking de <b style="color:${me.color}">vos (${me.name})</b>` : `Mirando el tier de <b style="color:${(users[B.owner] || {}).color}">${ownerName(B.owner)}</b> · solo lectura`)
       : (B.kind === 'shared' ? `Tier <b>compartida</b> — la editan ${B.members.map(ownerName).join(' y ')}${B.editable ? '' : ' · vos solo mirás'}` : `Tier <b>personal</b> de ${ownerName(B.owner)}${B.editable ? '' : ' · solo lectura'}`);
+    const rows = rowsOf(B);
     s.innerHTML =
       `<div class="section__head"><div><h3 class="section__title">Tier list</h3><p class="section__sub">${sub}</p></div></div>` +
       `<div class="tier-switch" id="tier-switch">` +
@@ -787,21 +1007,34 @@
       `<button class="tswitch tswitch--add" id="tier-new">${icon('add')} Nueva</button>` +
       (others.length ? `<button class="tswitch tswitch--others${!B.editable ? ' is-on' : ''}" id="tier-others">${icon('visibility')} ${!B.editable ? escapeHtml(B.name) : 'Ver tier de otros'}</button>` : '') +
       `</div>` +
-      (B.type === 'custom' && B.editable ? `<div class="tier-toolbar"><button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button></div>` : '') +
-      (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
-      `<div class="genrebar tier-filter" id="tier-filter">${TIER_FILTERS.map((f) => `<button class="genre${tierFilter === f.id ? ' is-on' : ''}" data-tf="${f.id}">${f.label}</button>`).join('')}</div>` +
-      `<div class="tier-board" id="tier-board">` +
-      TIERS.map((t) => `<div class="tier"><div class="tier__label" style="--c:${t.color}"><b>${t.label}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</div><div class="tier__drop" data-tier="${t.id}"></div></div>`).join('') +
+      `<div class="tier-toolbar">` +
+      (B.editable ? `<button class="btn btn--soft btn--xs" id="tl-rows">${icon('table_rows')} Editar filas</button>` : '') +
+      (B.type === 'custom' && B.editable ? `<button class="btn btn--soft btn--xs" id="tl-rename">${icon('edit')} Renombrar</button><button class="btn btn--soft btn--xs" id="tl-del">${icon('delete')} Borrar lista</button>` : '') +
+      `<button class="btn btn--soft btn--xs tl-share" id="tl-share">${icon('ios_share')} Compartir</button>` +
       `</div>` +
+      (B.editable ? `<p class="tier-hint">${icon('touch_app')} ${isTouch() ? 'Tocá un tier para elegir qué peli poner ahí; tocá una peli ya puesta para moverla.' : 'Arrastrá pósters al tier que merezcan (o tocá una peli para moverla).'}</p>` : '') +
+      `<div class="tier-board" id="tier-board">` +
+      rows.map((t, i) =>
+        (i ? `<button class="tier-insert" data-tier-insert="${i}" aria-label="Agregar una fila entre ${escapeHtml(rows[i - 1].label)} y ${escapeHtml(t.label)}">${icon('add')}</button>` : '') +
+        `<div class="tier"><button class="tier__label${B.editable ? ' tier__label--editable' : ''}" data-tier-row="${escapeHtml(t.id)}" style="--c:${t.color}"${B.editable ? ` title="Editar nombre y color de ${escapeHtml(t.label)}"` : ' disabled'}><b>${escapeHtml(t.label)}</b>${t.sub ? `<small>${escapeHtml(t.sub)}</small>` : ''}</button><div class="tier__drop" data-tier="${escapeHtml(t.id)}"></div></div>`
+      ).join('') +
+      `</div>` +
+      `<div class="genrebar tier-filter" id="tier-filter">${TIER_FILTERS.map((f) => `<button class="genre${tierFilter === f.id ? ' is-on' : ''}" data-tf="${f.id}">${f.label}</button>`).join('')}</div>` +
       `<div class="tier-pool"><div class="tier-pool__head">Sin ubicar <span class="tier-pool__note">— ${B.kind === 'shared' ? 'las que vio cualquiera de los dos' : (B.editable ? 'las que ya viste (Letterboxd o app) o agregaste' : `las que ${ownerName(B.owner)} vio`)}</span></div><div class="tier-pool__drop" id="tier-pool" data-tier=""></div></div>` +
       (B.editable ? `<div class="tier-add"><button class="btn btn--soft" id="tier-add-btn">${icon('add_circle')} Agregar peli</button></div>` : '');
     app.appendChild(s);
     app.appendChild(buildFooter());
     s.querySelector('#tier-switch').addEventListener('click', (e) => { const btn = e.target.closest('[data-board]'); if (!btn) return; tierBoardId = btn.dataset.board; renderTier(app); });
-    s.querySelector('#tier-new').addEventListener('click', () => openTierlistModal(app, null));
+    s.querySelector('#tier-new').addEventListener('click', () => { if (!guestBlock()) openTierlistModal(app, null); });
     const othersBtn = s.querySelector('#tier-others'); if (othersBtn) othersBtn.addEventListener('click', () => openTierOthers(app, others));
     const rn = s.querySelector('#tl-rename'); if (rn) rn.addEventListener('click', () => openTierlistModal(app, B));
     const dl = s.querySelector('#tl-del'); if (dl) dl.addEventListener('click', () => deleteTierlist(app, B));
+    const rw = s.querySelector('#tl-rows'); if (rw) rw.addEventListener('click', () => openRowsEditor(app, B));
+    if (B.editable) {
+      s.querySelectorAll('[data-tier-row]').forEach((label) => label.addEventListener('click', () => beginInlineTierEdit(app, B, label)));
+      s.querySelectorAll('[data-tier-insert]').forEach((btn) => btn.addEventListener('click', () => insertTierRow(app, B, +btn.dataset.tierInsert)));
+    }
+    s.querySelector('#tl-share').addEventListener('click', () => shareTier(B));
     s.querySelector('#tier-filter').addEventListener('click', (e) => { const b = e.target.closest('[data-tf]'); if (!b) return; tierFilter = b.dataset.tf; s.querySelectorAll('#tier-filter .genre').forEach((x) => x.classList.toggle('is-on', x.dataset.tf === tierFilter)); fillTier(B); });
     if (B.editable) s.querySelector('#tier-add-btn').addEventListener('click', () => openAddFilm(() => { closeAddFilm(); fillTier(B); }));
     if (B.editable && isTouch()) {
@@ -813,6 +1046,93 @@
     fillTier(B);
     if (B.editable && !isTouch()) enableTierDnD(B);
   }
+  function beginInlineTierEdit(app, B, label) {
+    if (label.classList.contains('is-editing') || guestBlock('editar esta fila')) return;
+    const rows = rawRowsOf(B);
+    const i = rows.findIndex((r) => r.id === label.dataset.tierRow);
+    if (i < 0) return;
+    const row = rows[i];
+    const resolved = rowsOf(B).find((r) => r.id === row.id);
+    let color = row.color || (resolved && resolved.color) || TIER_RAMP[Math.min(i, TIER_RAMP.length - 1)];
+    let colorTouched = !!row.color;
+    label.classList.add('is-editing');
+    label.innerHTML =
+      `<input class="tier-inline__name" type="text" maxlength="28" value="${escapeHtml(row.label)}" aria-label="Nombre de la fila">` +
+      `<span class="tier-inline__tools"><label class="tier-inline__color" title="Color"><input type="color" value="${color}" aria-label="Color de la fila"><span style="--row-color:${color}"></span></label>` +
+      `<span class="tier-inline__done" role="button" tabindex="0" aria-label="Guardar">${icon('check')}</span></span>`;
+    const name = label.querySelector('.tier-inline__name');
+    const picker = label.querySelector('input[type="color"]');
+    const done = label.querySelector('.tier-inline__done');
+    const save = () => {
+      const next = name.value.trim();
+      if (!next) { name.focus(); return; }
+      rows[i] = { ...row, label: next, color: colorTouched ? color : row.color || null };
+      store.saveTierRows(B.id, rows);
+      renderTier(app);
+    };
+    picker.addEventListener('input', () => {
+      color = picker.value; colorTouched = true; label.style.setProperty('--c', color);
+      label.querySelector('.tier-inline__color span').style.setProperty('--row-color', color);
+    });
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); renderTier(app); }
+    });
+    done.addEventListener('click', (e) => { e.stopPropagation(); save(); });
+    done.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); save(); } });
+    setTimeout(() => { name.focus(); name.select(); }, 20);
+  }
+  function insertTierRow(app, B, index) {
+    if (guestBlock('agregar una fila')) return;
+    const rows = rawRowsOf(B);
+    const id = 'row-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    rows.splice(index, 0, { id, label: 'Nueva fila', sub: '', color: null });
+    store.saveTierRows(B.id, rows);
+    renderTier(app);
+    setTimeout(() => {
+      const label = document.querySelector(`[data-tier-row="${id}"]`);
+      if (label) beginInlineTierEdit(app, B, label);
+    }, 30);
+  }
+  /* ---------- tier rows: rename / add / remove / recolor ---------- */
+  function openRowsEditor(app, B) {
+    if (guestBlock()) return;
+    K.openRowEditor({
+      host: $('#confirm'), boardName: B.name, ramp: TIER_RAMP,
+      rows: rawRowsOf(B).map((r) => ({ ...r, rawColor: r.color || null })),
+      onReset: () => { store.clearTierRows(B.id); renderTier(app); },
+      onSave: (rows, gone) => {
+        store.saveTierRows(B.id, rows);
+        // whatever lived in a row that no longer exists goes back to "Sin ubicar"
+        if (gone.length) boardEligible(B).forEach((f) => { if (gone.includes(boardGet(B, f.id))) boardSet(B, f.id, null); });
+        renderTier(app);
+      },
+    });
+  }
+
+  /* ---------- share the board as an image ---------- */
+  function shareTier(B) {
+    const rows = rowsOf(B);
+    const me = currentUser();
+    const title = B.type === 'default'
+      ? (B.editable ? `Tier de ${me.name}` : `Tier de ${ownerName(B.owner)}`)
+      : B.name;
+    const subtitle = B.type === 'default'
+      ? 'Ranking personal'
+      : (B.kind === 'shared' ? `Compartida · ${B.members.map(ownerName).join(' y ')}` : `Personal · ${ownerName(B.owner)}`);
+    K.openShareBoard($('#confirm'), () => {
+      const byRow = {};
+      rows.forEach((r) => (byRow[r.id] = []));
+      boardEligible(B).forEach((f) => { const t = boardGet(B, f.id); if (t && byRow[t]) byRow[t].push({ title: f.title, img: f.poster || null }); });
+      return {
+        brand: 'PWM', title, subtitle,
+        bg: '#0d0303', ink: '#eff8ff', accent: '#bbef1f',
+        rows: rows.map((r) => ({ label: r.label, color: r.color, items: byRow[r.id] })),
+        fileName: 'pwm-' + title,
+      };
+    });
+  }
+
   /* ---------- tier list create / rename / delete ---------- */
   function openTierlistModal(app, B) {
     const editing = !!B; const me = currentUser();
@@ -857,14 +1177,73 @@
   const isoDate = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   function currentCalendars() {
     const me = currentUser();
-    const list = [{ id: 'cal-main', type: 'default', name: 'Nuestro calendario', owner: me.id, members: Object.values(users).map((u) => u.id), editable: true }];
-    store.getCalendars().forEach((c) => { const members = Array.isArray(c.members) && c.members.length ? c.members : [c.owner]; list.push({ id: c.id, type: 'custom', name: c.name, owner: c.owner, members, editable: members.includes(me.id) }); });
+    const list = [{ id: 'cal-main', type: 'default', name: 'Nuestro calendario', owner: me.id, members: Object.values(users).map((u) => u.id), editable: !me.guest }];
+    store.getCalendars().forEach((c) => { const members = Array.isArray(c.members) && c.members.length ? c.members : [c.owner]; list.push({ id: c.id, type: 'custom', name: c.name, owner: c.owner, members, editable: !me.guest && members.includes(me.id) }); });
     return list;
+  }
+
+  /* ---------- how you're watching it ---------- */
+  const CAL_MODES = [
+    { v: 'imax', label: 'IMAX', icon: 'theaters' },
+    { v: 'cine', label: 'Cine', icon: 'local_movies' },
+    { v: 'casa', label: 'Casa', icon: 'home' },
+    { v: 'discord', label: 'Discord', icon: 'headset_mic', note: 'la vemos juntos online' },
+  ];
+  const modeOf = (v) => CAL_MODES.find((m) => m.v === v) || null;
+  const modeLabel = (ev) => { const m = modeOf(ev.mode); return m ? m.label : (ev.place || ''); };
+
+  /* ---------- invitations ----------
+   * Every event records who created it (`by`). For everyone else on that calendar it is an
+   * invitation until they accept or dismiss it — that's the +N on the header calendar icon. */
+  function eachEvent(fn) {
+    const cals = currentCalendars();
+    const all = store.allCalEvents();
+    cals.forEach((C) => {
+      const map = all[C.id] || {};
+      Object.keys(map).forEach((iso) => (map[iso] || []).forEach((ev) => fn(C, iso, ev)));
+    });
+  }
+  function pendingInvites() {
+    const u = currentUser();
+    if (!u || u.guest) return [];
+    const today = new Date().toISOString().slice(0, 10);
+    const out = [];
+    eachEvent((C, iso, ev) => {
+      if (!ev.by || ev.by === u.id) return;
+      if (!C.members.includes(u.id)) return;
+      if (iso < today) return;                                    // ya pasó, no molestamos
+      if ((ev.accepted || {})[u.id] || (ev.dismissed || {})[u.id]) return;
+      out.push({ C, iso, ev });
+    });
+    return out.sort((a, b) => (a.iso + (a.ev.time || '')).localeCompare(b.iso + (b.ev.time || '')));
+  }
+  /** "X aceptó la invitación" — for the person who created the event. */
+  function acceptNotices() {
+    const u = currentUser();
+    if (!u || u.guest) return [];
+    const out = [];
+    eachEvent((C, iso, ev) => {
+      if (ev.by !== u.id) return;
+      Object.keys(ev.accepted || {}).forEach((uid) => {
+        if (uid === u.id) return;
+        if ((ev.acceptSeen || {})[uid]) return;
+        out.push({ C, iso, ev, uid });
+      });
+    });
+    return out;
+  }
+  /** Patch one event in place and persist the calendar it belongs to. */
+  function patchEvent(calId, iso, evId, fn) {
+    const map = store.getCalEvents(calId);
+    const ev = (map[iso] || []).find((x) => x.id === evId);
+    if (!ev) return;
+    fn(ev);
+    store.saveCalEvents(calId, map);
   }
   function calEventsMap(calId) { return store.getCalEvents(calId); }
   function watchedByDate(members) {
     const map = {};
-    movies.forEach((f) => members.forEach((uid) => { const wm = store.getWatchMeta(f.id, uid); if (wm.date) (map[wm.date] = map[wm.date] || []).push({ film: f, uid }); }));
+    movies.forEach((f) => members.forEach((uid) => { const wm = watchMetaOf(f.id, uid); if (wm.date) (map[wm.date] = map[wm.date] || []).push({ film: f, uid }); }));
     return map;
   }
   const filmThumb = (f) => (f && f.poster ? `#0d0303 url(${f.poster}) center/cover` : posterArt(f || { id: 'x', title: '?' }));
@@ -893,7 +1272,7 @@
       `<div class="cal-legend">${icon('theaters')} función planeada · ${icon('event_available')} ya la vieron (según la fecha de la reseña)</div>`;
     app.appendChild(s); app.appendChild(buildFooter());
     s.querySelector('#cal-switch').addEventListener('click', (e) => { const b = e.target.closest('[data-cal]'); if (!b) return; calBoardId = b.dataset.cal; renderCalendario(app); });
-    s.querySelector('#cal-new').addEventListener('click', () => openCalendarModal(app, null));
+    s.querySelector('#cal-new').addEventListener('click', () => { if (!guestBlock()) openCalendarModal(app, null); });
     const co = s.querySelector('#cal-others'); if (co) co.addEventListener('click', () => openCalOthers(app, others));
     const ce = s.querySelector('#cal-edit'); if (ce) ce.addEventListener('click', () => openCalendarModal(app, C));
     const cd = s.querySelector('#cal-del'); if (cd) cd.addEventListener('click', () => deleteCalendar(app, C));
@@ -901,7 +1280,107 @@
     s.querySelector('#cal-next').addEventListener('click', () => { calCursor.m++; if (calCursor.m > 11) { calCursor.m = 0; calCursor.y++; } renderCalGrid(C); });
     s.querySelector('#cal-today').addEventListener('click', () => { const n = new Date(); calCursor = { y: n.getFullYear(), m: n.getMonth() }; renderCalGrid(C); });
     renderCalGrid(C);
+    renderAcceptNotices();
+    // don't pop the invitation on top of a form the user just opened
+    if (pendingInvites().length) setTimeout(() => { if ($('#confirm').hidden !== false) openInviteOverlay(); }, 260);
   }
+
+  function calendarNotificationHost() {
+    let host = document.getElementById('calendar-notifications');
+    if (!host) {
+      host = document.createElement('aside');
+      host.id = 'calendar-notifications';
+      host.className = 'calendar-notifications';
+      host.setAttribute('aria-live', 'polite');
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+  function showCalendarToast(title, detail, tone = '') {
+    const host = calendarNotificationHost();
+    const note = document.createElement('div');
+    note.className = `calnotify calnotify--toast${tone ? ` calnotify--${tone}` : ''}`;
+    note.innerHTML = `<span class="calnotify__icon">${icon(tone === 'success' ? 'mark_email_read' : 'notifications')}</span><div class="calnotify__copy"><b>${escapeHtml(title)}</b>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</div><button class="icon-btn calnotify__close" aria-label="Cerrar">${icon('close')}</button>`;
+    host.appendChild(note);
+    const close = () => { note.classList.add('is-leaving'); setTimeout(() => note.remove(), 180); };
+    note.querySelector('.calnotify__close').addEventListener('click', close);
+    setTimeout(close, 4800);
+  }
+
+  /** "Fulano aceptó la invitación a la premier" — compact notices below the header. */
+  function renderAcceptNotices() {
+    const host = calendarNotificationHost();
+    let wrap = document.getElementById('cal-accept-notices');
+    const list = acceptNotices();
+    if (!list.length) { if (wrap) wrap.remove(); return; }
+    if (!wrap) { wrap = document.createElement('div'); wrap.id = 'cal-accept-notices'; wrap.className = 'calnotify-group'; host.appendChild(wrap); }
+    wrap.innerHTML = list.map((n, i) => {
+      const f = byId(n.ev.filmId) || { title: '?' };
+      const who = users[n.uid] || { name: n.uid, color: 'var(--accent)' };
+      return `<div class="calnotify calnotify--accepted" data-note="${i}" style="--c:${who.color}">` +
+        `<span class="calnotify__icon">${icon('celebration')}</span>` +
+        `<div class="calnotify__copy"><b>${escapeHtml(who.name)} aceptó la invitación</b><small>${escapeHtml(f.title)} · ${fmtDay(n.iso)}${n.ev.time ? ' · ' + n.ev.time : ''}</small></div>` +
+        `<button class="icon-btn calnotify__close" data-dismiss="${i}" aria-label="Descartar">${icon('close')}</button></div>`;
+    }).join('');
+    wrap.querySelectorAll('[data-dismiss]').forEach((b) => b.addEventListener('click', () => {
+      const n = list[+b.dataset.dismiss];
+      patchEvent(n.C.id, n.iso, n.ev.id, (e) => { e.acceptSeen = e.acceptSeen || {}; e.acceptSeen[n.uid] = true; });
+      renderAcceptNotices();
+    }));
+  }
+
+  /** The invitation itself: poster, when, how, and Aceptar / Descartar. */
+  function openInviteOverlay() {
+    const list = pendingInvites();
+    if (!list.length) return;
+    let i = 0;
+    const host = calendarNotificationHost();
+    let el = document.getElementById('invite');
+    if (!el) { el = document.createElement('div'); el.id = 'invite'; el.className = 'calnotify calnotify--invite'; host.prepend(el); }
+    const done = () => {
+      el.remove();
+      renderHeader();
+      if (route === 'calendario') { const C = currentCalendars().find((c) => c.id === calBoardId) || currentCalendars()[0]; renderCalGrid(C); renderAcceptNotices(); }
+    };
+    const draw = () => {
+      const n = list[i];
+      if (!n) return done();
+      const f = byId(n.ev.filmId) || { title: '?', id: n.ev.filmId };
+      const from = users[n.ev.by] || { name: 'alguien', color: 'var(--accent)' };
+      const m = modeOf(n.ev.mode);
+      el.style.setProperty('--c', from.color);
+      el.innerHTML =
+        `<div class="invite__head"><span class="calnotify__icon">${icon('confirmation_number')}</span><div class="calnotify__copy"><b>Invitación de ${escapeHtml(from.name)}</b><small>Te invitó a ver una función</small></div>` +
+        `<button class="icon-btn calnotify__close" data-inv-close aria-label="Cerrar">${icon('close')}</button></div>` +
+        `<div class="invite__film"><span class="invite__poster" style="background:${posterArt(f)}"></span>` +
+        `<div class="invite__meta"><b>${escapeHtml(f.title)}</b>` +
+        `<small>${icon('event')} ${fmtDay(n.iso)}${n.ev.time ? ` · ${n.ev.time}` : ''}</small>` +
+        `<small>${icon(m ? m.icon : 'place')} ${escapeHtml(m ? m.label : (n.ev.place || 'A definir'))}</small>` +
+        `</div></div>` +
+        `<div class="invite__actions">` +
+        `<button class="btn btn--soft" data-inv-no>${icon('close')} Ahora no</button>` +
+        `<button class="btn btn--accent" data-inv-yes>${icon('check_circle')} ¡Voy!</button></div>` +
+        `<button class="linklike invite__calendar" data-inv-calendar>${icon('calendar_month')} Abrir calendario</button>` +
+        (list.length > 1 ? `<p class="invite__count">${i + 1} de ${list.length}</p>` : '') +
+        ``;
+      el.querySelector('[data-inv-close]').addEventListener('click', () => el.remove());
+      el.querySelector('[data-inv-calendar]').addEventListener('click', () => setRoute('calendario'));
+      el.querySelector('[data-inv-yes]').addEventListener('click', () => {
+        const u = currentUser();
+        patchEvent(n.C.id, n.iso, n.ev.id, (e) => { e.accepted = e.accepted || {}; e.accepted[u.id] = new Date().toISOString(); });
+        showCalendarToast('¡Anotado!', `Le avisamos a ${users[n.ev.by] ? users[n.ev.by].name : 'quien te invitó'}.`, 'success');
+        i++; draw();
+      });
+      el.querySelector('[data-inv-no]').addEventListener('click', () => {
+        const u = currentUser();
+        patchEvent(n.C.id, n.iso, n.ev.id, (e) => { e.dismissed = e.dismissed || {}; e.dismissed[u.id] = true; });
+        i++; draw();
+      });
+    };
+    draw();
+    el.hidden = false;
+  }
+
   function renderCalGrid(C) {
     const grid = document.getElementById('calgrid'); if (!grid) return;
     const titleEl = document.querySelector('.calbar__title'); if (titleEl) titleEl.textContent = `${MONTHS[calCursor.m]} ${calCursor.y}`;
@@ -916,12 +1395,16 @@
       const iso = isoDate(calCursor.y, calCursor.m, d);
       const evs = events[iso] || [];
       const wat = watched[iso] || [];
-      const thumbs = evs.slice(0, 3).map((e) => { const f = byId(e.filmId) || { id: e.filmId, title: '?' }; return `<span class="calthumb" title="${escapeHtml(f.title)}${e.time ? ' · ' + e.time : ''}" style="background:${filmThumb(f)}"></span>`; }).join('');
-      const watMarks = wat.slice(0, 3).map((w) => avatarHTML(users[w.uid], 'avatar calwatch__av')).join('');
-      const extra = (evs.length + wat.length) - (evs.slice(0, 3).length + wat.slice(0, 3).length);
-      html += `<button class="calcell${iso === todayIso ? ' is-today' : ''}${evs.length ? ' has-ev' : ''}" data-day="${iso}">` +
+      // the planned screening takes over the whole cell as a wide backdrop
+      const lead = evs[0] ? (byId(evs[0].filmId) || null) : null;
+      const bg = lead && (lead.backdrop || lead.poster) ? `#0d0303 url(${lead.backdrop || lead.poster}) center/cover` : '';
+      const watMarks = wat.slice(0, 3).map((w) => avatarHTML(users[w.uid] || { id: w.uid, color: '#666', initial: '?' }, 'avatar calwatch__av')).join('');
+      const extra = (evs.length - 1) + Math.max(0, wat.length - 3);
+      html += `<button class="calcell${iso === todayIso ? ' is-today' : ''}${evs.length ? ' has-ev' : ''}${bg ? ' has-art' : ''}" data-day="${iso}"` +
+        (bg ? ` style="background:${bg}"` : '') + `>` +
+        (bg ? `<span class="calcell__scrim"></span>` : '') +
         `<span class="calcell__d">${d}</span>` +
-        (thumbs ? `<span class="calcell__thumbs">${thumbs}</span>` : '') +
+        (lead ? `<span class="calcell__ev"><b>${escapeHtml(lead.title)}</b>${evs[0].time ? `<small>${escapeHtml(evs[0].time)}${modeLabel(evs[0]) ? ' · ' + escapeHtml(modeLabel(evs[0])) : ''}</small>` : (modeLabel(evs[0]) ? `<small>${escapeHtml(modeLabel(evs[0]))}</small>` : '')}</span>` : '') +
         ((watMarks || extra > 0) ? `<span class="calcell__watch">${watMarks}${extra > 0 ? `<span class="calmore">+${extra}</span>` : ''}</span>` : '') +
         `</button>`;
     }
@@ -929,6 +1412,12 @@
     grid.querySelectorAll('[data-day]').forEach((cell) => cell.addEventListener('click', () => openCalDay(C, cell.dataset.day)));
   }
   function openCalDay(C, iso) {
+    const evsNow = calEventsMap(C.id)[iso] || [];
+    const watNow = watchedByDate(C.members)[iso] || [];
+    if (!evsNow.length && !watNow.length && C.editable) {
+      openCalEventModal(C, iso, null, () => renderCalGrid(C), () => {});
+      return;
+    }
     let el = document.getElementById('calday'); if (!el) { el = document.createElement('div'); el.id = 'calday'; el.className = 'picksheet'; document.body.appendChild(el); }
     const render = () => {
       const evs = calEventsMap(C.id)[iso] || [];
@@ -938,41 +1427,178 @@
         `<div class="picksheet__scrim" data-cdclose></div><div class="picksheet__panel">` +
         `<div class="picksheet__head"><h3>${dateLabel}</h3><button class="icon-btn" data-cdclose>${icon('close')}</button></div>` +
         `<div class="picksheet__list">` +
-        (evs.length ? `<div class="calday__sec">${icon('theaters')} Funciones planeadas</div>` + evs.map((e) => { const f = byId(e.filmId) || { id: e.filmId, title: '?' }; return `<div class="calev"><span class="calev__poster" style="background:${filmThumb(f)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(f.title)}</div><div class="calev__meta">${[e.time ? icon('schedule') + ' ' + e.time : '', e.place ? icon('place') + ' ' + escapeHtml(e.place) : ''].filter(Boolean).join(' · ') || 'sin horario ni lugar'}</div></div>${C.editable ? `<button class="icon-btn calev__edit" data-edit="${e.id}" aria-label="Editar">${icon('edit')}</button>` : ''}</div>`; }).join('') : '') +
-        (wat.length ? `<div class="calday__sec">${icon('event_available')} Vieron ese día</div>` + wat.map((w) => `<div class="calev"><span class="calev__poster" style="background:${filmThumb(w.film)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(w.film.title)}</div><div class="calev__meta">${avatarHTML(users[w.uid], 'avatar calev__av')} ${users[w.uid].name}</div></div></div>`).join('') : '') +
+        (evs.length ? `<div class="calday__sec">${icon('theaters')} Funciones planeadas</div>` + evs.map((e) => {
+          const f = byId(e.filmId) || { id: e.filmId, title: '?' };
+          const m = modeOf(e.mode);
+          const going = Object.keys(e.accepted || {});
+          return `<div class="calev"><span class="calev__poster" style="background:${filmThumb(f)}"></span>` +
+            `<div class="calev__body"><div class="calev__title">${escapeHtml(f.title)}</div>` +
+            `<div class="calev__meta">${[e.time ? icon('schedule') + ' ' + escapeHtml(e.time) : '', m ? icon(m.icon) + ' ' + m.label : '', e.place ? icon('place') + ' ' + escapeHtml(e.place) : ''].filter(Boolean).join(' · ') || 'sin horario ni lugar'}</div>` +
+            (going.length ? `<div class="calev__going">${icon('how_to_reg')} van ${going.map((uid) => escapeHtml((users[uid] || {}).name || uid)).join(', ')}</div>` : '') +
+            `</div>${C.editable ? `<button class="icon-btn calev__edit" data-edit="${e.id}" aria-label="Editar">${icon('edit')}</button>` : ''}</div>`;
+        }).join('') : '') +
+        (wat.length ? `<div class="calday__sec">${icon('event_available')} Vieron ese día</div>` + wat.map((w) => `<div class="calev"><span class="calev__poster" style="background:${filmThumb(w.film)}"></span><div class="calev__body"><div class="calev__title">${escapeHtml(w.film.title)}</div><div class="calev__meta">${avatarHTML(users[w.uid] || { id: w.uid, color: '#666', initial: '?' }, 'avatar calev__av')} ${escapeHtml((users[w.uid] || {}).name || w.uid)}</div></div></div>`).join('') : '') +
         (!evs.length && !wat.length ? `<p class="addfilm__hint">Nada este día${C.editable ? '. Agregá una función 👇' : '.'}</p>` : '') +
         `</div>` +
         (C.editable ? `<button class="btn btn--accent calday__add" data-cdadd>${icon('add_circle')} Agregar función</button>` : '') +
         `</div>`;
       el.querySelectorAll('[data-cdclose]').forEach((b) => b.addEventListener('click', closeCalDay));
-      const add = el.querySelector('[data-cdadd]'); if (add) add.addEventListener('click', () => openCalEventModal(C, iso, null, render));
-      el.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { const ev = (calEventsMap(C.id)[iso] || []).find((x) => x.id === b.dataset.edit); if (ev) openCalEventModal(C, iso, ev, render); }));
+      // the day sheet steps aside so the form is the only overlay on screen (no stacking)
+      const reopen = () => openCalDay(C, iso);
+      const add = el.querySelector('[data-cdadd]');
+      if (add) add.addEventListener('click', () => { closeCalDay(); openCalEventModal(C, iso, null, reopen, reopen); });
+      el.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
+        const ev = (calEventsMap(C.id)[iso] || []).find((x) => x.id === b.dataset.edit);
+        if (!ev) return;
+        closeCalDay();
+        openCalEventModal(C, iso, ev, reopen, reopen);
+      }));
     };
     render(); el.hidden = false; document.body.style.overflow = 'hidden';
   }
   function closeCalDay() { const el = document.getElementById('calday'); if (el) { el.hidden = true; el.innerHTML = ''; } document.body.style.overflow = ''; if (route === 'calendario') { const C = currentCalendars().find((c) => c.id === calBoardId) || currentCalendars()[0]; renderCalGrid(C); } }
-  function openCalEventModal(C, iso, ev, onDone) {
+
+  /**
+   * Add/edit a screening. `iso` may be null — then the form asks for the day too, which is what
+   * the "Agendar" button on a film sheet uses. opts.filmId preselects a film.
+   */
+  function openCalEventModal(C, iso, ev, onDone, onCancel, opts = {}) {
+    if (guestBlock()) { if (onCancel) onCancel(); return; }
     const editing = !!ev;
     const el = $('#confirm');
-    const opts = movies.slice().sort((a, b) => a.title.localeCompare(b.title)).map((f) => `<option value="${f.id}"${ev && ev.filmId === f.id ? ' selected' : ''}>${escapeHtml(f.title)}${f.year ? ' (' + f.year + ')' : ''}</option>`).join('');
-    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
-      `<div class="confirm__title">${editing ? 'Editar función' : 'Agregar función'}</div>` +
-      `<label class="tl-field"><span>Película</span><select id="cev-film">${opts}</select></label>` +
-      `<div class="cev-row"><label class="fieldlet">Horario<input type="time" id="cev-time" value="${ev && ev.time ? ev.time : ''}"></label>` +
-      `<label class="fieldlet cev-place">Dónde<input type="text" id="cev-place" maxlength="60" placeholder="Cine, casa…" value="${ev && ev.place ? escapeHtml(ev.place) : ''}"></label></div>` +
-      `<div class="confirm__actions">` + (editing ? `<button class="btn btn--soft" id="cev-del">${icon('delete')} Borrar</button>` : '') + `<button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cev-ok">${icon('check')} ${editing ? 'Guardar' : 'Agregar'}</button></div></div>`;
+    const askDay = !iso;
+    let day = iso || new Date().toISOString().slice(0, 10);
+    let filmId = (ev && ev.filmId) || opts.filmId || null;
+    let mode = (ev && ev.mode) || null;
+    let query = '';
+    let picking = !filmId;
+    let searchTimer = null;
+    let searchToken = 0;
+
+    const localResults = (q) => movies.slice()
+      .filter((m) => !q || m.title.toLowerCase().includes(q))
+      .sort((a, b) => a.title.localeCompare(b.title)).slice(0, 40)
+      .map((m) => ({ ...m, source: 'local' }));
+    const resultMeta = (m) => {
+      const bits = [m.year, kindLabel(m.kind)];
+      if (m.releaseDate) bits.push(m.upcoming ? `Próximamente · ${fmtDay(m.releaseDate)}` : fmtDay(m.releaseDate));
+      return bits.filter(Boolean).join(' · ');
+    };
+    const paintResults = (items, message = '') => {
+      const host = el.querySelector('#cev-results'); if (!host) return;
+      if (!items.length) { host.innerHTML = `<p class="addfilm__hint">${message || `Nada con “${escapeHtml(query)}”. Probá otro título.`}</p>`; return; }
+      host.innerHTML = items.map((m) =>
+        `<button class="cevres" ${m.source === 'tmdb' ? `data-tmdb="${m.id}" data-media="${m.media}"` : `data-film="${escapeHtml(m.id)}"`}>` +
+        `<span class="cevres__poster" style="background:${posterArt(m)}"></span>` +
+        `<span class="cevres__body"><b>${escapeHtml(m.title)}</b><small>${escapeHtml(resultMeta(m))}</small></span>` +
+        (m.upcoming ? `<span class="cevres__upcoming">Próximamente</span>` : '') + `</button>`
+      ).join('');
+      host.querySelectorAll('[data-film]').forEach((b) => b.addEventListener('click', () => { filmId = b.dataset.film; picking = false; draw(); }));
+      host.querySelectorAll('[data-tmdb]').forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true; b.classList.add('is-loading');
+        try {
+          const film = await WM.api.addDetails(+b.dataset.tmdb, b.dataset.media);
+          addExtraFilm(film); filmId = film.id; picking = false; draw();
+        } catch {
+          b.disabled = false; b.classList.remove('is-loading');
+          showCalendarToast('No pude cargar ese título', 'Revisá la conexión y probá de nuevo.');
+        }
+      }));
+    };
+    const updateSearch = async () => {
+      const token = ++searchToken;
+      const q = query.trim();
+      const local = localResults(q.toLowerCase());
+      paintResults(local, q.length < 2 ? 'Escribí al menos 2 letras para buscar también próximos estrenos.' : '');
+      if (q.length < 2 || !(WM.api && WM.api.available)) return;
+      try {
+        const remote = await WM.api.search(q);
+        if (token !== searchToken || !el.querySelector('#cev-results')) return;
+        const localTmdb = new Set(local.map((m) => m.tmdb).filter(Boolean).map(String));
+        const fresh = remote.filter((m) => !localTmdb.has(String(m.id))).map((m) => ({ ...m, source: 'tmdb' }));
+        paintResults([...local.slice(0, 16), ...fresh].slice(0, 40));
+      } catch {
+        if (token === searchToken && !local.length) paintResults([], 'No pude buscar en TMDB. Probá de nuevo.');
+      }
+    };
+
+    const draw = () => {
+      const f = filmId ? byId(filmId) : null;
+      const q = query.trim().toLowerCase();
+      const results = picking ? localResults(q) : [];
+      el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card confirm__card--wide">` +
+        `<div class="confirm__title">${editing ? 'Editar función' : 'Agregar función'}</div>` +
+        (askDay ? `<label class="tl-field"><span>Día</span><input type="date" id="cev-day" value="${day}"></label>` : '') +
+        `<div class="cevpick">` +
+        (f && !picking
+          ? `<div class="cevpick__chosen"><span class="cevpick__poster" style="background:${posterArt(f)}"></span>` +
+            `<div class="cevpick__body"><b>${escapeHtml(f.title)}</b><small>${[f.year, kindLabel(f.kind)].filter(Boolean).join(' · ')}</small></div>` +
+            `<button class="btn btn--soft btn--xs" id="cev-change">${icon('swap_horiz')} Cambiar</button></div>`
+          : `<label class="search search--lg"><span class="material-symbols-rounded">search</span>` +
+            `<input id="cev-q" type="search" placeholder="Buscar película o serie…" value="${escapeHtml(query)}" autocomplete="off"></label>` +
+            `<div class="cevpick__list" id="cev-results">` +
+            (results.length ? results.map((m) => `<button class="cevres" data-film="${escapeHtml(m.id)}">` +
+              `<span class="cevres__poster" style="background:${posterArt(m)}"></span>` +
+              `<span class="cevres__body"><b>${escapeHtml(m.title)}</b><small>${escapeHtml(resultMeta(m))}</small></span></button>`).join('')
+              : `<p class="addfilm__hint">Nada con “${escapeHtml(query)}”. Probá otro título.</p>`) +
+            `</div>`) +
+        `</div>` +
+        `<div class="cev-row"><label class="fieldlet">Horario<input type="time" id="cev-time" value="${ev && ev.time ? escapeHtml(ev.time) : ''}"></label></div>` +
+        `<div class="cev-modes"><span class="watchmeta__lbl">¿Cómo la vemos?</span>` +
+        CAL_MODES.map((m) => `<button class="wchip${mode === m.v ? ' is-on' : ''}" data-mode="${m.v}" title="${m.note || m.label}">${icon(m.icon)} ${m.label}</button>`).join('') + `</div>` +
+        `<label class="tl-field"><span>Nota <small>(opcional — sala, link, dirección…)</small></span><input type="text" id="cev-place" maxlength="60" placeholder="Ej: Showcase Norte, sala 4" value="${ev && ev.place ? escapeHtml(ev.place) : ''}"></label>` +
+        `<div class="confirm__actions">` + (editing ? `<button class="btn btn--soft" id="cev-del">${icon('delete')} Borrar</button>` : '') +
+        `<button class="btn btn--soft" data-cancel>Cancelar</button><button class="btn btn--accent" id="cev-ok">${icon('check')} ${editing ? 'Guardar' : 'Agregar'}</button></div></div>`;
+
+      el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => { el.hidden = true; if (onCancel) onCancel(); }));
+      const qi = el.querySelector('#cev-q');
+      if (qi) {
+        qi.addEventListener('input', () => {
+          query = qi.value;
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(updateSearch, 220);
+        });
+        setTimeout(() => qi.focus(), 40);
+      }
+      el.querySelectorAll('[data-film]').forEach((b) => b.addEventListener('click', () => { filmId = b.dataset.film; picking = false; draw(); }));
+      const ch = el.querySelector('#cev-change'); if (ch) ch.addEventListener('click', () => { picking = true; query = ''; draw(); });
+      el.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+        mode = mode === b.dataset.mode ? null : b.dataset.mode;
+        el.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('is-on', x.dataset.mode === mode));
+      }));
+      el.querySelector('#cev-ok').addEventListener('click', () => {
+        if (!filmId) { K.toast('Elegí una película primero.', 'bad'); picking = true; draw(); return; }
+        if (askDay) { const di = el.querySelector('#cev-day'); day = (di && di.value) || day; }
+        const time = el.querySelector('#cev-time').value || null;
+        const place = el.querySelector('#cev-place').value.trim() || null;
+        const me = currentUser();
+        const map = store.getCalEvents(C.id); map[day] = map[day] || [];
+        if (editing) {
+          const e2 = map[day].find((x) => x.id === ev.id);
+          if (e2) { e2.filmId = filmId; e2.time = time; e2.place = place; e2.mode = mode; }
+        } else {
+          map[day].push({
+            id: 'ce-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            filmId, time, place, mode, by: me.id, createdAt: new Date().toISOString(),
+            accepted: {}, dismissed: {}, acceptSeen: {},
+          });
+        }
+        store.saveCalEvents(C.id, map);
+        el.hidden = true;
+        const invited = C.members.filter((m) => m !== me.id).length;
+        if (!editing && invited) showCalendarToast('Invitación enviada', `${invited} ${invited === 1 ? 'persona recibió' : 'personas recibieron'} la función.`, 'success');
+        if (onDone) onDone(day);
+      });
+      const del = el.querySelector('#cev-del');
+      if (del) del.addEventListener('click', () => {
+        const map = store.getCalEvents(C.id);
+        map[iso] = (map[iso] || []).filter((x) => x.id !== ev.id);
+        if (!map[iso].length) delete map[iso];
+        store.saveCalEvents(C.id, map); el.hidden = true; if (onDone) onDone(iso);
+      });
+    };
+    draw();
     el.hidden = false;
-    el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
-    el.querySelector('#cev-ok').addEventListener('click', () => {
-      const filmId = el.querySelector('#cev-film').value; if (!filmId) return;
-      const time = el.querySelector('#cev-time').value || null;
-      const place = el.querySelector('#cev-place').value.trim() || null;
-      const map = store.getCalEvents(C.id); map[iso] = map[iso] || [];
-      if (editing) { const e2 = map[iso].find((x) => x.id === ev.id); if (e2) { e2.filmId = filmId; e2.time = time; e2.place = place; } }
-      else { map[iso].push({ id: 'ce-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), filmId, time, place }); }
-      store.saveCalEvents(C.id, map); el.hidden = true; if (onDone) onDone();
-    });
-    const del = el.querySelector('#cev-del'); if (del) del.addEventListener('click', () => { const map = store.getCalEvents(C.id); map[iso] = (map[iso] || []).filter((x) => x.id !== ev.id); if (!map[iso].length) delete map[iso]; store.saveCalEvents(C.id, map); el.hidden = true; if (onDone) onDone(); });
   }
   function openCalendarModal(app, C) {
     const editing = !!C; const me = currentUser();
@@ -1017,10 +1643,13 @@
   }
   function fillTier(B) {
     const draggable = B.editable;
+    const drops = {};
+    document.querySelectorAll('.tier__drop').forEach((d) => (drops[d.dataset.tier] = d));
     document.querySelectorAll('.tier__drop, #tier-pool').forEach((d) => (d.innerHTML = ''));
     boardEligible(B).filter((f) => passesTierFilter(f, B)).forEach((f) => {
       const t = boardGet(B, f.id);
-      const target = t ? document.querySelector(`.tier__drop[data-tier="${t}"]`) : document.querySelector('#tier-pool');
+      // a film parked in a row that was deleted falls back to the pool instead of vanishing
+      const target = (t && drops[t]) || document.querySelector('#tier-pool');
       if (target) target.appendChild(tierChip(f, draggable));
     });
     const pool = document.querySelector('#tier-pool');
@@ -1046,7 +1675,7 @@
       drop.addEventListener('drop', (e) => {
         e.preventDefault(); drop.classList.remove('drag-over');
         const id = dragId || (e.dataTransfer && e.dataTransfer.getData('text/plain'));
-        if (!id) return;
+        if (!id || guestBlock()) return;
         boardSet(B, id, drop.dataset.tier || null);
         fillTier(B);
       });
@@ -1057,15 +1686,14 @@
   function posterCard(f, opts = {}) {
     const card = document.createElement('button');
     card.className = 'card';
-    const ownerU = users[f.owner];
-    const ownerBadge = ownerU ? `<span class="poster__owner" style="background:${ownerU.color}" title="Lista de ${ownerU.name}">${ownerU.initial}</span>` : '';
+    const ownerTag = ownerBadge(f, 'poster__owner');
     const rank = opts.rank ? `<span class="poster__rank">#${opts.rank}</span>` : '';
     const kindBadge = f.kind === 'series' ? `<span class="poster__kind">Serie</span>` : '';
     card.innerHTML =
       `<div class="poster">` +
       `<div class="poster__img" style="background:${posterArt(f)}"></div>` +
       `<div class="poster__label"><span class="t">${f.title}</span><span class="y">${f.year || ''}</span></div>` +
-      `${rank}${kindBadge}${ownerBadge}</div>` +
+      `${rank}${kindBadge}${ownerTag}</div>` +
       `<div class="card__foot"><div class="card__scores">` +
       (f.imdb != null ? `<span class="imdb">★ ${f.imdb.toFixed(1)}</span>` : '') +
       (f.rt != null ? `<span class="rt">🍅 ${f.rt}%</span>` : '') +
@@ -1127,10 +1755,13 @@
       `<div class="swiper__card"><div class="swiper__poster" style="background:${posterArt(m)}"></div>` +
       `<div class="swiper__meta">${meta}<div class="swiper__t">${escapeHtml(m.title)}</div></div></div>` +
       `<div class="swiper__actions"><div class="swiper__stars" id="sw-stars"></div>` +
+      `<label class="sw-date" title="¿Cuándo la viste? (opcional)"><span class="sw-date__head">${icon('event')} Fecha en que la viste</span>` +
+      `<input type="date" id="sw-date" value="${watchMetaOf(m.id, u.id).date || ''}" aria-label="Fecha en que la viste (opcional)"></label>` +
       `<div class="swiper__btns">` +
       `<button class="swbtn swbtn--nav" data-swprev ${swIndex <= 0 ? 'disabled' : ''} aria-label="Anterior">${icon('arrow_back')}</button>` +
       `<button class="swbtn swbtn--clock ${inWatchlist(m.id) ? 'is-on' : ''}" data-swclock aria-label="Agregar a la watchlist" title="Agregar a la watchlist">${icon('schedule')}</button>` +
       `<button class="swbtn swbtn--heart ${v.liked ? 'is-liked' : ''}" data-swlike aria-label="Me gusta">${icon('favorite')}</button>` +
+      `<button class="swbtn swbtn--calendar" data-swcal aria-label="Agendar función" title="Agendar función">${icon('calendar_add_on')}</button>` +
       `<button class="swbtn swbtn--nav" data-swnext aria-label="Siguiente">${icon('arrow_forward')}</button>` +
       `</div></div></div>` +
       `<div class="swiper__hint">Puntuala · ⏰ watchlist · ❤ like · ← → seguí · ✕ salir</div>`;
@@ -1139,7 +1770,24 @@
     el.querySelectorAll('[data-swnext]').forEach((b) => b.addEventListener('click', () => swGo(1)));
     el.querySelectorAll('[data-swlike]').forEach((b) => b.addEventListener('click', () => swLike(m)));
     el.querySelectorAll('[data-swclock]').forEach((b) => b.addEventListener('click', () => swClock(m, b)));
+    el.querySelectorAll('[data-swcal]').forEach((b) => b.addEventListener('click', () => {
+      if (guestBlock('agendar una función')) return;
+      if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m });
+      closeSwiper();
+      const cals = currentCalendars();
+      const C = cals.find((c) => c.id === calBoardId && c.editable) || cals.find((c) => c.editable) || cals[0];
+      calBoardId = C.id;
+      setRoute('calendario');
+      openCalEventModal(C, null, null, () => renderCalendario($('#app')), null, { filmId: m.id });
+    }));
     mountSwiperStars($('#sw-stars', el), m, u, v.rating);
+    const dt = el.querySelector('#sw-date');
+    if (dt) dt.addEventListener('change', () => {
+      if (guestBlock()) { dt.value = ''; return; }
+      if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m });
+      store.setWatchMeta(m.id, u.id, { date: dt.value || null });
+      if (dt.value) K.toast(`${icon('event_available')} Anotado: la viste el ${fmtDay(dt.value)}.`);
+    });
     const card = el.querySelector('.swiper__card'); let x0 = null;
     card.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
     card.addEventListener('touchend', (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) swGo(dx < 0 ? 1 : -1); x0 = null; });
@@ -1152,6 +1800,7 @@
     renderSwiper();
   }
   function swLike(m) {
+    if (guestBlock()) return;
     const u = currentUser();
     if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m });
     store.toggleLike(m.id, u.id);
@@ -1160,20 +1809,23 @@
   }
   const inWatchlist = (id) => { const f = movies.find((x) => x.id === id); return !!(f && f.extra && isWatchlist(f)); };
   function swClock(m) {
+    if (guestBlock()) return;
     const u = currentUser();
     const ex = store.getSetting('extra_films') || [];
     const existing = movies.find((x) => x.id === m.id);
     let on;
     if (existing && existing.extra && isWatchlist(existing)) {
       existing.owner = 'extra'; // remove from watchlist (keep as extra so a rating still shows in "Ya vimos")
-      const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) ex[i].owner = 'extra';
+      existing.owners = [];
+      const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) { ex[i].owner = 'extra'; ex[i].owners = []; }
       on = false;
     } else if (existing) {
       existing.owner = u.id;
-      const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) ex[i].owner = u.id; else ex.push({ ...existing });
+      existing.owners = [u.id];
+      const i = ex.findIndex((x) => x.id === m.id); if (i >= 0) { ex[i].owner = u.id; ex[i].owners = [u.id]; } else ex.push({ ...existing });
       on = true;
     } else {
-      const film = { ...m, owner: u.id, extra: true };
+      const film = { ...m, owner: u.id, owners: [u.id], extra: true };
       movies.push(film); ex.push(film); on = true;
     }
     store.setSetting('extra_films', ex);
@@ -1190,7 +1842,7 @@
     widget.addEventListener('pointerleave', () => setV(value));
     widget.addEventListener('pointerdown', (e) => { value = fromX(e.clientX); commit(); });
     widget.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp') { value = Math.min(5, value + 0.5); commit(); e.preventDefault(); e.stopPropagation(); } if (e.key === 'ArrowDown') { value = Math.max(0, value - 0.5); commit(); e.preventDefault(); e.stopPropagation(); } });
-    function commit() { setV(value); if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m }); store.setRating(m.id, u.id, value || null); }
+    function commit() { if (guestBlock()) { value = typeof initial === 'number' ? initial : 0; setV(value); return; } setV(value); if (!movies.some((x) => x.id === m.id)) addExtraFilm({ ...m }); store.setRating(m.id, u.id, value || null); }
   }
   function onSwiperKey(e) { if (e.key === 'Escape') closeSwiper(); else if (e.key === 'ArrowLeft') swGo(-1); else if (e.key === 'ArrowRight') swGo(1); }
   function closeSwiper() {
@@ -1208,7 +1860,7 @@
   ];
   function fmtDay(iso) { if (!iso) return ''; const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }); }
   function watchMetaHTML(f, u) {
-    const m = store.getWatchMeta(f.id, u.id);
+    const m = watchMetaOf(f.id, u.id);
     return `<div class="watchmeta">` +
       `<label class="fieldlet fieldlet--wm">Fecha en que la vi<input type="date" data-wm="date" value="${m.date || ''}"></label>` +
       `<div class="watchmeta__where"><span class="watchmeta__lbl">¿Dónde?</span>${WHERE.map((w) => `<button class="wchip${m.where === w.v ? ' is-on' : ''}" data-where="${w.v}">${icon(w.icon)} ${w.label}</button>`).join('')}</div>` +
@@ -1216,15 +1868,16 @@
   }
   function wireWatchMeta(scope, f, u) {
     const d = scope.querySelector('[data-wm="date"]');
-    if (d) d.addEventListener('change', () => store.setWatchMeta(f.id, u.id, { date: d.value || null }));
+    if (d) d.addEventListener('change', () => { if (guestBlock()) { d.value = ''; return; } store.setWatchMeta(f.id, u.id, { date: d.value || null }); });
     scope.querySelectorAll('[data-where]').forEach((b) => b.addEventListener('click', () => {
+      if (guestBlock()) return;
       const cur = store.getWatchMeta(f.id, u.id).where; const val = cur === b.dataset.where ? null : b.dataset.where;
       store.setWatchMeta(f.id, u.id, { where: val });
       scope.querySelectorAll('[data-where]').forEach((x) => x.classList.toggle('is-on', x.dataset.where === val));
     }));
   }
   function watchMetaLine(f, uid) {
-    const m = store.getWatchMeta(f.id, uid);
+    const m = watchMetaOf(f.id, uid);
     const w = (WHERE.find((x) => x.v === m.where) || {}).label;
     const parts = [];
     if (m.date) parts.push(`vista el ${fmtDay(m.date)}`);
@@ -1241,9 +1894,9 @@
     sheetFilm = f;
     const u = currentUser();
     const me = verdictOf(f.id, u.id);
-    const other = Object.values(users).find((x) => x.id !== u.id);
-    const otherE = verdictOf(f.id, other.id);
-    const otherHas = typeof otherE.rating === 'number' || otherE.review || otherE.liked;
+    // everyone else who said something about this one (not just "the other one" — accounts can grow)
+    const others = Object.values(users).filter((x) => x.id !== u.id).map((x) => ({ u: x, e: verdictOf(f.id, x.id) }))
+      .filter(({ e }) => typeof e.rating === 'number' || e.review || e.liked);
 
     sheet.innerHTML =
       `<div class="sheet__scrim" data-close></div>` +
@@ -1256,7 +1909,10 @@
       `</div>` +
       `<h2 class="sheet__title">${f.title}</h2>` +
       `<div class="sheet__scores">${scoreBadges(f)}</div>` +
+      `<div class="sheet__cta">` +
       (f.trailer ? `<button class="btn btn--ghost sheet__trailer" id="sheet-trailer">${icon('play_circle')} Ver trailer</button>` : '') +
+      `<button class="btn btn--ghost" id="sheet-plan">${icon('event')} Agendar</button>` +
+      `</div>` +
       `<p class="sheet__synopsis">${f.synopsis || ''}</p>` +
 
       `<div class="rate-box">` +
@@ -1271,13 +1927,15 @@
       `<span class="saved-flag" id="saved-flag">guardado ✓</span></div></div>` +
       `</div>` +
 
-      (otherHas
-        ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijo ${other.name}</div>` +
-          `<div class="verdict">${avatarHTML(other, 'avatar verdict__avatar')}` +
-          `<div class="verdict__main"><div class="verdict__row">` +
-          (typeof otherE.rating === 'number' ? `${starsMarkup(otherE.rating, 'sm')}<span class="stars-value">${otherE.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
-          (otherE.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
-          `</div>${otherE.review ? `<p class="verdict__review">“${escapeHtml(otherE.review)}”</p>` : ''}${watchMetaLine(f, other.id)}</div></div></div>`
+      (others.length
+        ? `<div class="other-verdict"><div class="other-verdict__head">Lo que dijeron ${others.map((o) => escapeHtml(o.u.name)).join(', ')}</div>` +
+          others.map(({ u: ou, e }) =>
+            `<div class="verdict">${avatarHTML(ou, 'avatar verdict__avatar')}` +
+            `<div class="verdict__main"><div class="verdict__row"><span class="verdict__name">${escapeHtml(ou.name)}</span>` +
+            (typeof e.rating === 'number' ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
+            (e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
+            `</div>${e.review ? `<p class="verdict__review">“${escapeHtml(e.review)}”</p>` : ''}${watchMetaLine(f, ou.id)}</div></div>`).join('') +
+          `</div>`
         : '') +
 
       `</div></div>`;
@@ -1286,17 +1944,30 @@
     mountInteractiveStars($('#rate-stars', sheet), f, u, me.rating);
     wireWatchMeta(sheet, f, u);
     $('#rate-clear', sheet).addEventListener('click', () => {
+      if (guestBlock()) return;
       store.setRating(f.id, u.id, null);
       openSheet(f); // re-render
     });
     $('#save-review', sheet).addEventListener('click', () => {
+      if (guestBlock()) return;
       store.setReview(f.id, u.id, $('#review', sheet).value.trim());
       const flag = $('#saved-flag', sheet); flag.classList.add('show');
       setTimeout(() => flag.classList.remove('show'), 1600);
     });
-    $('#review', sheet).addEventListener('blur', (e) => store.setReview(f.id, u.id, e.target.value.trim()));
+    $('#review', sheet).addEventListener('blur', (e) => { if (!isGuest()) store.setReview(f.id, u.id, e.target.value.trim()); });
     $('#sheet-like', sheet).addEventListener('click', (e) => toggleLike(f, e.currentTarget, true));
     const st = $('#sheet-trailer', sheet); if (st) st.addEventListener('click', () => openTrailer(f));
+    const sp = $('#sheet-plan', sheet);
+    if (sp) sp.addEventListener('click', () => {
+      if (guestBlock()) return;
+      if (!movies.some((m) => m.id === f.id)) addExtraFilm({ ...f });   // agendar una peli descubierta la trae a la app
+      closeSheet();
+      const cals = currentCalendars();
+      const C = cals.find((c) => c.id === calBoardId && c.editable) || cals.find((c) => c.editable) || cals[0];
+      calBoardId = C.id;
+      setRoute('calendario');
+      openCalEventModal(C, null, null, () => renderCalendario($('#app')), null, { filmId: f.id });
+    });
 
     sheet.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
     sheet.hidden = false;
@@ -1341,6 +2012,7 @@
       if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { value = Math.max(0, (value || 0) - 0.5); commit(); e.preventDefault(); }
     });
     function commit() {
+      if (guestBlock()) { value = typeof initial === 'number' ? initial : 0; setVisual(value); return; }
       setVisual(value);
       widget.setAttribute('aria-valuenow', value);
       if (value && !movies.some((x) => x.id === f.id)) addExtraFilm({ ...f }); // persist discovered/new films when rated
@@ -1351,6 +2023,7 @@
 
   /* ---------- like ---------- */
   function toggleLike(f, btn, relabel) {
+    if (guestBlock()) return;
     const u = currentUser();
     store.toggleLike(f.id, u.id);
     const liked = store.get(f.id, u.id).liked;
@@ -1505,13 +2178,13 @@
   }
 
   function openTierPicker(tierId, B) {
-    const label = (TIERS.find((t) => t.id === tierId) || {}).label || '';
+    const label = (rowsOf(B).find((t) => t.id === tierId) || {}).label || '';
     openPickSheet(`Poné en ${label}`, () =>
       boardEligible(B)
         .filter((f) => (boardGet(B, f.id) || null) !== tierId)
         .map((f) => ({
           thumb: posterArt(f), label: f.title, sub: boardGet(B, f.id) ? '(mover)' : '',
-          onClick: (render) => { boardSet(B, f.id, tierId); fillTier(B); render(); },
+          onClick: (render) => { if (guestBlock()) return; boardSet(B, f.id, tierId); fillTier(B); render(); },
         })));
   }
   function openChipMenu(filmId, B) {
@@ -1519,30 +2192,304 @@
     openPickSheet(f.title, () => {
       const cur = boardGet(B, filmId);
       return [
-        ...TIERS.map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { boardSet(B, filmId, t.id); fillTier(B); closePickSheet(); } })),
-        { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { boardSet(B, filmId, null); fillTier(B); closePickSheet(); } },
+        ...rowsOf(B).map((t) => ({ icon: 'label', color: t.color, label: t.label, check: cur === t.id, onClick: () => { if (guestBlock()) return; boardSet(B, filmId, t.id); fillTier(B); closePickSheet(); } })),
+        { icon: 'remove_circle', label: 'Sacar (Sin ubicar)', onClick: () => { if (guestBlock()) return; boardSet(B, filmId, null); fillTier(B); closePickSheet(); } },
         { icon: 'info', label: 'Ver ficha', onClick: () => { closePickSheet(); openSheet(f); } },
       ];
     });
   }
 
-  /* ============================================================= CONFIRM (change user) */
-  function openConfirm() {
-    const u = currentUser();
+  /* ============================================================= PERFIL
+   * Perfil = la vista linda (stats, medallas, reseñas). Configuraciones = los ajustes de la cuenta.
+   * Cuando una peli no tiene fecha cargada a mano, usamos la fecha en que se puntuó. */
+  function seenDate(f, uid) {
+    const wm = watchMetaOf(f.id, uid).date;
+    if (wm) return wm;
+    const t = store.get(f.id, uid).updatedAt;
+    return t ? String(t).slice(0, 10) : null;
+  }
+  const isoWeek = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return `${t.getUTCFullYear()}-W${Math.ceil(((t - y0) / 86400000 + 1) / 7)}`;
+  };
+  function profileStats(uid) {
+    const rated = movies.filter((f) => verdictOf(f.id, uid).rating != null);
+    const reviews = movies.filter((f) => (verdictOf(f.id, uid).review || '').trim());
+    const likes = movies.filter((f) => verdictOf(f.id, uid).liked);
+    const year = String(new Date().getFullYear());
+    const byDay = {}, byMonth = {}, byWeek = {};
+    rated.forEach((f) => {
+      const d = seenDate(f, uid); if (!d) return;
+      (byDay[d] = byDay[d] || []).push(f);
+      byMonth[d.slice(0, 7)] = (byMonth[d.slice(0, 7)] || 0) + 1;
+      const w = isoWeek(d); (byWeek[w] = byWeek[w] || new Set()).add(d);
+    });
+    const dist = {};
+    rated.forEach((f) => { const r = verdictOf(f.id, uid).rating; dist[r] = (dist[r] || 0) + 1; });
+    const genres = {};
+    rated.forEach((f) => (f.genres || []).forEach((g) => (genres[g] = (genres[g] || 0) + 1)));
+    const sum = rated.reduce((a, f) => a + verdictOf(f.id, uid).rating, 0);
+    // tier: ¿tiene al menos una peli en cada fila? ¿cuántas en la fila de arriba?
+    const rows = K.tierRows(store, 'def:' + uid, TIER_DEFAULTS, TIER_RAMP);
+    const placed = {};
+    movies.forEach((f) => { const t = store.getTier(f.id, uid); if (t) placed[t] = (placed[t] || 0) + 1; });
+    return {
+      rated: rated.length,
+      thisYear: rated.filter((f) => (seenDate(f, uid) || '').startsWith(year)).length,
+      series: rated.filter((f) => f.kind === 'series').length,
+      movies: rated.filter((f) => f.kind !== 'series').length,
+      reviews: reviews.length, likes: likes.length,
+      avg: rated.length ? sum / rated.length : 0,
+      byDay, byMonth, byWeek, dist, genres,
+      bestMonth: Math.max(0, ...Object.values(byMonth)),
+      bestWeek: Math.max(0, ...Object.values(byWeek).map((s) => s.size)),
+      topRow: placed[(rows[0] || {}).id] || 0,
+      tierFull: rows.length > 0 && rows.every((r) => placed[r.id]),
+      ratedList: rated, reviewList: reviews,
+    };
+  }
+  const MEDALS = [
+    { icon: 'rate_review', name: 'Primera reseña', desc: 'Escribí una reseña', goal: 1, get: (s) => s.reviews },
+    { icon: 'local_movies', name: 'Cinéfilo', desc: '10 títulos puntuados', goal: 10, get: (s) => s.rated },
+    { icon: 'theaters', name: 'Maratón', desc: '25 títulos puntuados', goal: 25, get: (s) => s.rated },
+    { icon: 'workspace_premium', name: 'Centurión', desc: '100 títulos puntuados', goal: 100, get: (s) => s.rated },
+    { icon: 'edit_note', name: 'Crítico', desc: '10 reseñas escritas', goal: 10, get: (s) => s.reviews },
+    { icon: 'favorite', name: 'Corazón grande', desc: '25 me gusta', goal: 25, get: (s) => s.likes },
+    { icon: 'live_tv', name: 'Seriéfilo', desc: '5 series puntuadas', goal: 5, get: (s) => s.series },
+    { icon: 'table_rows', name: 'Tier completa', desc: 'Al menos una peli en cada fila', goal: 1, get: (s) => (s.tierFull ? 1 : 0) },
+    { icon: 'calendar_month', name: 'Mes intenso', desc: '5 pelis en un mismo mes', goal: 5, get: (s) => s.bestMonth },
+    { icon: 'bolt', name: 'Semana redonda', desc: '3 días con pelis en la misma semana', goal: 3, get: (s) => s.bestWeek },
+    { icon: 'star', name: 'Amante del PRIME', desc: '10 pelis en la fila de arriba', goal: 10, get: (s) => s.topRow },
+  ];
+  function statTile(n, label, sub) {
+    return `<div class="ptile"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  }
+  function miniCalendar(byDay, color) {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    const start = (new Date(y, m, 1).getDay() + 6) % 7;
+    const days = new Date(y, m + 1, 0).getDate();
+    let html = WEEKDAYS.map((w) => `<span class="pmc__h">${w[0]}</span>`).join('');
+    for (let i = 0; i < start; i++) html += `<span class="pmc__d pmc__d--out"></span>`;
+    for (let d = 1; d <= days; d++) {
+      const iso = isoDate(y, m, d);
+      const n = (byDay[iso] || []).length;
+      const today = d === now.getDate();
+      html += `<span class="pmc__d${n ? ' is-on' : ''}${today ? ' is-today' : ''}"${n ? ` style="--c:${color}" title="${n} el ${d}"` : ''}>${d}</span>`;
+    }
+    return `<div class="pmc"><div class="pmc__title">${MONTHS[m]} ${y}</div><div class="pmc__grid">${html}</div></div>`;
+  }
+  function yearStrip(byMonth, color) {
+    const out = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      out.push({ key, label: MONTHS[d.getMonth()].slice(0, 3), n: byMonth[key] || 0 });
+    }
+    const max = Math.max(1, ...out.map((o) => o.n));
+    return `<div class="pbars">${out.map((o) => `<div class="pbar" title="${o.n} en ${o.label}"><span class="pbar__fill" style="height:${Math.round((o.n / max) * 100)}%;--c:${color}"></span><small>${o.label}</small></div>`).join('')}</div>`;
+  }
+  function distChart(dist, color) {
+    const steps = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+    const max = Math.max(1, ...steps.map((s) => dist[s] || 0));
+    return `<div class="pbars pbars--dist">${steps.map((s) => `<div class="pbar" title="${dist[s] || 0} con ${s}★"><span class="pbar__fill" style="height:${Math.round(((dist[s] || 0) / max) * 100)}%;--c:${color}"></span><small>${s}</small></div>`).join('')}</div>`;
+  }
+  function genreChart(genres, color) {
+    const top = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    if (!top.length) return `<p class="addfilm__hint">Todavía sin datos.</p>`;
+    const max = top[0][1];
+    return `<div class="prows">${top.map(([g, n]) => `<div class="prow"><span class="prow__l">${escapeHtml(g)}</span><span class="prow__t"><span class="prow__f" style="width:${Math.round((n / max) * 100)}%;--c:${color}"></span></span><b>${n}</b></div>`).join('')}</div>`;
+  }
+
+  function renderPerfil(app, uid) {
+    const me = currentUser();
+    if (me.guest) { store.clearUser(); return showGate(); }
+    const id = uid || me.id;
+    const u = users[id] || me;
+    const mine = id === me.id;
+    const s = profileStats(id);
+    const acc = store.getAccounts()[id] || {};
+    const bio = acc.bio || '';
+    app.innerHTML = '';
+    const sec = document.createElement('section');
+    sec.className = 'section';
+    sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    sec.innerHTML =
+      `<div class="phero" style="--c:${u.color}">` +
+      `<button class="phero__av" id="p-photo" ${mine ? '' : 'disabled'} title="${mine ? 'Cambiar foto' : ''}">${avatarHTML(u, 'avatar phero__avatar')}${mine ? `<span class="phero__cam">${icon('photo_camera')}</span>` : ''}</button>` +
+      `<div class="phero__body"><h2 class="phero__name">${escapeHtml(u.name)}</h2>` +
+      `<p class="phero__handle">@${escapeHtml(u.lb || u.handle || u.id)}${u.lb ? ' · Letterboxd' : ''}</p>` +
+      `<p class="phero__bio" id="p-bio">${bio ? escapeHtml(bio) : (mine ? '<i>Sin descripción — tocá para escribir algo.</i>' : '<i>Sin descripción.</i>')}</p>` +
+      (mine ? `<button class="linklike" id="p-editbio">${icon('edit')} Editar descripción</button>` : '') +
+      `</div></div>` +
+
+      `<div class="ptiles">` +
+      statTile(s.rated, 'títulos vistos', 'puntuados') +
+      statTile(s.thisYear, 'este año', String(new Date().getFullYear())) +
+      statTile(s.movies, 'pelis') +
+      statTile(s.series, 'series') +
+      statTile(s.reviews, 'reseñas') +
+      statTile(s.likes, 'me gusta') +
+      statTile(s.avg ? s.avg.toFixed(2) : '—', 'promedio', 'de 5') +
+      `</div>` +
+
+      `<div class="pgrid">` +
+      `<div class="pcard"><h4>${icon('calendar_month')} Este mes</h4>${miniCalendar(s.byDay, u.color)}</div>` +
+      `<div class="pcard"><h4>${icon('bar_chart')} Últimos 12 meses</h4>${yearStrip(s.byMonth, u.color)}</div>` +
+      `<div class="pcard"><h4>${icon('star')} Cómo puntuás</h4>${distChart(s.dist, u.color)}</div>` +
+      `<div class="pcard"><h4>${icon('category')} Tus géneros</h4>${genreChart(s.genres, u.color)}</div>` +
+      `</div>` +
+
+      `<h3 class="section__title psub"><span class="accentbar">/</span> Medallas</h3>` +
+      `<div class="pmedals">${MEDALS.map((md) => {
+        const have = md.get(s);
+        const done = have >= md.goal;
+        const pct = Math.min(100, Math.round((have / md.goal) * 100));
+        return `<div class="pmedal${done ? ' is-done' : ''}" style="--c:${u.color}">` +
+          `<span class="pmedal__ic">${icon(md.icon)}</span>` +
+          `<div class="pmedal__b"><b>${md.name}</b><small>${md.desc}</small>` +
+          `<span class="pmedal__bar"><span style="width:${pct}%"></span></span>` +
+          `<span class="pmedal__n">${Math.min(have, md.goal)} / ${md.goal}</span></div>` +
+          (done ? `<span class="pmedal__check">${icon('check_circle')}</span>` : '') + `</div>`;
+      }).join('')}</div>` +
+
+      `<h3 class="section__title psub"><span class="accentbar">/</span> Últimas reseñas</h3><div class="pgrid pgrid--wide" id="p-reviews"></div>` +
+      `<h3 class="section__title psub"><span class="accentbar">/</span> Mejor rankeadas</h3><div class="row" id="p-best"></div>`;
+    app.appendChild(sec);
+    app.appendChild(buildFooter());
+
+    const revs = s.reviewList
+      .map((f) => ({ f, t: Date.parse(store.get(f.id, id).updatedAt || 0) || 0 }))
+      .sort((a, b) => b.t - a.t).slice(0, 4);
+    const rw = sec.querySelector('#p-reviews');
+    if (!revs.length) rw.innerHTML = `<p class="addfilm__hint">Todavía sin reseñas.</p>`;
+    revs.forEach(({ f }) => {
+      const v = verdictOf(f.id, id);
+      const c = document.createElement('button');
+      c.className = 'prev';
+      c.innerHTML = `<span class="prev__poster" style="background:${posterArt(f)}"></span>` +
+        `<span class="prev__b"><b>${escapeHtml(f.title)}</b>` +
+        `<span class="prev__stars">${starsMarkup(v.rating || 0, 'sm')}${v.rating != null ? `<span class="stars-value">${v.rating.toFixed(1)}</span>` : ''}</span>` +
+        `<span class="prev__txt">“${escapeHtml(v.review)}”</span></span>`;
+      c.addEventListener('click', () => openSheet(f));
+      rw.appendChild(c);
+    });
+
+    const best = s.ratedList.slice().sort((a, b) => verdictOf(b.id, id).rating - verdictOf(a.id, id).rating).slice(0, 12);
+    const bw = sec.querySelector('#p-best');
+    if (!best.length) bw.innerHTML = `<p class="addfilm__hint">Puntuá algo y aparece acá.</p>`;
+    best.forEach((f) => bw.appendChild(posterCard(f)));
+
+    if (mine) {
+      sec.querySelector('#p-photo').addEventListener('click', () => K.pickPhoto((data) => {
+        K.accounts.patch(store, id, { photo: data });
+        refreshUsers(); renderHeader(); renderPerfil(app);
+        K.toast('Foto actualizada ✓');
+      }));
+      sec.querySelector('#p-editbio').addEventListener('click', () => openBioEditor(app, id, bio));
+    }
+  }
+  function openBioEditor(app, id, bio) {
     const el = $('#confirm');
-    el.innerHTML =
-      `<div class="confirm__scrim" data-cancel></div>` +
-      `<div class="confirm__card"><div class="confirm__title">¿Cambiar de usuario?</div>` +
-      `<p class="confirm__text">Estás como <b style="color:${u.color}">${u.name}</b>. Podés volver a elegir quién sos.</p>` +
+    el.innerHTML = `<div class="confirm__scrim" data-cancel></div><div class="confirm__card">` +
+      `<div class="confirm__title">Tu descripción</div>` +
+      `<div class="review-field"><textarea id="bio-txt" maxlength="240" placeholder="Contá algo tuyo…">${escapeHtml(bio)}</textarea></div>` +
       `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button>` +
-      `<button class="btn btn--accent" data-switch>${icon('switch_account')} Cambiar</button></div></div>`;
+      `<button class="btn btn--accent" id="bio-ok">${icon('check')} Guardar</button></div></div>`;
     el.hidden = false;
     el.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => (el.hidden = true)));
-    el.querySelector('[data-switch]').addEventListener('click', () => {
-      el.hidden = true;
-      stopHero();
-      store.clearUser();
-      showGate();
+    el.querySelector('#bio-ok').addEventListener('click', () => {
+      K.accounts.patch(store, id, { bio: el.querySelector('#bio-txt').value.trim() });
+      refreshUsers(); el.hidden = true; renderPerfil(app);
+    });
+    setTimeout(() => el.querySelector('#bio-txt').focus(), 40);
+  }
+
+  /* ============================================================= CONFIGURACIONES */
+  function renderConfig(app) {
+    const me = currentUser();
+    if (me.guest) { store.clearUser(); return showGate(); }
+    const acc = store.getAccounts()[me.id] || {};
+    const importState = (WM.importStatus || {})[me.id] || null;
+    const syncLine = importState
+      ? `${importState.message}${importState.syncedAt ? ` · ${new Date(importState.syncedAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}` : ''}${importState.ok ? ` · ${importState.watched || 0} vistas` : ''}`
+      : 'Todavía no hay una sincronización registrada.';
+    app.innerHTML = '';
+    const sec = document.createElement('section');
+    sec.className = 'section';
+    sec.style.paddingTop = 'calc(var(--header-h) + 1.4rem)';
+    sec.innerHTML =
+      `<div class="section__head"><div><h3 class="section__title">Configuraciones</h3>` +
+      `<p class="section__sub">Tu cuenta — es la misma para <b>PWM</b> y <b>PRB</b>.</p></div></div>` +
+      `<div class="cfg">` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('account_circle')}<div><b>Foto de perfil</b><small>Se recorta y se guarda chiquita (400×400).</small></div></div>` +
+      `<div class="cfg__r">${avatarHTML(me, 'avatar cfg__av')}<button class="btn btn--soft btn--xs" id="cfg-photo">${icon('photo_camera')} Cambiar</button>` +
+      (acc.photo ? `<button class="btn btn--soft btn--xs" id="cfg-photo-off">${icon('delete')} Sacar</button>` : '') + `</div></div>` +
+
+      `<div class="cfg__row"><div class="cfg__l">${icon('badge')}<div><b>Nombre</b><small>Cómo te ven en la app.</small></div></div>` +
+      `<div class="cfg__r"><input class="cfg__in" id="cfg-name" maxlength="24" value="${escapeHtml(me.name)}"></div></div>` +
+
+      `<div class="cfg__row"><div class="cfg__l">${icon('palette')}<div><b>Tu color</b><small>Pinta tus puntajes y los acentos.</small></div></div>` +
+      `<div class="cfg__r su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c.toLowerCase() === String(me.color).toLowerCase() ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>` +
+
+      `<div class="cfg__row"><div class="cfg__l">${icon('link')}<div><b>Usuario de Letterboxd</b><small>Para importar reseñas, likes, estrellas, watchlist y vistas. Entra en la próxima corrida del robot (máx. 24h).</small></div></div>` +
+      `<div class="cfg__r cfg__r--sync"><input class="cfg__in" id="cfg-lb" maxlength="40" placeholder="tuusuario" value="${escapeHtml(acc.lb || me.lb || me.handle || '')}">` +
+      `<span class="cfg-sync${importState && !importState.ok ? ' is-bad' : ''}">${icon(importState && importState.ok ? 'cloud_done' : 'sync_problem')} ${escapeHtml(syncLine)}</span></div></div>` +
+
+      `<div class="cfg__row"><div class="cfg__l">${icon('lock')}<div><b>Contraseña</b><small>4 números. ${K.accounts.hasPin(store, me.id) ? 'Ya tenés una propia.' : 'Todavía usás la de fábrica (1234).'}</small></div></div>` +
+      `<div class="cfg__r"><button class="btn btn--soft btn--xs" id="cfg-pin">${icon('key')} Cambiar contraseña</button></div></div>` +
+
+      `<div class="cfg__row"><div class="cfg__l">${icon('logout')}<div><b>Cerrar sesión</b><small>Volvés a la pantalla de “¿Quién sos?”.</small></div></div>` +
+      `<div class="cfg__r"><button class="btn btn--soft btn--xs cfg__danger" id="cfg-out">${icon('logout')} Cerrar sesión</button></div></div>` +
+      `</div>` +
+      `<div class="cfg__actions"><button class="btn btn--accent" id="cfg-save">${icon('save')} Guardar cambios</button><span class="saved-flag" id="cfg-flag">guardado ✓</span></div>`;
+    app.appendChild(sec);
+    app.appendChild(buildFooter());
+
+    let color = me.color;
+    sec.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => {
+      color = b.dataset.c;
+      sec.querySelectorAll('.su-color').forEach((x) => x.classList.toggle('is-on', x === b));
+    }));
+    sec.querySelector('#cfg-photo').addEventListener('click', () => K.pickPhoto((data) => {
+      K.accounts.patch(store, me.id, { photo: data }); refreshUsers(); renderHeader(); renderConfig(app); K.toast('Foto actualizada ✓');
+    }));
+    const off = sec.querySelector('#cfg-photo-off');
+    if (off) off.addEventListener('click', () => { K.accounts.patch(store, me.id, { photo: null }); refreshUsers(); renderHeader(); renderConfig(app); });
+    sec.querySelector('#cfg-pin').addEventListener('click', () => changePin(me));
+    sec.querySelector('#cfg-out').addEventListener('click', () => { stopHero(); store.clearUser(); showGate(); });
+    sec.querySelector('#cfg-save').addEventListener('click', () => {
+      const name = sec.querySelector('#cfg-name').value.trim() || me.name;
+      const lb = sec.querySelector('#cfg-lb').value.trim().replace(/^@/, '');
+      K.accounts.patch(store, me.id, { name, color, lb, initial: name.charAt(0).toUpperCase() });
+      refreshUsers(); applyAccent(); renderHeader();
+      const flag = sec.querySelector('#cfg-flag'); flag.classList.add('show'); setTimeout(() => flag.classList.remove('show'), 1600);
+      renderConfig(app);
+    });
+  }
+  function changePin(u) {
+    const hasOwn = K.accounts.hasPin(store, u.id);
+    let stage = hasOwn ? 'old' : 'new';
+    let first = null;
+    K.pinPad({
+      avatar: avatarHTML(u, 'profile__avatar'), name: u.name, color: u.color,
+      label: hasOwn ? 'Contraseña actual' : 'Elegí tu nueva contraseña',
+      async onDone(pin, ctl) {
+        if (stage === 'old') {
+          if (!(await K.accounts.checkPin(store, u.id, pin))) return ctl.fail('Esa no es la actual');
+          stage = 'new'; return ctl.next('Nueva contraseña');
+        }
+        if (stage === 'new') { first = pin; stage = 'rep'; return ctl.next('Repetila'); }
+        if (pin !== first) { stage = 'new'; first = null; return ctl.next('No coinciden — probá de nuevo'); }
+        await K.accounts.setPin(store, u.id, pin);
+        ctl.close();
+        K.toast('Contraseña cambiada ✓');
+        if (route === 'config') renderConfig($('#app'));
+      },
     });
   }
 
@@ -1570,17 +2517,37 @@
   }
 
   (async () => {
-    await store.init(); mergeExtras(); // load shared state from Supabase (falls back to local cache)
+    await store.init(); mergeExtras(); refreshUsers(); // load shared state from Supabase (falls back to local cache)
     const uid = store.getUser();
-    if (uid && users[uid]) { applyAccent(); startApp(); } else { showGate(); }
-    // Re-sync with the other user when the tab regains focus.
+    if (uid && (users[uid] || uid === 'guest')) { applyAccent(); startApp(); } else { showGate(); }
+
+    /* Everything is live now, not just the notifications: the store pushes on every remote change
+     * (Supabase Realtime, or a light poll if the socket can't join) and we redraw what's on screen. */
+    let painting = false;
+    store.onRemote(() => {
+      if (painting || !store.getUser() || !gate.hidden) return;
+      painting = true;
+      requestAnimationFrame(() => {
+        painting = false;
+        mergeExtras(); refreshUsers();
+        const busy = !$('#sheet').hidden
+          || document.getElementById('swiper')?.hidden === false
+          || $('#confirm').hidden === false
+          || document.getElementById('invite')?.hidden === false
+          || document.getElementById('calday')?.hidden === false;
+        renderHeader();                                  // el +N del calendario siempre al día
+        if (!busy) renderRoute();
+      });
+    });
+    store.startLive();
+
+    // Belt and braces: also re-sync when the tab regains focus.
     let refreshing = false;
     window.addEventListener('focus', async () => {
       if (refreshing || !store.getUser()) return;
       refreshing = true;
-      await store.refresh(); mergeExtras();
+      await store.refresh(); mergeExtras(); refreshUsers();
       refreshing = false;
-      if ($('#sheet').hidden && document.getElementById('swiper')?.hidden !== false) renderRoute();
     });
   })();
 })();

@@ -41,20 +41,44 @@ WM.api = (function () {
     } catch { return {}; }
   }
 
+  /* Search in Spanish, English AND Japanese (for the animes): TMDB's matching leans on the
+   * `language` you ask with, so one query alone misses titles the user typed in another one.
+   * We fire all three in parallel, merge by id and keep the Spanish title for display when it exists. */
+  const SEARCH_LANGS = ['es-ES', 'en-US', 'ja-JP'];
   async function search(query) {
-    if (!query || query.trim().length < 2) return [];
-    const d = await tmdb('/search/multi', { query, language: 'es-ES', include_adult: false });
-    return (d.results || [])
-      .filter((x) => x.media_type === 'movie' || x.media_type === 'tv')
-      .slice(0, 12)
-      .map((x) => ({
-        id: x.id,
-        media: x.media_type,
-        kind: x.media_type === 'tv' ? 'series' : 'movie',
-        title: x.title || x.name,
-        year: (x.release_date || x.first_air_date || '').slice(0, 4),
-        poster: poster(x.poster_path),
-      }));
+    const q = (query || '').trim();
+    if (q.length < 2) return [];
+    const packs = await Promise.all(SEARCH_LANGS.map(async (language) => {
+      try { return { language, d: await tmdb('/search/multi', { query: q, language, include_adult: false }) }; }
+      catch { return { language, d: { results: [] } }; }
+    }));
+    const merged = new Map();
+    packs.forEach(({ language, d }) => {
+      (d.results || [])
+        .filter((x) => x.media_type === 'movie' || x.media_type === 'tv')
+        .forEach((x) => {
+          const key = `${x.media_type}-${x.id}`;
+          const title = x.title || x.name || '';
+          const releaseDate = x.release_date || x.first_air_date || '';
+          const prev = merged.get(key);
+          if (!prev) {
+            merged.set(key, {
+              id: x.id, media: x.media_type, kind: x.media_type === 'tv' ? 'series' : 'movie',
+              title, orig: x.original_title || x.original_name || '',
+              year: releaseDate.slice(0, 4), releaseDate,
+              upcoming: !!releaseDate && releaseDate > new Date().toISOString().slice(0, 10),
+              poster: poster(x.poster_path), pop: x.popularity || 0, hits: 1, es: language === 'es-ES',
+            });
+          } else {
+            prev.hits++;
+            prev.pop = Math.max(prev.pop, x.popularity || 0);
+            if (!prev.poster) prev.poster = poster(x.poster_path);
+            if (!prev.es && language === 'es-ES' && title) { prev.title = title; prev.es = true; }
+          }
+        });
+    });
+    // titles found in several languages are the likelier match, then plain popularity
+    return [...merged.values()].sort((a, b) => b.hits - a.hits || b.pop - a.pop).slice(0, 14);
   }
 
   async function addDetails(tmdbId, media) {
@@ -74,6 +98,8 @@ WM.api = (function () {
       id: `x-${kind}-${tmdbId}`,
       title: d.title || d.name,
       year: date ? +date.slice(0, 4) : null,
+      releaseDate: date || null,
+      upcoming: !!date && date > new Date().toISOString().slice(0, 10),
       kind,
       director,
       runtime: d.runtime || (d.episode_run_time && d.episode_run_time[0]) || 0,
@@ -92,10 +118,16 @@ WM.api = (function () {
 
   // Random movie pool for the "secret" swiper — all eras/genres, shuffled.
   let genreMap = null;
+  let tvGenreMap = null;
   async function ensureGenres() {
     if (genreMap) return;
     genreMap = {};
     try { const g = await tmdb('/genre/movie/list', { language: 'es-ES' }); (g.genres || []).forEach((x) => (genreMap[x.id] = x.name)); } catch {}
+  }
+  async function ensureTvGenres() {
+    if (tvGenreMap) return;
+    tvGenreMap = {};
+    try { const g = await tmdb('/genre/tv/list', { language: 'es-ES' }); (g.genres || []).forEach((x) => (tvGenreMap[x.id] = x.name)); } catch {}
   }
   async function randomMovies() {
     await ensureGenres();
@@ -139,5 +171,39 @@ WM.api = (function () {
     }));
   }
 
-  return { search, addDetails, randomMovies, discover, available: !!T };
+  /* Catalog "Descubrir nuevos": fresh TMDB titles for the Movies/Series screens, honouring the
+   * genre chip that's active there. `genre` is the Spanish label shown in the UI ('Anime' is a
+   * pseudo-genre = animation + japanese). Works for both /discover/movie and /discover/tv. */
+  async function discoverCatalog({ kind = 'movie', genre = null, page = 1 } = {}) {
+    const tv = kind === 'series' || kind === 'tv';
+    await (tv ? ensureTvGenres() : ensureGenres());
+    const map = tv ? tvGenreMap : genreMap;
+    const nameToId = {}; Object.entries(map).forEach(([id, name]) => (nameToId[name] = id));
+    const params = {
+      sort_by: 'popularity.desc', include_adult: false, language: 'es-ES', page,
+      'vote_count.gte': tv ? 40 : 80,
+    };
+    if (genre === 'Anime') {
+      params.with_genres = tv ? nameToId['Animación'] || '16' : '16';
+      params.with_original_language = 'ja';
+    } else if (genre && genre !== 'Todos') {
+      const gid = nameToId[genre];
+      if (gid) params.with_genres = gid;
+    }
+    const d = await tmdb(tv ? '/discover/tv' : '/discover/movie', params);
+    return (d.results || []).filter((m) => m.poster_path).map((m) => {
+      const date = m.release_date || m.first_air_date || '';
+      return {
+        id: `x-${tv ? 'series' : 'movie'}-${m.id}`, tmdb: m.id, media: tv ? 'tv' : 'movie',
+        title: m.title || m.name, year: date ? +date.slice(0, 4) : null,
+        kind: tv ? 'series' : 'movie', owner: 'extra', extra: true,
+        genres: (m.genre_ids || []).map((id) => map[id]).filter(Boolean),
+        lang: m.original_language || '',
+        synopsis: m.overview || '', imdb: m.vote_average ? +m.vote_average.toFixed(1) : null, rt: null,
+        poster: poster(m.poster_path), backdrop: backdrop(m.backdrop_path), trailer: null,
+      };
+    });
+  }
+
+  return { search, addDetails, randomMovies, discover, discoverCatalog, available: !!T };
 })();

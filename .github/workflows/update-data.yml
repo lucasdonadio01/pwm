@@ -1,10 +1,10 @@
-# Weekly data refresh for PWM.
+# Daily data refresh for PWM and every shared account with a Letterboxd handle.
 # To activate: `gh auth refresh -s workflow`, then `git mv .github/_workflows .github/workflows`, commit & push.
 # Requires repo secrets TMDB_TOKEN and OMDB_KEY.
 name: Update PWM data
 on:
   schedule:
-    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+    - cron: '0 9 * * *' # Every day at 09:00 UTC
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,6 +25,6 @@ jobs:
         run: |
           git config user.name "pwm-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add js/data.js
-          git diff --cached --quiet || git commit -m "chore: weekly data refresh"
+          git add js/data.js index.html
+          git diff --cached --quiet || git commit -m "chore: daily data refresh"
           git push
