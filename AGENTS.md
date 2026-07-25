@@ -32,6 +32,14 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
+### 2026-07-25 · Claude — v35 / PWM+PRB 1.23
+- **Letterboxd import now starts at signup**, instead of waiting for the daily run. The browser still can't fetch Letterboxd (CORS + anti-scraping, unchanged), so this is a queue, not a direct call: `accounts.requestLbSync(store, id, lb)` writes `settings(app=shared, key=lb_sync_queue)`; called from `accounts.create` and from the Configuración save in both apps (only when the handle actually changed).
+- `build-data.mjs` gained `--only-if-pending`: reads that queue and exits in ~0.1s when nobody is waiting; clears the queue after a successful write. Refactored the Supabase creds out of `loadPipelineUsers` into a cached `supabase()` + `supaHeaders()`.
+- Workflow has a second cron `*/10 * * * *` passing `--only-if-pending` (the daily 09:00 run stays a full refresh); the flag is chosen with `github.event.schedule`. Polling this often is free because the repo is public — **if it ever goes private this burns the Actions quota**, drop the watcher cron then.
+- Deliberately NOT done: triggering the Action from the browser via `workflow_dispatch`. That needs a PAT with `actions:write` in a public static file — GitHub auto-revokes leaked PATs and anyone could burn Action minutes. A Supabase Edge Function holding the token is the only clean way to make it instant; not worth it for a ~10 min wait.
+- Copy updated in signup + Configuración (no longer promises "máx. 24h").
+- Verified: watcher exits clean on an empty queue; with a seeded test entry it detects it and starts the import (killed at 12s, `data.js` untouched); test entry removed from Supabase afterwards. Enqueue logic checked in-browser against a stub store (strips `@`, accumulates users, ignores blanks). Not verifiable locally: the real cron cadence — worth watching the first signup.
+
 ### 2026-07-24 · Gemini 3.6 Flash — v34 / PWM+PRB 1.22
 - **Review GIFs**: new `reviewgif` blob stores external GIF URLs per film+user. Added `getReviewGif`/`setReviewGif` to both stores, synced via `pushSetting` like other blobs.
 - **`pickGif()`** exposed from APPKIT (refactored `pickPhoto` → `openMediaPicker(opts)`). Opens the same Giphy/Tenor/Wikimedia modal but as a GIF-only picker, without the file-upload button.

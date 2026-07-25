@@ -238,6 +238,17 @@ window.APPKIT = (function () {
       return out;
     },
     guest: () => ({ ...GUEST }),
+    /* Letterboxd can't be fetched from a browser (CORS + anti-scraping), so importing a new
+     * account's data has to happen in the GitHub Action. Instead of waiting for the daily run,
+     * we leave a request in Supabase: a light watcher workflow polls it every few minutes and
+     * runs the importer only when somebody is actually waiting. No token ever lives in the page. */
+    requestLbSync(store, userId, lb) {
+      const handle = String(lb || '').trim().replace(/^@/, '');
+      if (!handle) return;
+      const queue = { ...(store.getShared('lb_sync_queue') || {}) };
+      queue[userId] = { lb: handle, requestedAt: new Date().toISOString() };
+      store.setShared('lb_sync_queue', queue);
+    },
     async create(store, { name, color, lb, photo, pin, notifyTargets = [] }) {
       const base = (name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user';
       const acc = store.getAccounts();
@@ -249,6 +260,7 @@ window.APPKIT = (function () {
         lb: (lb || '').trim(), pass: await sha256(id + ':' + (pin || DEFAULT_PIN)), createdAt: new Date().toISOString(), custom: true,
       };
       store.saveAccounts(acc);
+      if (acc[id].lb) accounts.requestLbSync(store, id, acc[id].lb);   // import their Letterboxd now, not tomorrow
       const targets = [...new Set(notifyTargets)].filter((uid) => uid && uid !== id && uid !== 'guest');
       if (targets.length) activity.push(store, {
         id: `user-joined:${id}`,

@@ -40,14 +40,52 @@ let USERS = { ...BASE_USERS };
 /* Accounts created in the browser live in settings(app=shared,key=accounts). The publishable
  * Supabase key is read from js/config.js (or env overrides), so GitHub Actions needs no new secret.
  * Password hashes and photos never get copied into generated data.js. */
-async function loadPipelineUsers() {
+let supaCreds;
+async function supabase() {
+  if (supaCreds !== undefined) return supaCreds;
   try {
     const client = await readFile(join(__dirname, '..', 'js', 'config.js'), 'utf8');
     const url = process.env.SUPABASE_URL || (client.match(/url:\s*'([^']+)'/) || [])[1];
     const key = process.env.SUPABASE_KEY || (client.match(/key:\s*'([^']+)'/) || [])[1];
-    if (!url || !key) return;
+    supaCreds = url && key ? { url, key } : null;
+  } catch { supaCreds = null; }
+  return supaCreds;
+}
+const supaHeaders = (key) => ({ apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' });
+
+/* Signups (and Letterboxd-handle changes) leave a request in settings(app=shared,key=lb_sync_queue).
+ * The watcher workflow runs this script with --only-if-pending every few minutes, so a new account's
+ * data lands in minutes instead of waiting for the daily run. Cleared once the import succeeds. */
+async function readSyncQueue() {
+  const c = await supabase();
+  if (!c) return {};
+  try {
+    const r = await fetch(`${c.url}/rest/v1/settings?app=eq.shared&key=eq.lb_sync_queue&select=value`, { headers: supaHeaders(c.key) });
+    if (!r.ok) return {};
+    const rows = await r.json();
+    const v = rows[0] && rows[0].value;
+    return v && typeof v === 'object' ? v : {};
+  } catch { return {}; }
+}
+async function clearSyncQueue() {
+  const c = await supabase();
+  if (!c) return;
+  try {
+    await fetch(`${c.url}/rest/v1/settings`, {
+      method: 'POST',
+      headers: { ...supaHeaders(c.key), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ app: 'shared', key: 'lb_sync_queue', value: {}, updated_at: new Date().toISOString() }),
+    });
+  } catch (e) { console.warn(`  Could not clear the sync queue (${e.message}).`); }
+}
+
+async function loadPipelineUsers() {
+  try {
+    const c = await supabase();
+    if (!c) return;
+    const { url, key } = c;
     const r = await fetch(`${url}/rest/v1/settings?app=eq.shared&key=eq.accounts&select=value`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+      headers: supaHeaders(key),
     });
     if (!r.ok) throw new Error(`Supabase ${r.status}`);
     const rows = await r.json();
@@ -456,6 +494,14 @@ function pickFeatured(films) {
 }
 
 async function main() {
+  // Watcher mode: bail out in a second or two unless somebody is actually waiting for an import.
+  const onlyIfPending = process.argv.includes('--only-if-pending');
+  if (onlyIfPending) {
+    const queue = await readSyncQueue();
+    const waiting = Object.entries(queue).filter(([, v]) => v && v.lb);
+    if (!waiting.length) { console.log('✓ Nada pendiente — no hay nada que sincronizar.'); return; }
+    console.log(`→ Sincronización pedida por: ${waiting.map(([id, v]) => `${id} (@${v.lb})`).join(', ')}`);
+  }
   await loadPipelineUsers();
   console.log('→ Scraping watchlists…');
   const ownerBySlug = new Map();
@@ -516,6 +562,9 @@ async function main() {
     await writeFile(idxPath, idx, 'utf8');
     console.log('✓ Cache-busted index.html');
   } catch (e) { console.warn('index cache-bust skipped:', e.message); }
+
+  // Everyone who was waiting is now in data.js, so the queue can go.
+  await clearSyncQueue();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

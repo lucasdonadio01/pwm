@@ -210,7 +210,7 @@
         (photo ? `<button class="linklike" id="su-picoff">Sacar la foto</button>` : '') + `</div></div>` +
         `<label class="tl-field"><span>Nombre</span><input id="su-name" type="text" maxlength="24" placeholder="Cómo te llamás" autocomplete="off"></label>` +
         `<label class="tl-field"><span>Usuario de Letterboxd <small>(opcional)</small></span><input id="su-lb" type="text" maxlength="40" placeholder="tuusuario" autocomplete="off"></label>` +
-        `<p class="confirm__text confirm__text--tight">Con eso importamos tus reseñas, likes, estrellas, watchlist y vistas en la próxima corrida del robot (máx. 24h).</p>` +
+        `<p class="confirm__text confirm__text--tight">Con eso importamos tus reseñas, likes, estrellas, watchlist y vistas. Arranca solo apenas creás la cuenta y suele estar listo en unos minutos.</p>` +
         `<div class="su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c === color ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div>` +
         `<div class="confirm__actions"><button class="btn btn--soft" data-cancel>Cancelar</button>` +
         `<button class="btn btn--accent" id="su-ok">${icon('arrow_forward')} Elegir contraseña</button></div></div>`;
@@ -3269,7 +3269,7 @@
       `<div class="cfg__row"><div class="cfg__l">${icon('palette')}<div><b>Tu color</b><small>Pinta tus puntajes y los acentos.</small></div></div>` +
       `<div class="cfg__r su-colors">${NEW_COLORS.map((c) => `<button class="su-color${c.toLowerCase() === String(me.color).toLowerCase() ? ' is-on' : ''}" data-c="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>` +
 
-      `<div class="cfg__row"><div class="cfg__l">${icon('link')}<div><b>Usuario de Letterboxd</b><small>Para importar reseñas, likes, estrellas, watchlist y vistas. Entra en la próxima corrida del robot (máx. 24h).</small></div></div>` +
+      `<div class="cfg__row"><div class="cfg__l">${icon('link')}<div><b>Usuario de Letterboxd</b><small>Para importar reseñas, likes, estrellas, watchlist y vistas. Si lo cambiás, la importación arranca sola y suele tardar unos minutos.</small></div></div>` +
       `<div class="cfg__r cfg__r--sync"><input class="cfg__in" id="cfg-lb" maxlength="40" placeholder="tuusuario" value="${escapeHtml(acc.lb || me.lb || me.handle || '')}">` +
       `<span class="cfg-sync${importState && !importState.ok ? ' is-bad' : ''}">${icon(importState && importState.ok ? 'cloud_done' : 'sync_problem')} ${escapeHtml(syncLine)}</span></div></div>` +
 
@@ -3298,7 +3298,9 @@
     sec.querySelector('#cfg-save').addEventListener('click', () => {
       const name = sec.querySelector('#cfg-name').value.trim() || me.name;
       const lb = sec.querySelector('#cfg-lb').value.trim().replace(/^@/, '');
+      const prevLb = String((store.getAccounts()[me.id] || {}).lb || '').trim().replace(/^@/, '');
       K.accounts.patch(store, me.id, { name, color, lb, initial: name.charAt(0).toUpperCase() });
+      if (lb && lb.toLowerCase() !== prevLb.toLowerCase()) K.accounts.requestLbSync(store, me.id, lb);
       refreshUsers(); applyAccent(); renderHeader();
       const flag = sec.querySelector('#cfg-flag'); flag.classList.add('show'); setTimeout(() => flag.classList.remove('show'), 1600);
       renderConfig(app);

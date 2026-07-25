@@ -1756,7 +1756,9 @@
     sec.querySelector('#cfg-save').addEventListener('click', () => {
       const name = sec.querySelector('#cfg-name').value.trim() || me.name;
       const lb = sec.querySelector('#cfg-lb').value.trim().replace(/^@/, '');
+      const prevLb = String((store.getAccounts()[me.id] || {}).lb || '').trim().replace(/^@/, '');
       K.accounts.patch(store, me.id, { name, color, lb, initial: name.charAt(0).toUpperCase() });
+      if (lb && lb.toLowerCase() !== prevLb.toLowerCase()) K.accounts.requestLbSync(store, me.id, lb);
       refreshUsers(); applyAccent(); renderHeader();
       const flag = sec.querySelector('#cfg-flag'); flag.classList.add('show'); setTimeout(() => flag.classList.remove('show'), 1600);
       renderConfig(app);
