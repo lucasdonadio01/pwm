@@ -1446,12 +1446,9 @@
   const PROFILE_MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const PROFILE_WEEKDAYS = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const profileISO = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  function readDate(b, uid) {
-    const r = store.getReading(b.id, uid);
-    if (r.finishedAt) return r.finishedAt;
-    const t = store.get(b.id, uid).updatedAt;
-    return t ? String(t).slice(0, 10) : null;
-  }
+  /* Only a real finish date counts. Falling back to `updatedAt` (when the row was written in the
+   * app) made rating an old book look like you finished it today, inflating "este año". */
+  function readDate(b, uid) { return store.getReading(b.id, uid).finishedAt || null; }
   const isoWeek = (iso) => {
     const d = new Date(iso + 'T00:00:00');
     const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));

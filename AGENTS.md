@@ -32,6 +32,10 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
+### 2026-07-25 · Claude — v36 / PWM+PRB 1.24
+- **Only a real watch/finish date counts toward the timeline.** `seenDate` (PWM) and `readDate` (PRB) fell back to `store.get().updatedAt` — the moment the row was *written in the app* — so rating an old film today made it look watched today. Luke's profile said "40 este año"; with the fix it's the honest 0 (nobody has ever set a date). Undated titles just don't land on `byDay/byMonth/byWeek` or "este año"; totals, averages and distributions are unaffected. Verified in-app: 50 títulos vistos · 0 este año, no console errors, profile still renders.
+- Deliberately NOT done: auto-importing `<letterboxd:watchedDate>` from the RSS. It exists and the parser could read it, but Luke bulk-logged his backlog on 2026-07-20, so every entry carries that date — importing it would re-inflate "este año" to ~40, i.e. reproduce the exact bug he reported. Left for him to decide; if he ever wants it, the field is right there in the `<item>` next to `memberRating`.
+
 ### 2026-07-25 · Claude — v35 / PWM+PRB 1.23
 - **Letterboxd import now starts at signup**, instead of waiting for the daily run. The browser still can't fetch Letterboxd (CORS + anti-scraping, unchanged), so this is a queue, not a direct call: `accounts.requestLbSync(store, id, lb)` writes `settings(app=shared, key=lb_sync_queue)`; called from `accounts.create` and from the Configuración save in both apps (only when the handle actually changed).
 - `build-data.mjs` gained `--only-if-pending`: reads that queue and exits in ~0.1s when nobody is waiting; clears the queue after a successful write. Refactored the Supabase creds out of `loadPipelineUsers` into a cached `supabase()` + `supaHeaders()`.

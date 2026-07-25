@@ -2842,12 +2842,10 @@
   /* ============================================================= PERFIL
    * Perfil = la vista linda (stats, medallas, reseñas). Configuraciones = los ajustes de la cuenta.
    * Cuando una peli no tiene fecha cargada a mano, usamos la fecha en que se puntuó. */
-  function seenDate(f, uid) {
-    const wm = watchMetaOf(f.id, uid).date;
-    if (wm) return wm;
-    const t = store.get(f.id, uid).updatedAt;
-    return t ? String(t).slice(0, 10) : null;
-  }
+  /* Only a real watch date counts. This used to fall back to `updatedAt` — the moment the row was
+   * written in the app — so rating an old film today made it look watched today, and "este año"
+   * counted everything anyone had ever rated. Undated titles simply don't land on the timeline. */
+  function seenDate(f, uid) { return watchMetaOf(f.id, uid).date || null; }
   const isoWeek = (iso) => {
     const d = new Date(iso + 'T00:00:00');
     const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
