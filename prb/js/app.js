@@ -1242,7 +1242,32 @@
       t = setTimeout(async () => {
         try {
           const list = await PRB.api.search(q);
-          if (!list.length) { results.innerHTML = `<p class="addfilm__hint">Sin resultados.</p>`; return; }
+          if (!list.length) {
+            const html = [`<p class="addfilm__hint">Sin resultados.</p>`];
+            // In ISBN mode with no key configured, offer to set one
+            if (addBookIsbnMode && !PRB.keys.googlebooks) {
+              html.push(`<div class="ab-gbprompt"><p class="addfilm__hint">¿No encontrás el libro? Muchos ISBNs de editoriales argentinas y españolas solo están en Google Books.</p><div class="ab-gbprompt__row"><input id="ab-gbkey" type="text" class="ab-gbprompt__in" placeholder="Pegá tu API Key de Google Books…"><button class="btn btn--soft ab-gbprompt__btn" id="ab-gbsave">${icon('key')} Guardar</button></div><p class="addfilm__hint" style="font-size:0.75rem">Conseguí la key gratis en <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> → Habilitá Books API → Crear API Key (sin tarjeta).</p></div>`);
+            } else if (addBookIsbnMode && PRB.keys.googlebooks) {
+              html.push(`<p class="addfilm__hint">Tampoco está en Google Books. Probá con otro ISBN o buscá por título.</p>`);
+            }
+            results.innerHTML = html.join('');
+            const gbSave = el.querySelector('#ab-gbsave');
+            if (gbSave) {
+              const gbIn = el.querySelector('#ab-gbkey');
+              const onSave = () => {
+                const v = gbIn.value.trim();
+                if (!v) return;
+                PRB.keys.googlebooks = v;
+                try { localStorage.setItem('PRB_gbooks_key', v); } catch {}
+                results.innerHTML = `<p class="addfilm__hint">Key guardada. Buscando de nuevo…</p>`;
+                input.dispatchEvent(new Event('input'));
+              };
+              gbSave.addEventListener('click', onSave);
+              gbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') onSave(); });
+              setTimeout(() => gbIn.focus(), 100);
+            }
+            return;
+          }
           results.innerHTML = '';
           list.forEach((it) => {
             const existing = books.find((b) => b.id === PRB.bookId(it.key));
@@ -1864,6 +1889,8 @@
   }
   function startApp() { applyAccent(); wireProfileNavigation(); wireHashRouting(); renderHeader(); setRoute(routeFromHash() || 'home'); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
   (async () => {
+    // Load saved Google Books key
+    try { const k = localStorage.getItem('PRB_gbooks_key'); if (k) PRB.keys.googlebooks = k; } catch {}
     await store.init();
     mergeExtras();
     refreshUsers();
