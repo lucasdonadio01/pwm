@@ -28,15 +28,15 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- ~~GIF search keys~~ → your Giphy key `KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr` is now in both configs. Tenor key still optional. The key is a free read-only public API key — no card attached, no risk.
+- ~~GIF search keys~~ → your Giphy key `KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr` is now in both configs. Tenor key still optional.
+- ~~Google Books API key~~ → your key `AIzaSyDr-xp0-Wvx0RKbV7RL6qmeKHZ5jGPqPkM` is now in `PRB.keys.googlebooks`.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-25 · Gemini 3.6 Flash — v38 / PWM+PRB 1.26
-- **Google Books fallback for ISBNs not in Open Library**: cuando OL no encuentra un ISBN (ej. 9788420669885, editoriales españolas/argentinas no indexadas), `PRB.api.search` prueba Google Books API. Trae título, autor, editorial, portada, sinopsis y año exacto de edición.
-- **googlebooks key opcional**: `PRB.keys.googlebooks` (sin key funciona igual con límites generosos desde el browser; con key de Google Cloud Console → 1000 req/día gratis).
-- **add() usa description inline**: Google Books ya incluye la sinopsis en la respuesta de búsqueda, así que `PRB.api.add` la usa sin hacer un fetch extra.
-- Version 1.26, cache-bust v=38. Pushed to `main`.
+### 2026-07-25 · Gemini 3.6 Flash — v39 / PWM+PRB 1.27
+- **Google Books API key configurada**: `AIzaSyDr-xp0-Wvx0RKbV7RL6qmeKHZ5jGPqPkM` en `PRB.keys.googlebooks`. Sin key, Google Books rechaza las consultas (429). Con esta key, los ISBNs de editoriales argentinas/españolas (como 9788420669885) se resuelven al instante.
+- **Prompt inline para la key**: si no hay key configurada al buscar un ISBN y no se encuentra en Open Library, aparece un input en el modal para pegar la key + link a Google Cloud. Se guarda en localStorage y reintenta.
+- Version 1.27, cache-bust v=39. Pushed to `main`.
 
 ### 2026-07-25 · Claude — v36 / PWM+PRB 1.24
 - **Only a real watch/finish date counts toward the timeline.** `seenDate` (PWM) and `readDate` (PRB) fell back to `store.get().updatedAt` — the moment the row was *written in the app* — so rating an old film today made it look watched today. Luke's profile said "40 este año"; with the fix it's the honest 0 (nobody has ever set a date). Undated titles just don't land on `byDay/byMonth/byWeek` or "este año"; totals, averages and distributions are unaffected. Verified in-app: 50 títulos vistos · 0 este año, no console errors, profile still renders.
