@@ -32,6 +32,13 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
+### 2026-07-25 · Gemini 3.6 Flash — v37 / PWM+PRB 1.25
+- **ISBN search button toggle**: "Escribir ISBN" / "Búsqueda normal" toggles the input mode. In ISBN mode the `inputMode` is set to `numeric` so mobile keyboards show digits. Button text and icon swap on each click.
+- **Numeric keypad on mobile**: when in ISBN mode, `.addbook__numpad` appears with a 5-column grid of digit keys (0-9) + backspace. Built with static HTML (no JS libs). Each key press fires an `input` event so the existing search flow works unchanged.
+- **ISBN auto-detection in `PRB.api.search`**: strips hyphens/spaces and matches 10/13-digit ISBN pattern → direct fetch to `openlibrary.org/isbn/{isbn}.json` → exact edition data (publisher, year, cover). Falls back to `q=isbn:...` if the direct endpoint fails.
+- **Buscalibre**: no public JSON API (server-rendered HTML, no CORS). Can't be searched from a browser without a backend proxy. Alternative: Google Books API (CORS + free + covers AR publishers) if desired later.
+- Version 1.25, cache-bust v=37. Pushed to `main`.
+
 ### 2026-07-25 · Claude — v36 / PWM+PRB 1.24
 - **Only a real watch/finish date counts toward the timeline.** `seenDate` (PWM) and `readDate` (PRB) fell back to `store.get().updatedAt` — the moment the row was *written in the app* — so rating an old film today made it look watched today. Luke's profile said "40 este año"; with the fix it's the honest 0 (nobody has ever set a date). Undated titles just don't land on `byDay/byMonth/byWeek` or "este año"; totals, averages and distributions are unaffected. Verified in-app: 50 títulos vistos · 0 este año, no console errors, profile still renders.
 - Deliberately NOT done: auto-importing `<letterboxd:watchedDate>` from the RSS. It exists and the parser could read it, but Luke bulk-logged his backlog on 2026-07-20, so every entry carries that date — importing it would re-inflate "este año" to ~40, i.e. reproduce the exact bug he reported. Left for him to decide; if he ever wants it, the field is right there in the `<item>` next to `memberRating`.
