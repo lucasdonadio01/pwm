@@ -15,8 +15,40 @@ PRB.bookId = (key) => 'x-' + String(key).replace(/[^a-z0-9]+/gi, '-').replace(/^
 PRB.api = {
   async search(query) {
     if (!query || query.trim().length < 2) return [];
+    const q = query.trim();
+    const cleanIsbn = q.replace(/[-\s]/g, '');
+    const isIsbn = /^(978|979)?\d{9}[\dxX]$/i.test(cleanIsbn);
+
+    if (isIsbn) {
+      try {
+        const r = await fetch(`https://openlibrary.org/isbn/${cleanIsbn}.json`);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.title) {
+            let author = '';
+            if (d.authors && d.authors[0] && d.authors[0].key) {
+              try {
+                const ar = await fetch(`https://openlibrary.org${d.authors[0].key}.json`);
+                if (ar.ok) author = (await ar.json()).name || '';
+              } catch {}
+            }
+            const cover = d.covers && d.covers[0] ? `https://covers.openlibrary.org/b/id/${d.covers[0]}-M.jpg` : null;
+            const workKey = d.works && d.works[0] ? d.works[0].key : `/isbn/${cleanIsbn}`;
+            return [{
+              key: workKey,
+              title: d.title,
+              author,
+              year: d.publish_date ? parseInt(d.publish_date, 10) || null : null,
+              cover,
+              subjects: d.subjects || [],
+            }];
+          }
+        }
+      } catch {}
+    }
+
     const u = new URL('https://openlibrary.org/search.json');
-    u.searchParams.set('q', query);
+    u.searchParams.set('q', isIsbn ? `isbn:${cleanIsbn}` : q);
     u.searchParams.set('fields', 'key,title,author_name,first_publish_year,cover_i,subject');
     u.searchParams.set('limit', '12');
     const r = await fetch(u);

@@ -1175,11 +1175,66 @@
   function closePickSheet() { const el = document.getElementById('picksheet'); if (el) { el.innerHTML = ''; el.hidden = true; } document.body.style.overflow = ''; document.removeEventListener('keydown', onPickKey); }
 
   /* ---------- add-book live search (Open Library) ---------- */
+  let addBookIsbnMode = false;
   function openAddBook(onAdded, options = {}) {
     let el = document.getElementById('addbook'); if (!el) { el = document.createElement('div'); el.id = 'addbook'; el.className = 'addfilm'; document.body.appendChild(el); }
-    el.innerHTML = `<div class="addfilm__scrim" data-aclose></div><div class="addfilm__panel"><div class="addfilm__head"><h3>Agregar libro</h3><button class="icon-btn" data-aclose aria-label="Cerrar">${icon('close')}</button></div><label class="search search--lg"><span class="material-symbols-rounded">search</span><input id="ab-input" type="search" placeholder="Buscar libro o autor…" autocomplete="off"></label><div class="addfilm__results" id="ab-results"><p class="addfilm__hint">Escribí un título para buscar.</p></div></div>`;
+    addBookIsbnMode = false;
+    el.innerHTML =
+      `<div class="addfilm__scrim" data-aclose></div>` +
+      `<div class="addfilm__panel">` +
+      `<div class="addfilm__head"><h3>Agregar libro</h3><button class="icon-btn" data-aclose aria-label="Cerrar">${icon('close')}</button></div>` +
+      `<div class="addbook__searchrow">` +
+      `<label class="search search--lg"><span class="material-symbols-rounded">search</span><input id="ab-input" type="search" placeholder="Buscar libro, autor o ISBN…" autocomplete="off"></label>` +
+      `<button type="button" class="btn btn--soft ab-isbn-btn" id="ab-isbn-btn">${icon('barcode_scanner')} Escribir ISBN</button>` +
+      `</div>` +
+      `<div class="addbook__numpad" id="ab-numpad" hidden></div>` +
+      `<div class="addfilm__results" id="ab-results"><p class="addfilm__hint">Escribí un título, autor o número ISBN para buscar.</p></div>` +
+      `</div>`;
     el.hidden = false; document.body.style.overflow = 'hidden';
-    const input = el.querySelector('#ab-input'), results = el.querySelector('#ab-results'); let t;
+    const input = el.querySelector('#ab-input'), results = el.querySelector('#ab-results'), isbnBtn = el.querySelector('#ab-isbn-btn'), numpad = el.querySelector('#ab-numpad'); let t;
+    function enterIsbnMode() {
+      addBookIsbnMode = true;
+      input.value = '';
+      input.type = 'text'; input.inputMode = 'numeric'; input.pattern = '[0-9]*';
+      input.placeholder = 'Ingresá el ISBN (ej: 9788437604947)...';
+      isbnBtn.innerHTML = `${icon('search')} Búsqueda normal`;
+      results.innerHTML = `<p class="addfilm__hint">Pegá o escribí los 10 o 13 dígitos del ISBN…</p>`;
+      if (numpad) {
+        numpad.innerHTML =
+          `<div class="numpad__keys">` +
+          `1 2 3 4 5 6 7 8 9 0`.split(' ').map(d => `<button type="button" class="numpad__key" data-d="${d}">${d}</button>`).join('') +
+          `<button type="button" class="numpad__key numpad__key--wide" data-d="del">${icon('backspace')}</button>` +
+          `</div>`;
+        numpad.hidden = false;
+        numpad.querySelectorAll('.numpad__key').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const d = btn.dataset.d;
+            if (d === 'del') {
+              input.value = input.value.slice(0, -1);
+            } else {
+              input.value = input.value + d;
+            }
+            input.dispatchEvent(new Event('input'));
+          });
+        });
+      }
+      input.focus();
+    }
+    function exitIsbnMode() {
+      addBookIsbnMode = false;
+      input.type = 'search'; input.inputMode = '';
+      input.placeholder = 'Buscar libro, autor o ISBN…';
+      isbnBtn.innerHTML = `${icon('barcode_scanner')} Escribir ISBN`;
+      if (numpad) numpad.hidden = true;
+      input.value = '';
+      input.focus();
+    }
+    if (isbnBtn) {
+      isbnBtn.addEventListener('click', () => {
+        if (addBookIsbnMode) { exitIsbnMode(); return; }
+        enterIsbnMode();
+      });
+    }
     input.addEventListener('input', () => {
       clearTimeout(t); const q = input.value.trim();
       if (q.length < 2) { results.innerHTML = `<p class="addfilm__hint">Escribí al menos 2 letras…</p>`; return; }
