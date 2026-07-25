@@ -3,14 +3,9 @@
 window.PRB = window.PRB || {};
 // GIF search keys (shared avatar/background picker in APPKIT). Keep in sync with WM.keys in js/config.js.
 // giphy: developers.giphy.com → Create App. tenor: Google Cloud → enable "Tenor API". Empty = Wikimedia fallback.
-PRB.keys = { giphy: 'KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr', tenor: '' };
-PRB.supabase = {
-  url: 'https://kcqrcyxzuskgnxnplbxb.supabase.co',
-  key: 'sb_publishable_SGd6YSFMKYd_8t_uaXm-sQ_AXvawyJX',
-  app: 'prb',
-};
+PRB.keys = { giphy: 'KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr', tenor: '', googlebooks: '' };
 
-// Live book search + add (Open Library, no key needed).
+// Live book search + add (Open Library, no key needed) + Google Books (optional key).
 PRB.bookId = (key) => 'x-' + String(key).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
 PRB.api = {
   async search(query) {
@@ -20,6 +15,7 @@ PRB.api = {
     const isIsbn = /^(978|979)?\d{9}[\dxX]$/i.test(cleanIsbn);
 
     if (isIsbn) {
+      // 1. Try Open Library direct ISBN lookup
       try {
         const r = await fetch(`https://openlibrary.org/isbn/${cleanIsbn}.json`);
         if (r.ok) {
@@ -45,6 +41,34 @@ PRB.api = {
           }
         }
       } catch {}
+
+      // 2. Fallback: Google Books API (CORS-friendly, covers publishers OL misses)
+      try {
+        const gbUrl = new URL('https://www.googleapis.com/books/v1/volumes');
+        gbUrl.searchParams.set('q', `isbn:${cleanIsbn}`);
+        gbUrl.searchParams.set('country', 'AR');
+        if (PRB.keys.googlebooks) gbUrl.searchParams.set('key', PRB.keys.googlebooks);
+        const g = await fetch(gbUrl);
+        if (g.ok) {
+          const gd = await g.json();
+          if (gd.totalItems > 0 && gd.items && gd.items[0]) {
+            const info = gd.items[0].volumeInfo;
+            const authors = info.authors || [];
+            const cover = info.imageLinks ? info.imageLinks.thumbnail.replace(/^http:/, 'https:') : null;
+            const year = info.publishedDate ? parseInt(info.publishedDate, 10) || null : null;
+            return [{
+              key: `/googlebooks/${gd.items[0].id}`,
+              title: info.title || '',
+              author: authors[0] || '',
+              year,
+              cover,
+              subjects: info.categories || [],
+              description: info.description || '',
+              publisher: info.publisher || '',
+            }];
+          }
+        }
+      } catch {}
     }
 
     const u = new URL('https://openlibrary.org/search.json');
@@ -59,8 +83,11 @@ PRB.api = {
     }));
   },
   async add(item) {
-    let synopsis = '';
-    try { const w = await fetch(`https://openlibrary.org${item.key}.json`); if (w.ok) { const d = await w.json(); if (d.description) synopsis = typeof d.description === 'string' ? d.description : (d.description.value || ''); } } catch {}
+    let synopsis = item.description || '';
+    // Google Books items come with description already; Open Library items need a fetch
+    if (!synopsis && item.key && item.key.startsWith('/')) {
+      try { const w = await fetch(`https://openlibrary.org${item.key}.json`); if (w.ok) { const d = await w.json(); if (d.description) synopsis = typeof d.description === 'string' ? d.description : (d.description.value || ''); } } catch {}
+    }
     synopsis = (synopsis || '').replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 600);
     const subj = (item.subjects || []).join(' ').toLowerCase();
     const genres = [];
