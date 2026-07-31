@@ -235,3 +235,10 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Si no hay novedades no escribe nada: sin commit y sin deploy.
 - ⚠️ **1 minuto no es posible:** el cron de GitHub tiene piso de 5 minutos y encima se atrasa seguido. 15' es el equilibrio entre latencia y ruido en el historial; cambiarlo es tocar un número en el workflow.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 35. 🚧 [Ambos · Ruteo] Recargar en el perfil de otro te deja ahí
+- Antes la URL decía solo `#perfil`, sin decir de quién: al recargar parado en el perfil de Bian volvías al tuyo.
+- Ahora el perfil visitado va en la propia URL (`#perfil/bian`), así que **F5 te deja donde estabas** y Atrás/Adelante también distinguen entre un perfil y otro.
+- Si el usuario del link ya no existe (cuenta borrada, link viejo), cae a tu perfil en vez de quedar en blanco.
+- Aplica igual en PWM y en PRB.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

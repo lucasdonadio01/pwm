@@ -224,22 +224,32 @@
   // were and the browser's Back/Forward move between sections. (See correcciones.md #22.)
   const ROUTES = ['home', 'selectos', 'leyendo', 'leidos', 'tier', 'perfil', 'config'];
   let hashRoutingWired = false;
-  function routeFromHash() {
-    const r = (location.hash || '').replace(/^#/, '');
-    return ROUTES.includes(r) ? r : null;
+  /* El perfil lleva a quien estas mirando en el propio hash (`#perfil/bian`).
+     Sin eso, recargar parado en el perfil de otro te devolvia al tuyo, porque
+     `#perfil` a secas no dice de quien es. */
+  function parseHash() {
+    const raw = (location.hash || '').replace(/^#/, '');
+    const [r, uid] = raw.split('/');
+    return ROUTES.includes(r) ? { route: r, uid: uid ? decodeURIComponent(uid) : null } : null;
   }
-  function syncHash(r) {
-    if (routeFromHash() === r) return; // already reflected (incl. our own change) — no extra history entry
-    location.hash = r; // pushes a history entry so Back/Forward step through sections
+  function routeFromHash() { const h = parseHash(); return h && h.route; }
+  function hashFor(r, uid) { return r === 'perfil' && uid ? `${r}/${encodeURIComponent(uid)}` : r; }
+  function syncHash(r, uid) {
+    const want = hashFor(r, uid);
+    if ((location.hash || '').replace(/^#/, '') === want) return; // ya reflejado — sin entrada de historial de mas
+    location.hash = want; // empuja una entrada para que Atras/Adelante recorran secciones
   }
   function wireHashRouting() {
     if (hashRoutingWired) return;
     hashRoutingWired = true;
     window.addEventListener('hashchange', () => {
       if (!gate.hidden) return;        // no session yet — ignore
-      const r = routeFromHash();
-      if (!r || r === route) return;   // invalid, or our own programmatic change
-      setRoute(r);
+      const h = parseHash();
+      if (!h) return;                  // invalido
+      /* Estando en un perfil tambien cuenta el usuario: pasar del perfil de uno
+         al de otro es el mismo route pero no es el mismo lugar. */
+      if (h.route === route && (h.route !== 'perfil' || h.uid === profileUserId)) return;
+      setRoute(h.route, { uid: h.uid });
     });
   }
 
@@ -412,8 +422,11 @@
     // State + hash are set synchronously (the motion wrapper can defer its callback via view
     // transitions): reloading right after a tap must still land on the section you tapped.
     route = r;
-    profileUserId = r === 'perfil' ? (options.uid || (currentUser() && currentUser().id)) : null;
-    syncHash(r);
+    /* Un uid que ya no existe (cuenta borrada, link viejo) cae al usuario
+       activo en vez de dejar el perfil en blanco. */
+    const pedido = options.uid && users[options.uid] ? options.uid : null;
+    profileUserId = r === 'perfil' ? (pedido || (currentUser() && currentUser().id)) : null;
+    syncHash(r, profileUserId);
     K.motion.run(() => {
       document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
       window.scrollTo({ top: 0, behavior: 'auto' });
@@ -1896,7 +1909,7 @@
     if (b) openSheet(b, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
     history.replaceState({}, '', location.pathname + location.hash);
   }
-  function startApp() { applyAccent(); wireProfileNavigation(); wireHashRouting(); renderHeader(); setRoute(routeFromHash() || 'home'); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
+  function startApp() { applyAccent(); wireProfileNavigation(); wireHashRouting(); renderHeader(); const inicio = parseHash(); setRoute(inicio ? inicio.route : 'home', inicio ? { uid: inicio.uid } : {}); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
   (async () => {
     // Load saved Google Books key
     try { const k = localStorage.getItem('PRB_gbooks_key'); if (k) PRB.keys.googlebooks = k; } catch {}

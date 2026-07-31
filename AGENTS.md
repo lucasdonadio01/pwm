@@ -41,7 +41,8 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-31 · Claude — v44 / PWM+PRB 1.32
-- **Favicons updated to Lucas's new logos**, byte-identical to the files he supplied: 540×178 with the slanted edge (`M540 0H60L0 178H480L540 0Z`), replacing the 480×178 rectangles. Same brand colours.
-- ⚠️ They ship **verbatim — no square canvas, no padding**; the browser letterboxes them into the tab slot. He chose this with the measurement in front of him (a wordmark this wide rasterises to ~2px of glyph at 16px). A first pass had centred them on a 480×480 square and he rejected it. **Do not "fix" the aspect ratio.** If legibility comes up again the open alternative is the lone `P` filling the square, not re-cropping.
-- Verified both files diff-clean against the originals in `~/Downloads`; `?v=44`, build 1.32.
+### 2026-07-31 · Claude — v45 / PWM+PRB 1.33
+- **The visited profile now lives in the hash** (`#perfil/bian`), both apps. `#perfil` alone did not say *whose*, so reloading on someone else's profile silently dropped you on your own — `setRoute` fell back to `currentUser()`. `parseHash()` splits `route/uid`, `hashFor()` rebuilds it, `syncHash(r, uid)` writes it, and the `hashchange` guard now also compares the uid (profile → profile is the same route but not the same place).
+- An unknown uid (deleted account, stale link) falls back to the active user instead of rendering an empty profile.
+- `openDeepLink` needed no change: it already does `replaceState(pathname + location.hash)`, which carries the slash through. `goToProfile` already passed `{ uid }`.
+- Verified: the real `parseHash`/`hashFor` pulled out of both sources and driven through `#perfil/bian`, `#perfil`, `#tier`, `#basura`, empty — identical results in PWM and PRB. Page loads on `#perfil/bian` with the hash intact and no console errors. NOT verified end-to-end: the actual reload-stays-put, which needs a PIN session.
