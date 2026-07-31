@@ -2367,7 +2367,8 @@
     container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="sw-num">${value ? value.toFixed(1) : '—'}</span>`;
     const widget = container.querySelector('.stars'), fill = container.querySelector('.stars__fill'), num = container.querySelector('#sw-num');
     widget.classList.add('stars--interactive'); widget.tabIndex = 0; widget.setAttribute('role', 'slider');
-    const setV = (val) => { fill.style.width = (val / 5) * 100 + '%'; num.textContent = val ? val.toFixed(1) : '—'; };
+    const setV = (val) => { fill.style.width = (val / 5) * 100 + '%'; if (!num.dataset.editing) num.textContent = val ? val.toFixed(1) : '—'; };
+    K.wireScoreEntry(num, () => value, (v) => { value = v; commit(); });
     const fromX = (x) => { const r = widget.getBoundingClientRect(); return Math.max(0.5, Math.ceil(Math.min(1, Math.max(0, (x - r.left) / r.width)) * 10) / 2); };
     widget.addEventListener('pointermove', (e) => setV(fromX(e.clientX)));
     widget.addEventListener('pointerleave', () => setV(value));
@@ -2635,7 +2636,8 @@
     widget.setAttribute('role', 'slider');
     widget.setAttribute('aria-label', 'Tu puntaje, de 0.5 a 5 estrellas');
     widget.setAttribute('aria-valuemin', '0'); widget.setAttribute('aria-valuemax', '5');
-    const setVisual = (v) => { fill.style.width = (v / 5) * 100 + '%'; num.textContent = v ? v.toFixed(1) : '—'; };
+    const setVisual = (v) => { fill.style.width = (v / 5) * 100 + '%'; if (!num.dataset.editing) num.textContent = v ? v.toFixed(1) : '—'; };
+    K.wireScoreEntry(num, () => value, (v) => { value = v; commit(); });
     const fromX = (clientX) => {
       const r = widget.getBoundingClientRect();
       const ratio = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
@@ -2866,7 +2868,9 @@
       const w = isoWeek(d); (byWeek[w] = byWeek[w] || new Set()).add(d);
     });
     const dist = {};
-    rated.forEach((f) => { const r = verdictOf(f.id, uid).rating; dist[r] = (dist[r] || 0) + 1; });
+    /* Se agrupa a la media estrella más cercana: un 3.8 escrito a mano cae en
+     * el 4 en vez de quedar entre barras y desaparecer del gráfico. */
+    rated.forEach((f) => { const r = K.halfStep(verdictOf(f.id, uid).rating); dist[r] = (dist[r] || 0) + 1; });
     const genres = {};
     rated.forEach((f) => (f.genres || []).forEach((g) => (genres[g] = (genres[g] || 0) + 1)));
     const sum = rated.reduce((a, f) => a + verdictOf(f.id, uid).rating, 0);
@@ -3067,7 +3071,7 @@
   }
 
   function openRatingBreakdown(uid, rating, items) {
-    const matches = items.filter((f) => verdictOf(f.id, uid).rating === rating);
+    const matches = items.filter((f) => K.halfStep(verdictOf(f.id, uid).rating) === rating);
     const who = users[uid] || currentUser();
     const el = $('#confirm');
     el.innerHTML =

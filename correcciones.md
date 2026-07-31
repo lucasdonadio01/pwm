@@ -210,3 +210,13 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Los usuarios reales van arriba, con **glow neón permanente en el color que cada uno eligió**.
 - **Invitado** y **Crear usuario** quedan agrupados abajo, en una fila secundaria de la misma jerarquía, separados por una línea.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 32. 🚧 [Ambos · Puntaje] Escribir el puntaje exacto tocando el número
+- Las estrellas siguen funcionando igual que siempre: se tocan y puntúan de media en media (3, 3.5, 4…).
+- **Tocando el número** se abre un campo para escribir el valor exacto: 3.1, 3.2, 3.8, 4.2. Un decimal.
+- Enter confirma, Escape cancela, salir del campo confirma. Dejarlo **vacío borra el puntaje**.
+- Acepta coma o punto (`4,2` y `4.2` valen lo mismo) y recorta fuera de rango (`7` queda en 5).
+- Un texto que no sea un número **no borra nada**: deja el puntaje como estaba.
+- Funciona en los tres lugares donde se puntúa: ficha de peli, Modo relámpago y ficha de libro.
+- **Cómo puntuás** agrupa a la media estrella más cercana, así un 3.8 cuenta en la barra del 4 en vez de desaparecer del gráfico; el detalle de cada barra usa el mismo criterio.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

@@ -1511,7 +1511,8 @@
     container.innerHTML = starsMarkup(value, 'lg') + `<span class="stars-value" id="rate-num" style="margin-left:.7rem">${value ? value.toFixed(1) : '—'}</span>`;
     const widget = container.querySelector('.stars'), fill = container.querySelector('.stars__fill'), num = container.querySelector('#rate-num');
     widget.classList.add('stars--interactive'); widget.tabIndex = 0; widget.setAttribute('role', 'slider');
-    const setV = (v) => { fill.style.width = (v / 5) * 100 + '%'; num.textContent = v ? v.toFixed(1) : '—'; };
+    const setV = (v) => { fill.style.width = (v / 5) * 100 + '%'; if (!num.dataset.editing) num.textContent = v ? v.toFixed(1) : '—'; };
+    K.wireScoreEntry(num, () => value, (v) => { value = v; commit(); });
     const fromX = (x) => { const r = widget.getBoundingClientRect(); return Math.max(0.5, Math.ceil(Math.min(1, Math.max(0, (x - r.left) / r.width)) * 10) / 2); };
     widget.addEventListener('pointermove', (e) => setV(fromX(e.clientX)));
     widget.addEventListener('pointerleave', () => setV(value));
@@ -1551,7 +1552,9 @@
       const w = isoWeek(d); (byWeek[w] = byWeek[w] || new Set()).add(d);
     });
     const dist = {};
-    rated.forEach((b) => { const r = verdictOf(b.id, uid).rating; dist[r] = (dist[r] || 0) + 1; });
+    /* Se agrupa a la media estrella más cercana: un 3.8 escrito a mano cae en
+     * el 4 en vez de quedar entre barras y desaparecer del gráfico. */
+    rated.forEach((b) => { const r = K.halfStep(verdictOf(b.id, uid).rating); dist[r] = (dist[r] || 0) + 1; });
     const genres = {};
     read.forEach((b) => (b.genres || []).forEach((g) => (genres[g] = (genres[g] || 0) + 1)));
     const sum = rated.reduce((a, b) => a + verdictOf(b.id, uid).rating, 0);
@@ -1713,7 +1716,7 @@
     return c;
   }
   function openRatingBreakdown(uid, rating, items) {
-    const matches = items.filter((b) => verdictOf(b.id, uid).rating === rating);
+    const matches = items.filter((b) => K.halfStep(verdictOf(b.id, uid).rating) === rating);
     const who = users[uid] || currentUser();
     const el = $('#confirm');
     el.innerHTML =

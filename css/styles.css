@@ -549,6 +549,10 @@ a { color: inherit; text-decoration: none; }
 .stars--md .material-symbols-rounded { font-size: 20px; }
 .stars--lg .material-symbols-rounded { font-size: 34px; }
 .stars-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--lime); }
+/* El número es tocable: abre un campo para escribir el puntaje exacto. */
+.stars-value--editable { cursor: text; padding: .1rem .45rem; border-radius: .5rem; border: 1px dashed rgb(255 255 255 / .18); transition: border-color .15s, background-color .15s; }
+.stars-value--editable:hover, .stars-value--editable:focus-visible { border-color: var(--lime); background: rgb(255 255 255 / .06); outline: none; }
+.stars-value__input { width: 3.4rem; font: inherit; color: inherit; background: transparent; border: 0; outline: none; text-align: center; }
 
 .stars--interactive { cursor: pointer; touch-action: none; }
 .stars--interactive:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }

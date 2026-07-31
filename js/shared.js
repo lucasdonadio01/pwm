@@ -1129,9 +1129,95 @@ window.APPKIT = (function () {
     el.hidden = false;
   }
 
+  /* ============================================================ score entry
+   * Clicking on the stars only lands on halves. Tapping the NUMBER swaps it for
+   * a field where you type the exact score (3.8, 4.2…). Same widget in both
+   * apps, so it lives here.
+   *
+   * `halfStep` is the other half of the feature: charts and filters group by
+   * half a star, so without rounding a 3.8 would fall between bars and vanish
+   * from "Cómo puntuás".
+   */
+  const SCORE_MAX = 5;
+  const clampScore = (n) => Math.min(SCORE_MAX, Math.max(0, n));
+  /* One decimal is the resolution the field accepts; more would be noise. */
+  const roundScore = (n) => Math.round(clampScore(n) * 10) / 10;
+  const halfStep = (n) => Math.round(clampScore(Number(n) || 0) * 2) / 2;
+
+  function wireScoreEntry(numEl, getValue, apply) {
+    if (!numEl) return;
+    numEl.classList.add('stars-value--editable');
+    numEl.tabIndex = 0;
+    numEl.setAttribute('role', 'button');
+    numEl.title = 'Tocá para escribir el puntaje exacto';
+    numEl.setAttribute('aria-label', 'Escribir el puntaje exacto');
+
+    let open = false;
+
+    function start() {
+      if (open) return;
+      open = true;
+      /* Marca para que el redibujado de las estrellas no pise el campo abierto. */
+      numEl.dataset.editing = '1';
+      const current = Number(getValue()) || 0;
+      const prev = numEl.textContent;
+      numEl.textContent = '';
+      const input = document.createElement('input');
+      /* Texto y no `number`: un input numérico devuelve '' ante cualquier cosa
+         que considere inválida, así que un typo como 'abc' o la coma decimal
+         terminaban borrando el puntaje en vez de rechazarse. Acá se parsea a
+         mano y se distingue vacío (borrar) de ilegible (dejar como estaba). */
+      input.type = 'text';
+      input.className = 'stars-value__input';
+      input.inputMode = 'decimal';
+      input.autocomplete = 'off';
+      input.maxLength = 4;
+      input.value = current ? String(current) : '';
+      input.setAttribute('aria-label', 'Puntaje exacto, de 0 a 5');
+      numEl.appendChild(input);
+      input.focus();
+      input.select();
+
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        open = false;
+        delete numEl.dataset.editing;
+        /* Campo vacío = sacar el puntaje, igual que el botón de limpiar. */
+        const raw = input.value.trim();
+        input.remove();
+        if (!save) { numEl.textContent = prev; return; }
+        if (raw === '') { apply(0); return; }
+        const parsed = Number(raw.replace(',', '.'));
+        if (!Number.isFinite(parsed)) { numEl.textContent = prev; return; }
+        apply(roundScore(parsed));
+      };
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+      /* El widget de estrellas escucha punteros: sin esto, tocar el campo
+         puntúa por posición y pisa lo que estabas escribiendo. */
+      ['pointerdown', 'pointerup', 'click'].forEach((type) =>
+        input.addEventListener(type, (e) => e.stopPropagation())
+      );
+    }
+
+    numEl.addEventListener('click', (e) => { e.stopPropagation(); start(); });
+    numEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    numEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); }
+    });
+  }
+
   return {
     icon, esc, toast,
     motion,
+    wireScoreEntry, halfStep, roundScore,
     rampAt, autoColor, tierRows, normalizeRows, newRowId, openRowEditor,
     accounts, activity, sha256, pinPad, DEFAULT_PIN,
     pickPhoto, pickGif, pickBackground, openCropper, profileBackground, MAX_UPLOAD, MAX_GIF_UPLOAD,
