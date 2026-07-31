@@ -810,4 +810,4 @@ PRB.books = [
   }
 ];
 
-PRB.build = {"version":"1.31","built":"2026-07-31T19:20:04-03:00"};
+PRB.build = {"version":"1.32","built":"2026-07-31T19:29:57-03:00"};

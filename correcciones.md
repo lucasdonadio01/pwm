@@ -223,7 +223,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 
 ## 33. 🚧 [Ambos · Marca] Logo propio en la pestaña del navegador
 - El favicon deja de ser el círculo rojo / cuadrado azul genéricos y pasa a ser el logotipo de cada app: **PWM en rosa** (`#FF0055`) y **PRB en azul** (`#2764CF`).
-- Los SVG van **tal cual los pasó Lucas**, apaisados (480×178), sin recuadre ni relleno. El navegador los encaja en el espacio cuadrado de la pestaña respetando la proporción: se ven como una banda de color con la palabra al medio.
+- Los SVG van **tal cual los pasó Lucas**, apaisados (540×178, con el borde inclinado), sin recuadre ni relleno. El navegador los encaja en el espacio cuadrado de la pestaña respetando la proporción: se ven como una banda de color con la palabra al medio.
 - ⚠️ Decisión tomada por Lucas después de ver la medición: a 16px la palabra ocupa 2px de alto y no se lee. Se eligió el logo íntegro por sobre la legibilidad en la pestaña.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
 

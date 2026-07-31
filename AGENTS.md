@@ -41,6 +41,7 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-31 · Claude — v43 / PWM+PRB 1.31
-- **Favicons are Lucas's logos verbatim** (`assets/favicon-pwm.svg`, `prb/assets/favicon-prb.svg`), byte-identical to the files he supplied: native 480×178, no square canvas, no padding. The browser letterboxes them into the tab slot.
-- ⚠️ He chose this **with the measurement in front of him**: rasterised at 16px the wordmark is 2px tall and unreadable; at 32px it is 28×6. A first pass had centred them on a 480×480 brand-colour square and he rejected it. **Do not "fix" the aspect ratio** — if legibility ever comes up again, the open alternative is the lone `P` filling the square, not re-cropping.
+### 2026-07-31 · Claude — v44 / PWM+PRB 1.32
+- **Favicons updated to Lucas's new logos**, byte-identical to the files he supplied: 540×178 with the slanted edge (`M540 0H60L0 178H480L540 0Z`), replacing the 480×178 rectangles. Same brand colours.
+- ⚠️ They ship **verbatim — no square canvas, no padding**; the browser letterboxes them into the tab slot. He chose this with the measurement in front of him (a wordmark this wide rasterises to ~2px of glyph at 16px). A first pass had centred them on a 480×480 square and he rejected it. **Do not "fix" the aspect ratio.** If legibility comes up again the open alternative is the lone `P` filling the square, not re-cropping.
+- Verified both files diff-clean against the originals in `~/Downloads`; `?v=44`, build 1.32.
