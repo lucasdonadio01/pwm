@@ -435,7 +435,7 @@
     const unread = u && !u.guest ? K.activity.unreadCount(store, u.id) : 0;
     header.innerHTML =
       `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
-      `<a class="logo" href="#home" aria-label="PWM — Project Watch Movies, inicio"><b>PWM</b><span class="dot">.</span></a>` +
+      `<a class="logo" href="#home" aria-label="PWM — Project Watch Movies, inicio"><img src="assets/logo-pwm.svg?v=46" alt="PWM" width="540" height="178" /></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}<a class="nav__x" href="prb/index.html">${icon('menu_book')} Libritos</a></nav>` +
       `<div class="header__right">` +
       `<button class="icon-btn hdr-bolt" id="hdr-bolt" title="Modo relámpago" aria-label="Modo relámpago">${icon('bolt')}</button>` +

@@ -242,3 +242,9 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Si el usuario del link ya no existe (cuenta borrada, link viejo), cae a tu perfil en vez de quedar en blanco.
 - Aplica igual en PWM y en PRB.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 36. 🚧 [Ambos · Marca] Logo en el header
+- El header deja de mostrar el texto **PWM.** / **PRB.** y pasa a mostrar el logotipo.
+- Es el **mismo archivo** que usa la pestaña (`assets/logo-pwm.svg` y `prb/assets/logo-prb.svg`, renombrados desde `favicon-*`): un solo lugar donde cambiar la marca.
+- Alto fijo de 1.7rem (unos 27px) y el ancho sale de la proporción del propio SVG, así el header no salta mientras carga.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

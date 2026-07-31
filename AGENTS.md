@@ -41,8 +41,8 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-31 · Claude — v45 / PWM+PRB 1.33
-- **The visited profile now lives in the hash** (`#perfil/bian`), both apps. `#perfil` alone did not say *whose*, so reloading on someone else's profile silently dropped you on your own — `setRoute` fell back to `currentUser()`. `parseHash()` splits `route/uid`, `hashFor()` rebuilds it, `syncHash(r, uid)` writes it, and the `hashchange` guard now also compares the uid (profile → profile is the same route but not the same place).
-- An unknown uid (deleted account, stale link) falls back to the active user instead of rendering an empty profile.
-- `openDeepLink` needed no change: it already does `replaceState(pathname + location.hash)`, which carries the slash through. `goToProfile` already passed `{ uid }`.
-- Verified: the real `parseHash`/`hashFor` pulled out of both sources and driven through `#perfil/bian`, `#perfil`, `#tier`, `#basura`, empty — identical results in PWM and PRB. Page loads on `#perfil/bian` with the hash intact and no console errors. NOT verified end-to-end: the actual reload-stays-put, which needs a PIN session.
+### 2026-07-31 · Claude — v46 / PWM+PRB 1.34
+- **The header shows the logo instead of the `PWM.` / `PRB.` wordmark**, in both apps. The favicons were renamed `favicon-*` → `assets/logo-pwm.svg` / `prb/assets/logo-prb.svg` and are now referenced from both the `<link rel=icon>` and the header, so the brand lives in exactly one file per app.
+- `.logo` went from type styles to `inline-flex` + `line-height: 0` with `.logo img { height: 1.7rem; width: auto }`; the `<img>` carries `width`/`height` so the header does not reflow while it loads. The dead `.logo b/i/.dot` rules are gone.
+- ⚠️ Same rule as the favicon: the SVGs are **Lucas's files verbatim** (540×178, slanted edge). Do not re-crop or re-square them.
+- Verified in the browser: both files serve 200 as `image/svg+xml`, rasterise at their native 540×178, and the header instance measures 82×27px with the aspect ratio intact. No `favicon-` references left in either `index.html`.

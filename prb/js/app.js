@@ -377,7 +377,7 @@
     const unread = u && !u.guest ? K.activity.unreadCount(store, u.id) : 0;
     header.innerHTML =
       `<button class="hamburger" id="hamburger" aria-label="Abrir menú">${icon('menu')}</button>` +
-      `<a class="logo" href="#home" aria-label="PRB — Project Read Books"><b>PRB</b><span class="dot">.</span></a>` +
+      `<a class="logo" href="#home" aria-label="PRB — Project Read Books"><img src="assets/logo-prb.svg?v=46" alt="PRB" width="540" height="178" /></a>` +
       `<nav class="nav" id="nav">${NAV.map((n) => `<a href="#${n.id}" data-route="${n.id}" class="${n.id === route ? 'is-active' : ''}">${n.label}</a>`).join('')}` +
       `<a class="nav__x" href="../index.html">${icon('movie')} Pelis</a></nav>` +
       `<div class="header__right"><button class="icon-btn hdr-notif" id="hdr-notif" title="Notificaciones" aria-label="Notificaciones${unread ? ` · ${unread} nueva(s)` : ''}">${icon('notifications')}` +
