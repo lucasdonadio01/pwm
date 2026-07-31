@@ -231,6 +231,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - El Action ahora corre un modo liviano **cada 15 minutos** que mira solo el RSS de cada uno (una request por persona, sin TMDB ni watchlists) y trae las reseñas nuevas. El refresco completo sigue igual, una vez por día.
 - Cuando entra algo nuevo, llega una **notificación** al centro de siempre que dice *"[usuario] publicó una reseña **desde Letterboxd**"*, con ícono de sincronización para distinguirla de las que se escriben adentro de la página. Se ve tanto en PWM como en PRB.
 - **Nunca pisa lo tuyo.** Una reseña escrita en PWM siempre gana; y en el baseline, si ya había una reseña importada, el RSS no la reemplaza (el RSS le come las comillas al texto, la página de reseñas lo trae entero).
+- Si la película no la tenía nadie en su watchlist, el sync **también la crea**; si no, la reseña se guardaba pero no se veía en ningún lado hasta el refresco del día siguiente.
 - Si no hay novedades no escribe nada: sin commit y sin deploy.
 - ⚠️ **1 minuto no es posible:** el cron de GitHub tiene piso de 5 minutos y encima se atrasa seguido. 15' es el equilibrio entre latencia y ruido en el historial; cambiarlo es tocar un número en el workflow.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**

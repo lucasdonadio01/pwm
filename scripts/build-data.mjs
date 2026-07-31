@@ -511,16 +511,17 @@ function pickFeatured(films) {
  * sin cambios no hay commit, y sin commit no hay deploy de Pages.
  */
 
-/* data.js es un archivo generado, no un modulo: se extrae el bloque por texto en
- * vez de importarlo, asi el resto del archivo queda intacto byte a byte. */
-function readLetterboxdBlock(source) {
-  const start = source.indexOf('WM.letterboxd = ');
+/* data.js es un archivo generado, no un modulo: se extraen los bloques por texto
+ * en vez de importarlo, asi el resto del archivo queda intacto byte a byte. */
+function readBlock(source, name) {
+  const start = source.indexOf(`WM.${name} = `);
   if (start < 0) return null;
-  const open = source.indexOf('{', start);
+  const open = source.search(new RegExp(`WM\.${name} = [\[{]`)) + `WM.${name} = `.length;
+  const [oc, cc] = source[open] === '[' ? ['[', ']'] : ['{', '}'];
   let depth = 0;
   for (let i = open; i < source.length; i++) {
-    if (source[i] === '{') depth++;
-    else if (source[i] === '}' && --depth === 0) {
+    if (source[i] === oc) depth++;
+    else if (source[i] === cc && --depth === 0) {
       return { from: start, to: i + 1, data: JSON.parse(source.slice(open, i + 1)) };
     }
   }
@@ -565,11 +566,14 @@ async function syncFromRss() {
   const dryRun = process.argv.includes('--dry-run');
   await loadPipelineUsers();
   const source = await readFile(OUT, 'utf8');
-  const block = readLetterboxdBlock(source);
-  if (!block) { console.error('✗ No encontre WM.letterboxd en data.js.'); process.exitCode = 1; return; }
+  const lbBlock = readBlock(source, 'letterboxd');
+  const filmBlock = readBlock(source, 'movies');
+  if (!lbBlock || !filmBlock) { console.error('✗ No encontre WM.letterboxd o WM.movies en data.js.'); process.exitCode = 1; return; }
 
-  const previous = block.data;
+  const previous = lbBlock.data;
   const next = JSON.parse(JSON.stringify(previous));
+  const films = filmBlock.data;
+  const haveFilm = new Set(films.map((f) => f.id));
   const news = [];
 
   for (const [uid, cfg] of Object.entries(USERS)) {
@@ -597,6 +601,17 @@ async function syncFromRss() {
         ...(rating != null ? { rating } : {}),
         ...(gainedReview ? { review } : {}),
       };
+      /* Si nadie tiene la pelicula en su watchlist, no existe en WM.movies y la
+       * resena no se veria en ningun lado hasta el refresco completo del dia
+       * siguiente. El refresco completo la crea con buildFromTmdb; aca se hace
+       * lo mismo, y sale gratis porque el RSS ya trae el id de TMDB. */
+      if (!haveFilm.has(entry.slug) && entry.tmdbId) {
+        try {
+          const f = await buildFromTmdb(entry.tmdbId, entry.kind, entry.slug);
+          if (f) { films.push(f); haveFilm.add(entry.slug); console.log(`  + pelicula nueva: ${f.title}`); }
+        } catch (e) { console.warn(`  ! no pude crear ${entry.slug}: ${e.message}`); }
+      }
+
       news.push({ uid, slug: entry.slug, title: entry.title, isNew, hasReview: gainedReview || !!(before && before.review) });
     }
   }
@@ -632,7 +647,12 @@ async function syncFromRss() {
 
   await pushActivity(avisos);
 
-  const body = source.slice(0, block.from) + `WM.letterboxd = ${JSON.stringify(next, null, 2)};` + source.slice(block.to + 1);
+  /* Se reescribe de atras hacia adelante para que el primer reemplazo no corra
+   * los indices del segundo. */
+  const [first, second] = [lbBlock, filmBlock].sort((a, b) => b.from - a.from);
+  const render = (b) => (b === lbBlock ? `WM.letterboxd = ${JSON.stringify(next, null, 2)};` : `WM.movies = ${JSON.stringify(films, null, 2)};`);
+  let body = source.slice(0, first.from) + render(first) + source.slice(first.to + 1);
+  body = body.slice(0, second.from) + render(second) + body.slice(second.to + 1);
   await writeFile(OUT, body, 'utf8');
   console.log('✓ data.js actualizado.');
 }
