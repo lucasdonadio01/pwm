@@ -2792,6 +2792,10 @@ WM.letterboxd = {
     },
     "last-holiday": {
       "rating": 3
+    },
+    "finding-emily": {
+      "rating": 3.5,
+      "review": "🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻 uno asi barba"
     }
   },
   "luke": {
