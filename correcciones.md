@@ -220,3 +220,9 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Funciona en los tres lugares donde se puntúa: ficha de peli, Modo relámpago y ficha de libro.
 - **Cómo puntuás** agrupa a la media estrella más cercana, así un 3.8 cuenta en la barra del 4 en vez de desaparecer del gráfico; el detalle de cada barra usa el mismo criterio.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 33. 🚧 [Ambos · Marca] Logo propio en la pestaña del navegador
+- El favicon deja de ser el círculo rojo / cuadrado azul genéricos y pasa a ser el logotipo de cada app: **PWM en rosa** (`#FF0055`) y **PRB en azul** (`#2764CF`).
+- Los SVG originales son apaisados (480×178), así que van centrados dentro de un cuadrado, lo más grandes que entran y sin tocar los bordes.
+- ⚠️ **A 32px el logotipo queda de 6px de alto: la palabra no se lee.** Lo que identifica la pestaña es el color. Si querés que se lea, la alternativa es usar solo la **P** bien grande, manteniendo el mismo fondo de color. Decime y lo cambio.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
