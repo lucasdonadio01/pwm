@@ -1,13 +1,19 @@
 # Data refresh for PWM and every shared account with a Letterboxd handle.
-#   · daily  → full refresh for everyone
+#   · daily  → full refresh for everyone (watchlists + TMDB, takes minutes)
+#   · */15   → RSS only: one request per member, picks up new reviews and notifies
 #   · */10   → watcher: exits in seconds unless a signup left a request in the Supabase queue
 #              (settings app=shared key=lb_sync_queue), so new accounts import within minutes.
 # Actions are free/unlimited on public repos, which is why polling this often is fine.
+#
+# GitHub's cron floor is 5 minutes and scheduled runs get delayed under load, so anything
+# shorter than this is a number in a file, not real latency. 15' also keeps the commit noise
+# down: every run that finds something commits data.js and triggers a Pages deploy.
 # Requires repo secrets TMDB_TOKEN and OMDB_KEY.
 name: Update PWM data
 on:
   schedule:
     - cron: '0 9 * * *' # Every day at 09:00 UTC — full refresh
+    - cron: '*/15 * * * *' # RSS only — new reviews from Letterboxd
     - cron: '*/10 * * * *' # Watcher — only imports when somebody just signed up
   workflow_dispatch:
 permissions:
@@ -24,7 +30,13 @@ jobs:
         env:
           TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
           OMDB_KEY: ${{ secrets.OMDB_KEY }}
-        run: node scripts/build-data.mjs ${{ github.event.schedule == '*/10 * * * *' && '--only-if-pending' || '' }}
+        # El modo depende de que cron disparo: completo, solo-RSS o watcher.
+        run: |
+          case "${{ github.event.schedule }}" in
+            "*/15 * * * *") node scripts/build-data.mjs --rss-only ;;
+            "*/10 * * * *") node scripts/build-data.mjs --only-if-pending ;;
+            *)              node scripts/build-data.mjs ;;
+          esac
       - name: Commit if changed
         run: |
           git config user.name "pwm-bot"

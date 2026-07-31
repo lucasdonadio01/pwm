@@ -294,11 +294,16 @@
       title: `${actor.name} le dio me gusta a tu reseña`,
       detail: item.title || 'Una de tus reseñas',
     };
-    if (item.type === 'review_publish') return {
-      icon: 'rate_review',
-      title: `${actor.name} ${item.action === 'updated' ? 'actualizó' : 'publicó'} una reseña`,
-      detail: item.title || 'Nueva reseña',
-    };
+    if (item.type === 'review_publish') {
+      /* Las que entran por el sync de Letterboxd se marcan, así se entiende por
+         qué apareció algo que nadie tocó dentro de la página. */
+      const desdeLb = item.via === 'letterboxd';
+      return {
+        icon: desdeLb ? 'sync' : 'rate_review',
+        title: `${actor.name} ${item.action === 'updated' ? 'actualizó' : 'publicó'} una reseña${desdeLb ? ' desde Letterboxd' : ''}`,
+        detail: item.title || 'Nueva reseña',
+      };
+    }
     if (item.type === 'calendar_invite') return {
       icon: 'confirmation_number',
       title: `${actor.name} te invitó a ver una función`,

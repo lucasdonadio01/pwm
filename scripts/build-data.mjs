@@ -280,7 +280,15 @@ async function scrapeRSS(user) {
         .replace(/\s+/g, ' ').trim();
       review = review.length < 15 ? '' : review.slice(0, 600);
     }
-    out.push({ slug: link[1], tmdbId: +(mv ? mv[1] : tv[1]), kind: mv ? 'movie' : 'series', rating: parseFloat(rt[1]), review });
+    /* El <title> del item viene como "Pelicula, 2024 - ★★★★". Solo interesa el
+     * nombre, para poder nombrar la obra en la notificacion aunque la pelicula
+     * no este en WM.movies (pasa si nadie la tiene en su watchlist). */
+    const ti = it.match(/<title>([\s\S]*?)<\/title>/);
+    const title = ti
+      ? decodeEntities(ti[1]).replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '')
+          .replace(/\s*-\s*[★½]+.*$/, '').replace(/,\s*\d{4}\s*$/, '').trim()
+      : '';
+    out.push({ slug: link[1], title, tmdbId: +(mv ? mv[1] : tv[1]), kind: mv ? 'movie' : 'series', rating: parseFloat(rt[1]), review });
   }
   return out;
 }
@@ -493,7 +501,145 @@ function pickFeatured(films) {
   return new Set(out);
 }
 
+/* ─────────────────────────────────────────────────────────────── modo solo-RSS
+ * El refresco completo scrapea watchlists y pega a TMDB pelicula por pelicula:
+ * tarda minutos y no sirve para correr seguido. El feed RSS de cada miembro, en
+ * cambio, es UNA request, no esta bloqueado para bots y ya trae puntaje, resena
+ * e id de TMDB. Con eso alcanza para detectar resenas nuevas cada pocos minutos.
+ *
+ * Solo reescribe el bloque `WM.letterboxd` de data.js y solo si algo cambio:
+ * sin cambios no hay commit, y sin commit no hay deploy de Pages.
+ */
+
+/* data.js es un archivo generado, no un modulo: se extrae el bloque por texto en
+ * vez de importarlo, asi el resto del archivo queda intacto byte a byte. */
+function readLetterboxdBlock(source) {
+  const start = source.indexOf('WM.letterboxd = ');
+  if (start < 0) return null;
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0) {
+      return { from: start, to: i + 1, data: JSON.parse(source.slice(open, i + 1)) };
+    }
+  }
+  return null;
+}
+
+async function pushActivity(items) {
+  if (!items.length) return false;
+  const c = await supabase();
+  if (!c) { console.warn('  Sin credenciales de Supabase: no se avisa nada.'); return false; }
+  try {
+    const r = await fetch(`${c.url}/rest/v1/settings?app=eq.shared&key=eq.activity&select=value`, { headers: supaHeaders(c.key) });
+    const rows = r.ok ? await r.json() : [];
+    const current = Array.isArray(rows[0] && rows[0].value) ? rows[0].value : [];
+    /* Mismo criterio que APPKIT.activity: dedupe por id y tope de 250. */
+    const byId = new Map(current.map((it) => [it.id, it]));
+    items.forEach((it) => {
+      const prev = byId.get(it.id);
+      /* Si el aviso ya existia se conserva quien lo leyo o descarto: el refresco
+       * diario regenera el bloque y sin esto revivirian notificaciones viejas. */
+      byId.set(it.id, { ...(prev || {}), ...it, readBy: (prev && prev.readBy) || {}, dismissedBy: (prev && prev.dismissedBy) || {} });
+    });
+    const next = [...byId.values()]
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      .slice(0, 250);
+    const w = await fetch(`${c.url}/rest/v1/settings`, {
+      method: 'POST',
+      headers: { ...supaHeaders(c.key), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ app: 'shared', key: 'activity', value: next, updated_at: new Date().toISOString() }),
+    });
+    if (!w.ok) throw new Error(`Supabase ${w.status}`);
+    return true;
+  } catch (e) {
+    console.warn(`  No se pudieron guardar las notificaciones (${e.message}).`);
+    return false;
+  }
+}
+
+async function syncFromRss() {
+  /* Con --dry-run no toca data.js ni Supabase: sirve para probar el parseo del
+   * feed y la deteccion de novedades sin ensuciar datos reales. */
+  const dryRun = process.argv.includes('--dry-run');
+  await loadPipelineUsers();
+  const source = await readFile(OUT, 'utf8');
+  const block = readLetterboxdBlock(source);
+  if (!block) { console.error('✗ No encontre WM.letterboxd en data.js.'); process.exitCode = 1; return; }
+
+  const previous = block.data;
+  const next = JSON.parse(JSON.stringify(previous));
+  const news = [];
+
+  for (const [uid, cfg] of Object.entries(USERS)) {
+    let feed = [];
+    try { feed = await scrapeRSS(cfg.user); }
+    catch (e) { console.warn(`  ! RSS de ${cfg.user}: ${e.message}`); continue; }
+
+    const mine = next[uid] || (next[uid] = {});
+    for (const entry of feed) {
+      const before = (previous[uid] || {})[entry.slug];
+      const rating = Number.isFinite(entry.rating) ? entry.rating : null;
+      const review = entry.review || '';
+
+      /* Una resena que YA existe no se toca. El RSS entrega el texto plano y le
+       * come las comillas; la pagina de resenas, que usa el refresco completo,
+       * lo trae entero. Sobrescribirla degradaria el texto y ademas dejaria a
+       * los dos modos turnandose el mismo campo, con un commit por vuelta. */
+      const isNew = !before;
+      const ratingChanged = (before && (before.rating ?? null)) !== rating && !isNew;
+      const gainedReview = !!review && !(before && before.review);
+      if (!isNew && !ratingChanged && !gainedReview) continue;
+
+      mine[entry.slug] = {
+        ...(mine[entry.slug] || {}),
+        ...(rating != null ? { rating } : {}),
+        ...(gainedReview ? { review } : {}),
+      };
+      news.push({ uid, slug: entry.slug, title: entry.title, isNew, hasReview: gainedReview || !!(before && before.review) });
+    }
+  }
+
+  if (!news.length) { console.log('✓ Sin novedades en Letterboxd.'); return; }
+
+  console.log(`→ ${news.length} novedad(es):`);
+  news.forEach((n) => console.log(`  ${n.uid} · ${n.title || n.slug}${n.hasReview ? ' (con resena)' : ''}`));
+
+  const everyone = Object.keys(USERS);
+  const now = new Date().toISOString();
+  const avisos = news.map((n) => ({
+    /* El id incluye si trae resena, para que una resena escrita despues de
+     * puntuar genere su propio aviso en vez de pisar el anterior. */
+    id: `lb-review:${n.uid}:${n.slug}:${n.hasReview ? 'r' : 's'}`,
+    type: 'review_publish',
+    app: 'pwm',
+    via: 'letterboxd',
+    actor: n.uid,
+    actorName: (USERS[n.uid] || {}).name || n.uid,
+    itemId: n.slug,
+    title: n.title || n.slug,
+    action: n.isNew ? 'published' : 'updated',
+    targets: everyone.filter((id) => id !== n.uid),
+    createdAt: now,
+  }));
+
+  if (dryRun) {
+    console.log('\n[simulacion] No se escribe nada. Se habrian mandado estos avisos:');
+    avisos.forEach((a) => console.log(`  ${a.id}  "${a.title}"  -> ${a.targets.join(', ') || '(nadie)'}`));
+    return;
+  }
+
+  await pushActivity(avisos);
+
+  const body = source.slice(0, block.from) + `WM.letterboxd = ${JSON.stringify(next, null, 2)};` + source.slice(block.to + 1);
+  await writeFile(OUT, body, 'utf8');
+  console.log('✓ data.js actualizado.');
+}
+
 async function main() {
+  if (process.argv.includes('--rss-only')) return syncFromRss();
+
   // Watcher mode: bail out in a second or two unless somebody is actually waiting for an import.
   const onlyIfPending = process.argv.includes('--only-if-pending');
   if (onlyIfPending) {
