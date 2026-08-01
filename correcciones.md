@@ -255,3 +255,9 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Va en un campo aparte de la fecha en que la vio, a propósito: esa alimenta el timeline y "este año", y mezclarlas rompería esas cuentas.
 - Completar las fechas de las reseñas viejas **no genera notificaciones** — si no, la primera corrida avisaría de todas juntas.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 38. 🚧 [Infra] Sello de versión, crons y corridas simultáneas
+- El pipeline **dejó de pisar el número de versión**: lo tenía fijo en `1.4` y lo reescribía en cada refresco de datos, así que el pie de PWM se reseteaba solo mientras el de PRB seguía subiendo. Ahora lee el que ya está y solo actualiza la fecha. Las dos apps quedaron en **1.35**.
+- **De tres crons a dos.** El de cada 10 minutos solo servía para importar a alguien que se acababa de registrar; eso ahora lo hace el de 15. GitHub estaba descartando ~9 de cada 10 corridas programadas y tener dos seguidas compitiendo lo empeoraba — por eso el refresco diario no corría hacía días, y por eso nadie vio que el token de TMDB estaba roto.
+- Se agregó un **candado de simultaneidad**: dos corridas a la vez commitean y pushean el mismo archivo y se pisan.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

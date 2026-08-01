@@ -15,8 +15,8 @@ Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes
 1. **Shared code → `js/shared.js` (`APPKIT`)**, loaded by both apps: accounts + PIN, photo cropper, tier-row config, image export, toast. Don't duplicate it in either `app.js`.
 2. **New data → JSON blobs in the `settings` table.** Never change the Supabase schema. Keys in use: `reading`, `watchmeta`, `tierlists`, `tierdata`, `tierrows`, `calendars`, `calevents`, `accounts`, `extra_films`, `extra_books`, `order`.
 3. **There is REAL user data in Supabase.** Never bulk-delete `reviews`/`settings`. If you write while testing, clean it up afterwards.
-4. **Cache-bust:** touched JS or CSS → bump `?v=N` in **both** `index.html` files. Otherwise stale assets ship (this already broke the "Leyendo" layout once).
-5. **Footer version stamp:** `WM.build` / `PRB.build` in `js/data.js` and `prb/js/data.js`.
+4. **Cache-bust:** touched JS or CSS -> bump `?v=` in **both** `index.html` files. Otherwise stale assets ship (this already broke the "Leyendo" layout once). PWM's is rewritten with a timestamp by every full pipeline run (a data refresh needs a fresh `data.js` URL); PRB's is hand-bumped and stays a plain number. Either is fine, they do not have to match.
+5. **Footer version stamp:** `WM.build` / `PRB.build` in `js/data.js` and `prb/js/data.js`, bumped by hand. The pipeline **reads and preserves** the existing version and only refreshes `built` -- it used to hardcode it and quietly reset PWM on every run.
 6. **Everything must stay free.** No build step, no npm at runtime, no paid services.
 7. **All user-facing UI text is Rioplatense Spanish** (vos / mirá / elegí).
 
@@ -26,7 +26,8 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 - **Build stamp is local time**, `Argentina Standard Time`: `(Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")`. Using the UTC hour with a `-03:00` suffix reads 3h ahead.
 - **The headless preview pane never fires `rAF`** (no compositing) and `ResizeObserver` doesn't fire either. Anything animated has to be reasoned about or driven with a `setTimeout` shim; it cannot be observed there.
 - **Verifying tier/board state in the pane:** `WM.movies` does NOT include extras and `verdictOf` merges the Letterboxd baseline. Evaluate against the board's owner (`def:<uid>`), not whoever you're logged in as — a naive localStorage check reports false positives.
-- **The Actions watcher cron polls every 10 min and is free only because the repo is public.** If it ever goes private, drop that cron or it burns the quota.
+- **GitHub drops most scheduled runs on this repo.** Measured: ~40 runs over 2.5 days where `*/10` alone should give ~144, and the 09:00 daily went days without firing -- which is why nobody noticed `TMDB_TOKEN` had been corrupted. Two frequent crons competing made it worse, so there is now **one** (`*/15`) plus the daily. Do not add a third.
+- **A corrupted secret fails silently.** A `TMDB_TOKEN` with a stray non-ASCII character throws `Cannot convert argument to a ByteString` from `fetch`, which the per-film `catch` swallows into a warning. If films stop being created, read the Action log before anything else.
 
 ## Handoff protocol
 **When you finish:** commit (never leave half-done work uncommitted) · mark status in `correcciones.md` (✅ / 🚧 / ⛔) · **replace** the Log entry below with yours · if Lucas must do something by hand, write it under "Needs Lucas" — the other assistant cannot see your chat.
@@ -41,10 +42,8 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-08-01 - Claude - PWM: orden de "Ultimas resenas"
-- **Imported reviews had no timestamp at all.** The profile sorted by `store.get().updatedAt` and home by `watchedAt || updatedAt`; a Letterboxd review has no Supabase row, so every one scored 0 and the list fell back to `data.js` order. Bian's newest review rendered third.
-- `scrapeRSS` now reads `<pubDate>` into **`loggedAt`**, written by both the full run and `--rss-only`. New `reviewTime(fid, uid)` in `app.js` = `updatedAt || loggedAt`, used by the profile and by `latestReviews()`.
-- ⚠️ **`loggedAt` is deliberately NOT `date`.** `date` feeds `seenDate`/`byDay`/"este ano"; v36 refused to import `watchedDate` precisely because a bulk-logged backlog would inflate those. Publication time is a different fact and only orders lists — keep them separate.
-- Backfilling `loggedAt` on old entries **counts as a change but not as news**, so the first run writes 69 dates and sends zero notifications instead of alerting on every historical review.
-- ⚠️ Still open, both pre-existing: the pipeline hardcodes `BUILD_VERSION = '1.4'` and rewrites `?v=` with a timestamp, so it stomps the hand-maintained stamp and PWM/PRB now disagree (1.4 vs 1.34). And **GitHub is dropping ~90% of the scheduled runs** on this repo (40 runs over 2.5 days; the 09:00 daily had not fired in days, which is why nobody noticed TMDB_TOKEN was corrupted). Consider fewer, wider-spaced crons.
-- Verified against the live feeds: dry-run reports 69 dates and 0 notifications, `data.js` untouched; the real local run wrote them and Bian's reviews now sort 2026-07-25 `finding-emily` first, then 05-16, 03-12, 03-07 - chronological. 204 films, 181 entries, 0 orphans.
+### 2026-08-01 - Claude - pipeline hygiene
+- **The pipeline no longer stomps the version stamp.** `BUILD_VERSION` was hardcoded `'1.4'`, so every data refresh reset PWM's footer while PRB kept climbing (1.4 vs 1.34). It now reads the version out of the existing `data.js` and only refreshes `built`; `FALLBACK_VERSION` is used only if the file does not exist yet. Both apps realigned to **1.35**.
+- **Three crons became two.** `--rss-only` now checks the signup queue first and escalates to a full run when somebody is waiting, which is all the `*/10` watcher ever did. Rationale in the Gotchas: GitHub was dropping ~90% of the scheduled runs and the competing schedules made it worse.
+- Added a `concurrency` group. Two overlapping runs both commit and push `data.js`; the 15' slot can now start a multi-minute full run, so the window was real.
+- Verified: `currentVersion()` reads 1.35 back out of the live `data.js`; `--rss-only --dry-run` still takes the light path on an empty queue and writes nothing. NOT verified: the escalation branch itself, which needs a real pending signup in Supabase.

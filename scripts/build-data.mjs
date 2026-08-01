@@ -18,7 +18,17 @@ const OMDB_KEY = process.env.OMDB_KEY;
 if (!TMDB_TOKEN || !OMDB_KEY) { console.error('Missing TMDB_TOKEN or OMDB_KEY env vars'); process.exit(1); }
 
 const IMG = 'https://image.tmdb.org/t/p';
-const BUILD_VERSION = '1.4';
+/* Version de respaldo, solo para un data.js que todavia no exista. La real se
+ * lee del archivo actual: el sello lo mantiene la gente a mano (regla 5) y el
+ * refresco de datos no tiene por que pisarlo. Hardcodearla hacia que cada
+ * corrida dejara PWM en 1.4 mientras PRB seguia subiendo. */
+const FALLBACK_VERSION = '1.4';
+async function currentVersion() {
+  try {
+    const prev = await readFile(OUT, 'utf8');
+    return (prev.match(/WM\.build = \{"version":"([^"]+)"/) || [])[1] || FALLBACK_VERSION;
+  } catch { return FALLBACK_VERSION; }
+}
 
 // TMDB leaves some TV genres in English even with language=es-ES.
 const GENRE_ES = {
@@ -679,7 +689,17 @@ async function syncFromRss() {
 }
 
 async function main() {
-  if (process.argv.includes('--rss-only')) return syncFromRss();
+  /* El modo liviano tambien cubre las altas: si alguien acaba de registrarse hay
+   * que traerle TODO (watchlist + TMDB), no solo el feed. Antes eso lo hacia un
+   * cron aparte cada 10 minutos, pero GitHub descarta la mayoria de las
+   * corridas programadas y tener dos crons seguidos compitiendo lo empeoraba.
+   * Con esto alcanza un solo cron frecuente. */
+  if (process.argv.includes('--rss-only')) {
+    const queue = await readSyncQueue();
+    const waiting = Object.entries(queue).filter(([, v]) => v && v.lb);
+    if (!waiting.length) return syncFromRss();
+    console.log(`-> Alta pendiente (${waiting.map(([id, v]) => `${id} @${v.lb}`).join(', ')}): corre el refresco completo.`);
+  }
 
   // Watcher mode: bail out in a second or two unless somebody is actually waiting for an import.
   const onlyIfPending = process.argv.includes('--only-if-pending');
@@ -735,7 +755,7 @@ async function main() {
     `WM.trending = ${JSON.stringify(trending, null, 2)};\n\n` +
     `WM.letterboxd = ${JSON.stringify(letterboxd, null, 2)};\n\n` +
     `WM.importStatus = ${JSON.stringify(imported.status, null, 2)};\n\n` +
-    `WM.build = ${JSON.stringify({ version: BUILD_VERSION, built: new Date().toISOString() })};\n`;
+    `WM.build = ${JSON.stringify({ version: await currentVersion(), built: new Date().toISOString() })};\n`;
 
   await writeFile(OUT, header + body, 'utf8');
   console.log(`✓ Wrote ${OUT}`);
