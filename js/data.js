@@ -5069,60 +5069,74 @@ WM.letterboxd = {
       "rating": 4
     },
     "the-odyssey-2026": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-07-18T18:21:35.000Z"
     },
     "billie-eilish-hit-me-hard-and-soft-the-tour": {
-      "rating": 5
+      "rating": 5,
+      "loggedAt": "2026-05-08T05:43:24.000Z"
     },
     "finding-emily": {
       "rating": 3.5,
-      "review": "🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻 uno asi barba"
+      "review": "🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻 uno asi barba",
+      "loggedAt": "2026-07-25T04:10:18.000Z"
     },
     "strangers-in-the-park": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-05-19T05:43:58.000Z"
     },
     "wuthering-heights-2026": {
       "rating": 4,
-      "review": "doomed love story Y charli xcx???!???? tengan todo mi dinero"
+      "review": "doomed love story Y charli xcx???!???? tengan todo mi dinero",
+      "loggedAt": "2026-03-12T01:33:30.000Z"
     },
     "send-help": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-05-17T22:04:52.000Z"
     },
     "people-we-meet-on-vacation": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-01-13T04:07:56.000Z"
     },
     "regretting-you": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2025-12-29T06:53:39.000Z"
     },
     "belen-2025": {
       "rating": 2
     },
     "one-battle-after-another": {
       "rating": 3.5,
-      "review": "completamente innecesario el redemption arc de 5 segundos al final"
+      "review": "completamente innecesario el redemption arc de 5 segundos al final",
+      "loggedAt": "2026-02-15T04:37:22.000Z"
     },
     "obsession-2025": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-05-24T04:44:55.000Z"
     },
     "wake-up-dead-man": {
-      "rating": 3
+      "rating": 3,
+      "loggedAt": "2026-01-11T03:55:31.000Z"
     },
     "frankenstein-2025": {
       "rating": 3
     },
     "hamnet": {
       "rating": 4,
-      "review": "loco que manera de llorar"
+      "review": "loco que manera de llorar",
+      "loggedAt": "2026-03-07T02:16:30.000Z"
     },
     "bugonia": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-02-17T03:16:20.000Z"
     },
     "love-untangled": {
       "rating": 4
     },
     "my-oxford-year": {
       "rating": 2.5,
-      "review": "donde donde está mi romcom 😭😭😭😭😭😭😭"
+      "review": "donde donde está mi romcom 😭😭😭😭😭😭😭",
+      "loggedAt": "2026-01-27T04:08:27.000Z"
     },
     "superman-2025": {
       "rating": 2.5
@@ -5134,7 +5148,8 @@ WM.letterboxd = {
       "rating": 4
     },
     "sinners-2025": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-02-13T03:53:55.000Z"
     },
     "mickey-17": {
       "rating": 3.5
@@ -5179,10 +5194,12 @@ WM.letterboxd = {
       "rating": 4
     },
     "journey-to-bethlehem": {
-      "rating": 3
+      "rating": 3,
+      "loggedAt": "2026-01-13T06:22:00.000Z"
     },
     "the-hunger-games-the-ballad-of-songbirds-snakes": {
-      "rating": 4.5
+      "rating": 4.5,
+      "loggedAt": "2026-07-18T18:22:14.000Z"
     },
     "the-other-zoey": {
       "rating": 3
@@ -5215,7 +5232,8 @@ WM.letterboxd = {
       "rating": 2.5
     },
     "suzume": {
-      "rating": 3
+      "rating": 3,
+      "loggedAt": "2026-07-18T18:15:14.000Z"
     },
     "the-menu-2022": {
       "rating": 3
@@ -5239,7 +5257,8 @@ WM.letterboxd = {
       "rating": 3.5
     },
     "the-woman-in-the-window-2021": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-03-06T04:44:59.000Z"
     },
     "girl-in-the-basement-2021": {
       "rating": 2
@@ -5261,13 +5280,16 @@ WM.letterboxd = {
     },
     "jojo-rabbit": {
       "rating": 4,
-      "review": "suena moco de fondo"
+      "review": "suena moco de fondo",
+      "loggedAt": "2026-05-16T23:41:08.000Z"
     },
     "weathering-with-you": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-07-18T18:15:57.000Z"
     },
     "parasite-2019": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-01-08T07:14:10.000Z"
     },
     "portrait-of-a-lady-on-fire": {
       "rating": 4
@@ -5288,90 +5310,118 @@ WM.letterboxd = {
       "rating": 5
     },
     "the-place-promised-in-our-early-days": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-07-19T06:05:47.000Z"
     },
     "the-hunger-games-mockingjay-part-2": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-07-18T18:21:13.000Z"
     },
     "the-hunger-games-mockingjay-part-1": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-07-18T18:20:57.000Z"
     },
     "the-hunger-games-catching-fire": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-07-18T18:20:38.000Z"
     },
     "the-hunger-games": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-07-18T18:19:34.000Z"
     },
     "children-who-chase-lost-voices": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-07-18T18:19:06.000Z"
     },
     "flipped": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-07-18T18:18:17.000Z"
     },
     "the-garden-of-words": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-07-18T18:17:46.000Z"
     },
     "sharpays-fabulous-adventure": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-07-18T18:16:57.000Z"
     },
     "perfect-blue": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-07-18T18:14:37.000Z"
     },
     "tron-legacy": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-07-18T18:13:07.000Z"
     },
     "the-cloverfield-paradox": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-07-18T18:12:42.000Z"
     },
     "princess-protection-program": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-07-18T18:11:24.000Z"
     },
     "camp-rock-2-the-final-jam": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-07-18T18:11:00.000Z"
     },
     "camp-rock": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-07-18T18:10:41.000Z"
     },
     "high-school-musical-2": {
-      "rating": 2
+      "rating": 2,
+      "loggedAt": "2026-07-18T18:09:17.000Z"
     },
     "high-school-musical": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-07-18T18:08:58.000Z"
     },
     "5-centimeters-per-second": {
-      "rating": 3
+      "rating": 3,
+      "loggedAt": "2026-05-02T06:11:03.000Z"
     },
     "your-name": {
-      "rating": 5
+      "rating": 5,
+      "loggedAt": "2026-05-02T06:10:00.000Z"
     },
     "sidewalls": {
-      "rating": 4
+      "rating": 4,
+      "loggedAt": "2026-05-02T06:00:25.000Z"
     },
     "the-shining": {
-      "rating": 3
+      "rating": 3,
+      "loggedAt": "2026-04-23T19:53:53.000Z"
     },
     "2001-a-space-odyssey": {
-      "rating": 1.5
+      "rating": 1.5,
+      "loggedAt": "2026-04-23T05:10:20.000Z"
     },
     "lost-in-translation": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-04-22T23:02:47.000Z"
     },
     "magnolia": {
-      "rating": 3
+      "rating": 3,
+      "loggedAt": "2026-04-04T07:16:16.000Z"
     },
     "arrival-2016": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-03-04T05:16:53.000Z"
     },
     "clue": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-02-17T05:22:17.000Z"
     },
     "sydney-white": {
       "rating": 2.5,
-      "review": "tomboy snow white"
+      "review": "tomboy snow white",
+      "loggedAt": "2026-02-08T06:15:08.000Z"
     },
     "before-we-go": {
       "rating": 1.5,
-      "review": "que carajos hna salí de ahí dejalo"
+      "review": "que carajos hna salí de ahí dejalo",
+      "loggedAt": "2026-01-26T22:41:26.000Z"
     }
   },
   "luke": {
@@ -5407,7 +5457,8 @@ WM.letterboxd = {
     },
     "the-hunger-games-the-ballad-of-songbirds-snakes": {
       "rating": 4.5,
-      "review": "La palabra prime proviene del inglés y significa principal , primero o el mejor momento . Se entiende perfecto la psicologia del pensamiento mejor justificado de snow que el de la negra loquita esa. Impresionante las puestas de camara, vfx, movimientos de camara y sorprendio el casting. Me fascino como chota hizo susan para escribir esto despues y que coincida todo a la perfection.... just susan knows."
+      "review": "La palabra prime proviene del inglés y significa principal , primero o el mejor momento . Se entiende perfecto la psicologia del pensamiento mejor justificado de snow que el de la negra loquita esa. Impresionante las puestas de camara, vfx, movimientos de camara y sorprendio el casting. Me fascino como chota hizo susan para escribir esto despues y que coincida todo a la perfection.... just susan knows.",
+      "loggedAt": "2026-07-20T05:54:25.000Z"
     },
     "society-of-the-snow": {
       "rating": 4
@@ -5419,11 +5470,13 @@ WM.letterboxd = {
       "rating": 3
     },
     "elemental-2023": {
-      "rating": 2.5
+      "rating": 2.5,
+      "loggedAt": "2026-07-20T05:55:25.000Z"
     },
     "the-little-mermaid-2023": {
       "rating": 1,
-      "review": "ariel puede ser negra... pero ursula, ursula si o si tenia que ser un traba. flasharon mal"
+      "review": "ariel puede ser negra... pero ursula, ursula si o si tenia que ser un traba. flasharon mal",
+      "loggedAt": "2026-07-20T06:16:30.000Z"
     },
     "john-wick-chapter-4": {
       "rating": 1
@@ -5435,7 +5488,8 @@ WM.letterboxd = {
       "rating": 2
     },
     "suzume": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-07-20T06:07:01.000Z"
     },
     "all-quiet-on-the-western-front-2022": {
       "rating": 3.5
@@ -5471,7 +5525,8 @@ WM.letterboxd = {
       "rating": 4
     },
     "tenet": {
-      "rating": 5
+      "rating": 5,
+      "loggedAt": "2026-07-20T06:06:00.000Z"
     },
     "the-platform": {
       "rating": 4
@@ -5484,7 +5539,8 @@ WM.letterboxd = {
     },
     "weathering-with-you": {
       "rating": 3.5,
-      "review": "OUUUshet, si 5cm por el culo se paso, aca reclamo lo que por derecho era suyo. suzume me hizo pensar quehabia perdido la chispa pero aqui me devolvio la fe, confianza, y amor por la humanidad."
+      "review": "OUUUshet, si 5cm por el culo se paso, aca reclamo lo que por derecho era suyo. suzume me hizo pensar quehabia perdido la chispa pero aqui me devolvio la fe, confianza, y amor por la humanidad.",
+      "loggedAt": "2026-07-20T06:14:34.000Z"
     },
     "john-wick-chapter-3-parabellum": {
       "rating": 3.5
@@ -5542,7 +5598,8 @@ WM.letterboxd = {
     },
     "your-name": {
       "rating": 5,
-      "review": "vayanse.... quiero estar solo. 🚬"
+      "review": "vayanse.... quiero estar solo. 🚬",
+      "loggedAt": "2026-07-20T06:06:26.000Z"
     },
     "now-you-see-me-2": {
       "rating": 2.5
@@ -5561,7 +5618,8 @@ WM.letterboxd = {
     },
     "the-hunger-games-mockingjay-part-2": {
       "rating": 4.5,
-      "review": "que decirte... el nombre ya suene epico y encima part2, o sea te va a partir la psiquis 2 veces. fue todo tan epico y el final tan tranquilo que de verdad pensaba que no iba a terminar asi."
+      "review": "que decirte... el nombre ya suene epico y encima part2, o sea te va a partir la psiquis 2 veces. fue todo tan epico y el final tan tranquilo que de verdad pensaba que no iba a terminar asi.",
+      "loggedAt": "2026-07-20T05:51:53.000Z"
     },
     "maze-runner-the-scorch-trials": {
       "rating": 4
@@ -5580,7 +5638,8 @@ WM.letterboxd = {
     },
     "the-hunger-games-mockingjay-part-1": {
       "rating": 4,
-      "review": "totalmente innecesario hacerlo en 2 partes. meteme 6hs y era 5 estrellas"
+      "review": "totalmente innecesario hacerlo en 2 partes. meteme 6hs y era 5 estrellas",
+      "loggedAt": "2026-07-20T05:50:20.000Z"
     },
     "interstellar": {
       "rating": 5
@@ -5595,42 +5654,52 @@ WM.letterboxd = {
       "rating": 4
     },
     "the-boy-in-the-striped-pyjamas": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-07-20T06:17:27.000Z"
     },
     "cross-road-2014": {
-      "rating": 3.5
+      "rating": 3.5,
+      "loggedAt": "2026-07-20T06:10:21.000Z"
     },
     "children-who-chase-lost-voices": {
       "rating": 3.5,
-      "review": "no le tenia fe, pero sorprendio!"
+      "review": "no le tenia fe, pero sorprendio!",
+      "loggedAt": "2026-07-20T06:09:43.000Z"
     },
     "the-garden-of-words": {
       "rating": 4,
-      "review": "el rotorno del prime. instrumental perfecta. nombre perfecto. shots perfectos que te dan ganas de viajar a korea. personaje rozando la pedofilia como el productor le gusta. en efecto.. sine"
+      "review": "el rotorno del prime. instrumental perfecta. nombre perfecto. shots perfectos que te dan ganas de viajar a korea. personaje rozando la pedofilia como el productor le gusta. en efecto.. sine",
+      "loggedAt": "2026-07-20T06:08:17.000Z"
     },
     "5-centimeters-per-second": {
       "rating": 4.5,
-      "review": "Makoto miró 5 centímetros dentro de mí, y algo adentro, de pura melancolía, no se dignó a devolverle la mirada."
+      "review": "Makoto miró 5 centímetros dentro de mí, y algo adentro, de pura melancolía, no se dignó a devolverle la mirada.",
+      "loggedAt": "2026-07-20T06:05:51.000Z"
     },
     "tron-legacy": {
       "rating": 4,
-      "review": "Daft punk carrea, el director con esa vision arquitectonica pudo transmitir a la perfeccion el espacio y las sensaciones que queria generar. Es el camino del heroe? quizas... , pero es épico y si no te gusta es poque no tenes sentimientos. hater"
+      "review": "Daft punk carrea, el director con esa vision arquitectonica pudo transmitir a la perfeccion el espacio y las sensaciones que queria generar. Es el camino del heroe? quizas... , pero es épico y si no te gusta es poque no tenes sentimientos. hater",
+      "loggedAt": "2026-07-20T06:00:14.000Z"
     },
     "the-dark-knight-rises": {
       "rating": 5,
-      "review": "Nolan y Zimmer. solo ellos 2 pueden hacer algo asi. cine 🚬🚬🚬"
+      "review": "Nolan y Zimmer. solo ellos 2 pueden hacer algo asi. cine 🚬🚬🚬",
+      "loggedAt": "2026-07-20T05:56:57.000Z"
     },
     "the-hunger-games-catching-fire": {
       "rating": 4,
-      "review": "una vez que introdujiste el concepto del prime en la mente del espectador es muy dificil que se olvide lo importante que es esta pelicula narrativamente hablando para la prota, y para el desarrollo de personajes de los semi primes. eventualmente esta pelicula es visagra a los primes por venir."
+      "review": "una vez que introdujiste el concepto del prime en la mente del espectador es muy dificil que se olvide lo importante que es esta pelicula narrativamente hablando para la prota, y para el desarrollo de personajes de los semi primes. eventualmente esta pelicula es visagra a los primes por venir.",
+      "loggedAt": "2026-07-20T05:49:33.000Z"
     },
     "the-hunger-games": {
       "rating": 4,
-      "review": "cuando alguien te pregunta por el prime vos le recomendas esta peli, no como el prime sino como el inicio del prime."
+      "review": "cuando alguien te pregunta por el prime vos le recomendas esta peli, no como el prime sino como el inicio del prime.",
+      "loggedAt": "2026-07-20T05:48:00.000Z"
     },
     "the-place-promised-in-our-early-days": {
       "rating": 3,
-      "review": "prime, pero no tan prime. nunca tocan los violines. estafa"
+      "review": "prime, pero no tan prime. nunca tocan los violines. estafa",
+      "loggedAt": "2026-07-20T05:41:32.000Z"
     }
   }
 };

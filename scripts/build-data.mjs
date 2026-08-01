@@ -288,7 +288,15 @@ async function scrapeRSS(user) {
       ? decodeEntities(ti[1]).replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '')
           .replace(/\s*-\s*[★½]+.*$/, '').replace(/,\s*\d{4}\s*$/, '').trim()
       : '';
-    out.push({ slug: link[1], title, tmdbId: +(mv ? mv[1] : tv[1]), kind: mv ? 'movie' : 'series', rating: parseFloat(rt[1]), review });
+    /* pubDate = cuando publico la entrada en Letterboxd. Es lo unico que
+     * permite ordenar "ultimas resenas": las importadas no tienen fila en
+     * Supabase, asi que sin esto empatan todas en cero y queda el orden del
+     * archivo. Va aparte de `date` (la fecha en que la vio) a proposito: `date`
+     * alimenta el timeline y "este ano", y meter ahi la fecha de carga masiva
+     * de un backlog inflaria esas cuentas. */
+    const pd = it.match(/<pubDate>([^<]+)<\/pubDate>/);
+    const loggedAt = pd && !isNaN(Date.parse(pd[1])) ? new Date(pd[1]).toISOString() : '';
+    out.push({ slug: link[1], title, loggedAt, tmdbId: +(mv ? mv[1] : tv[1]), kind: mv ? 'movie' : 'series', rating: parseFloat(rt[1]), review });
   }
   return out;
 }
@@ -350,6 +358,7 @@ async function buildLetterboxd(films) {
         if (e.review) v.review = e.review;
         if (e.liked) v.liked = true;
         if (e.date) v.date = e.date;
+        if (e.loggedAt) v.loggedAt = e.loggedAt;
         verd[e.slug] = v;
       }
     }
@@ -575,6 +584,9 @@ async function syncFromRss() {
   const films = filmBlock.data;
   const haveFilm = new Set(films.map((f) => f.id));
   const news = [];
+  /* Novedad != cambio: guardar una fecha de publicacion que faltaba modifica el
+   * archivo pero no genera aviso. Se cuentan por separado. */
+  let cambios = 0;
 
   for (const [uid, cfg] of Object.entries(USERS)) {
     let feed = [];
@@ -594,13 +606,22 @@ async function syncFromRss() {
       const isNew = !before;
       const ratingChanged = (before && (before.rating ?? null)) !== rating && !isNew;
       const gainedReview = !!review && !(before && before.review);
-      if (!isNew && !ratingChanged && !gainedReview) continue;
+      /* La fecha de publicacion se guarda igual aunque no haya novedad —es lo
+       * que ordena "ultimas resenas"— pero NO cuenta como novedad: si contara,
+       * la primera corrida despues de este cambio avisaria de todas las resenas
+       * viejas de golpe. */
+      const gainedLoggedAt = !!entry.loggedAt && !(before && before.loggedAt);
+      const avisa = isNew || ratingChanged || gainedReview;
+      if (!avisa && !gainedLoggedAt) continue;
 
       mine[entry.slug] = {
         ...(mine[entry.slug] || {}),
         ...(rating != null ? { rating } : {}),
         ...(gainedReview ? { review } : {}),
+        ...(entry.loggedAt ? { loggedAt: entry.loggedAt } : {}),
       };
+      cambios++;
+      if (!avisa) continue;
       /* Si nadie tiene la pelicula en su watchlist, no existe en WM.movies y la
        * resena no se veria en ningun lado hasta el refresco completo del dia
        * siguiente. El refresco completo la crea con buildFromTmdb; aca se hace
@@ -616,9 +637,9 @@ async function syncFromRss() {
     }
   }
 
-  if (!news.length) { console.log('✓ Sin novedades en Letterboxd.'); return; }
-
-  console.log(`→ ${news.length} novedad(es):`);
+  if (!cambios) { console.log('✓ Sin novedades en Letterboxd.'); return; }
+  if (!news.length) console.log(`→ ${cambios} fecha(s) de publicacion completada(s), sin resenas nuevas.`);
+  else console.log(`→ ${news.length} novedad(es):`);
   news.forEach((n) => console.log(`  ${n.uid} · ${n.title || n.slug}${n.hasReview ? ' (con resena)' : ''}`));
 
   const everyone = Object.keys(USERS);

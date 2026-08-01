@@ -41,8 +41,10 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-07-31 · Claude — v46 / PWM+PRB 1.34
-- **The header shows the logo instead of the `PWM.` / `PRB.` wordmark**, in both apps. The favicons were renamed `favicon-*` → `assets/logo-pwm.svg` / `prb/assets/logo-prb.svg` and are now referenced from both the `<link rel=icon>` and the header, so the brand lives in exactly one file per app.
-- `.logo` went from type styles to `inline-flex` + `line-height: 0` with `.logo img { height: 1.7rem; width: auto }`; the `<img>` carries `width`/`height` so the header does not reflow while it loads. The dead `.logo b/i/.dot` rules are gone.
-- ⚠️ Same rule as the favicon: the SVGs are **Lucas's files verbatim** (540×178, slanted edge). Do not re-crop or re-square them.
-- Verified in the browser: both files serve 200 as `image/svg+xml`, rasterise at their native 540×178, and the header instance measures 82×27px with the aspect ratio intact. No `favicon-` references left in either `index.html`.
+### 2026-08-01 - Claude - PWM: orden de "Ultimas resenas"
+- **Imported reviews had no timestamp at all.** The profile sorted by `store.get().updatedAt` and home by `watchedAt || updatedAt`; a Letterboxd review has no Supabase row, so every one scored 0 and the list fell back to `data.js` order. Bian's newest review rendered third.
+- `scrapeRSS` now reads `<pubDate>` into **`loggedAt`**, written by both the full run and `--rss-only`. New `reviewTime(fid, uid)` in `app.js` = `updatedAt || loggedAt`, used by the profile and by `latestReviews()`.
+- ⚠️ **`loggedAt` is deliberately NOT `date`.** `date` feeds `seenDate`/`byDay`/"este ano"; v36 refused to import `watchedDate` precisely because a bulk-logged backlog would inflate those. Publication time is a different fact and only orders lists — keep them separate.
+- Backfilling `loggedAt` on old entries **counts as a change but not as news**, so the first run writes 69 dates and sends zero notifications instead of alerting on every historical review.
+- ⚠️ Still open, both pre-existing: the pipeline hardcodes `BUILD_VERSION = '1.4'` and rewrites `?v=` with a timestamp, so it stomps the hand-maintained stamp and PWM/PRB now disagree (1.4 vs 1.34). And **GitHub is dropping ~90% of the scheduled runs** on this repo (40 runs over 2.5 days; the 09:00 daily had not fired in days, which is why nobody noticed TMDB_TOKEN was corrupted). Consider fewer, wider-spaced crons.
+- Verified against the live feeds: dry-run reports 69 dates and 0 notifications, `data.js` untouched; the real local run wrote them and Bian's reviews now sort 2026-07-25 `finding-emily` first, then 05-16, 03-12, 03-07 - chronological. 204 films, 181 entries, 0 orphans.

@@ -40,6 +40,15 @@
   // Merge in-app verdicts (store) with the Letterboxd baseline (rating/like/review from WM.letterboxd).
   const lbData = () => WM.letterboxd || {};
   function lbVerdict(fid, uid) { const u = lbData()[uid]; return (u && u[fid]) || null; }
+  /* Cuando se publico la resena, para ordenar "ultimas resenas". Lo escrito en
+     la pagina trae `updatedAt`; lo importado de Letterboxd no tiene fila en
+     Supabase, y sin `loggedAt` (la fecha del feed) empatan todas en cero y
+     terminan en el orden en que estan en data.js. */
+  function reviewTime(fid, uid) {
+    const local = store.get(fid, uid).updatedAt;
+    const lb = lbVerdict(fid, uid);
+    return Date.parse(local || (lb && lb.loggedAt) || 0) || 0;
+  }
   function watchMetaOf(fid, uid) {
     const local = store.getWatchMeta(fid, uid);
     const lb = lbVerdict(fid, uid);
@@ -810,8 +819,9 @@
       const v = verdictOf(f.id, u.id);
       if (!(v.review || '').trim()) return;
       const watchedAt = watchMetaOf(f.id, u.id).date || '';
-      const updatedAt = store.get(f.id, u.id).updatedAt || '';
-      const timestamp = Date.parse(watchedAt ? `${watchedAt}T23:59:59` : updatedAt) || 0;
+      const timestamp = watchedAt
+        ? Date.parse(`${watchedAt}T23:59:59`) || 0
+        : reviewTime(f.id, u.id);
       out.push({ f, u, v, watchedAt, timestamp });
     }));
     return out.sort((a, b) => b.timestamp - a.timestamp);
@@ -3208,7 +3218,7 @@
     }));
 
     const revs = s.reviewList
-      .map((f) => ({ f, t: Date.parse(store.get(f.id, id).updatedAt || 0) || 0 }))
+      .map((f) => ({ f, t: reviewTime(f.id, id) }))
       .sort((a, b) => b.t - a.t);
     const rw = sec.querySelector('#p-reviews');
     profileContentPreview(sec.querySelector('#p-reviews-preview'), rw, sec.querySelector('#p-reviews-more'), sec.querySelector('#p-reviews-peek'), revs, ({ f }) => {

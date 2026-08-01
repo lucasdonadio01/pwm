@@ -248,3 +248,10 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Es el **mismo archivo** que usa la pestaña (`assets/logo-pwm.svg` y `prb/assets/logo-prb.svg`, renombrados desde `favicon-*`): un solo lugar donde cambiar la marca.
 - Alto fijo de 1.7rem (unos 27px) y el ancho sale de la proporción del propio SVG, así el header no salta mientras carga.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 37. 🚧 [PWM · Reseñas] "Últimas reseñas" ordenadas por cuándo se publicaron
+- Las reseñas que entran desde Letterboxd no tenían ninguna fecha, así que empataban todas en cero y quedaban en el orden en que estaban en el archivo: la última que hizo Bian aparecía tercera.
+- Ahora el sync trae la **fecha de publicación** del feed y tanto el perfil como el inicio ordenan por eso, de la más nueva a la más vieja.
+- Va en un campo aparte de la fecha en que la vio, a propósito: esa alimenta el timeline y "este año", y mezclarlas rompería esas cuentas.
+- Completar las fechas de las reseñas viejas **no genera notificaciones** — si no, la primera corrida avisaría de todas juntas.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
