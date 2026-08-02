@@ -1,9 +1,8 @@
 /* PRB — client config. Shared cloud store via Supabase (publishable key only; secret never here).
  * Same project/table as PWM, namespaced with app='prb'. */
 window.PRB = window.PRB || {};
-// GIF search keys (shared avatar/background picker in APPKIT). Keep in sync with WM.keys in js/config.js.
-// giphy: developers.giphy.com → Create App. tenor: Google Cloud → enable "Tenor API". Empty = Wikimedia fallback.
-PRB.keys = { giphy: 'KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr', tenor: '', googlebooks: 'AIzaSyDr-xp0-Wvx0RKbV7RL6qmeKHZ5jGPqPkM' };
+// GIF search uses GIPHY through the shared Cloudflare Worker. Tenor stays optional.
+PRB.keys = { tenor: '', googlebooks: 'AIzaSyDr-xp0-Wvx0RKbV7RL6qmeKHZ5jGPqPkM' };
 
 // Live book search + add (Open Library, no key needed) + Google Books (optional key).
 PRB.bookId = (key) => 'x-' + String(key).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();

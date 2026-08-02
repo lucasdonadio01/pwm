@@ -5,11 +5,8 @@
  * Rotate anytime: TMDB dashboard / omdbapi.com.  The Supabase SECRET key is NEVER here.
  */
 window.WM = window.WM || {};
-// GIF search (avatar + profile background). Both providers need a free, READ-ONLY key — paste
-// yours here and it turns on instantly. giphy: developers.giphy.com → Create App → API key.
-// tenor: Google Cloud → enable "Tenor API" → create key. With no key, GIF search falls back to
-// Wikimedia Commons so it never breaks (but results are worse — that's why keys are worth it).
-WM.keys = { tmdb: 'df6dd2f54a8985efe507d42cfeab6683', omdb: '8a21a5a6', giphy: 'KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr', tenor: '' };
+// GIF search uses GIPHY through the shared Cloudflare Worker. Tenor stays optional.
+WM.keys = { tmdb: 'df6dd2f54a8985efe507d42cfeab6683', omdb: '8a21a5a6', tenor: '' };
 
 // Shared cloud store. The publishable key is safe to expose (that's its purpose) + RLS.
 // The Supabase SECRET key is NEVER placed here. app='pwm' namespaces PWM vs PRB in one table.

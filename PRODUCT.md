@@ -56,7 +56,7 @@ Su mecanismo distintivo es conectar en un mismo espacio:
 - Creación de perfiles desde la aplicación.
 - Contraseña numérica por perfil.
 - Perfil configurable con nombre, foto o GIF, color, descripción, usuario de Letterboxd y fondo personal.
-- El fondo del perfil puede ser un color, una imagen o un GIF ultrawide, aplicado solo a la portada o a toda la vista. Los GIFs se pueden subir o buscar gratis en Wikimedia Commons.
+- El fondo del perfil puede ser un color, una imagen o un GIF ultrawide, aplicado solo a la portada o a toda la vista. Los GIFs se pueden subir o buscar en GIPHY desde la app.
 - Modo Invitado de solo lectura.
 - No existe un registro público tradicional por correo electrónico.
 

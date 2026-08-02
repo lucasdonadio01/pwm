@@ -111,7 +111,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 
 ## 15. ✅ [Ambos · Perfil/Motion] Fondo personal + listas completas + transiciones
 - Perfil: fondo personalizable por usuario con color, contraste e imagen o GIF ultrawide; se puede aplicar solo a la portada o a toda la vista.
-- El fondo se puede subir desde el dispositivo o buscar dentro de la app entre GIFs libres de Wikimedia Commons, sin API paga ni clave adicional.
+- El fondo se puede subir desde el dispositivo o buscar dentro de la app en GIPHY.
 - PWM muestra debajo de las mejores rankeadas la Watchlist del usuario visitado.
 - Últimas reseñas y mejores rankeadas permiten **Ver todas / Ver menos** sin abandonar el perfil. PRB conserva el mismo comportamiento para reseñas y libros rankeados.
 - Rutas, filtros y cambios lista/grilla ahora mantienen continuidad visual. Se usan View Transitions cuando están disponibles y Web Animations como respaldo, con soporte para `prefers-reduced-motion`.
@@ -262,7 +262,14 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Se agregó un **candado de simultaneidad**: dos corridas a la vez commitean y pushean el mismo archivo y se pisan.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
 
-## 39. 🚧 [Ambos · GIFs] La búsqueda deja de quedar cargando para siempre
-- Las consultas a Giphy y Tenor ahora se cancelan si el proveedor no responde en 5 segundos. Antes una conexión colgada dejaba el selector eternamente en **“Buscando GIFs…”** y nunca ejecutaba el respaldo.
-- Al vencer ese plazo, la búsqueda pasa automáticamente a Wikimedia Commons; el mismo arreglo cubre foto de perfil, GIF de reseña y fondo personalizado en PWM y PRB.
+## 39. ✅ [Ambos · GIFs] La búsqueda deja de quedar cargando para siempre
+- Las consultas de GIF ahora se cancelan si el proveedor no responde en 5 segundos. Antes una conexión colgada dejaba el selector eternamente en **“Buscando GIFs…”**.
+- El arreglo cubre foto de perfil, GIF de reseña y fondo personalizado en PWM y PRB. La primera solución usaba Wikimedia como respaldo; el punto 40 la reemplaza por el proxy de GIPHY para mejorar la relevancia.
+- Estado: **✅ resuelto y reemplazado por la implementación del punto 40.**
+
+## 40. 🚧 [Ambos · GIFs] Resultados relevantes desde GIPHY
+- Se eliminó Wikimedia Commons como respaldo: encontraba archivos históricos que coincidían con las palabras, pero no GIFs de reacción útiles.
+- GIPHY ahora se consulta mediante un Worker propio de Cloudflare, porque `api.giphy.com` queda bloqueado en algunas conexiones. La clave vive como secreto del Worker y ya no aparece en el frontend.
+- La búsqueda conserva la frase exacta, pide resultados en español para Argentina, pagina de a 24 y muestra la atribución de GIPHY. Si el proveedor falla, se muestra un error en vez de resultados basura.
+- Probado con **“avatar aang”**: devuelve 24 resultados de Avatar: The Last Airbender en la primera página.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**

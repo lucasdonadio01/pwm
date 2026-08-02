@@ -1,0 +1,14 @@
+{
+  "name": "pwm-gif-search",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "wrangler": "4.118.0"
+  }
+}

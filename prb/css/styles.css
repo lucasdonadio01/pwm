@@ -1516,6 +1516,8 @@ html[data-app-motion="shared"]::view-transition-new(*) {
 .avatarpick__results .profile-gif-result { aspect-ratio: 1 / 1; }
 @media (max-width: 520px) { .avatarpick { align-items: end; } .avatarpick__panel { border-radius: 20px 20px 0 0; } }
 .profile-gif-more { margin: .7rem auto 0; }
+.gif-attribution { margin: .65rem 0 0; color: var(--ink-faint); font-size: .62rem; letter-spacing: .04em; text-align: center; }
+.gif-attribution strong { color: var(--ink); font-weight: 900; letter-spacing: .08em; }
 .profile-customizer__actions { justify-content: flex-end; margin-top: 1rem; }
 .cropper__panel--wide { width: min(760px, 100%); }
 .cropper__stage--wide { width: min(100%, 680px); }

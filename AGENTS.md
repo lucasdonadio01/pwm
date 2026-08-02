@@ -37,13 +37,14 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 `correcciones.md` is Lucas's spec file and stays in Spanish.
 
 ## Needs Lucas
-- ~~GIF search keys~~ → your Giphy key `KTxQd2M6L2xI6fFM7zzzfWLVi9sitJqr` is now in both configs. Tenor key still optional.
+- ~~GIF search key~~ → GIPHY is stored as the `GIPHY_API_KEY` secret on the `pwm-gif-search` Worker. It is no longer shipped in either frontend config. Tenor stays optional.
 - ~~Google Books API key~~ → your key `AIzaSyDr-xp0-Wvx0RKbV7RL6qmeKHZ5jGPqPkM` is now in `PRB.keys.googlebooks`.
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-08-02 - Codex - GIF search timeout
-- GIF provider requests now abort after 5 seconds. This prevents an unreachable Giphy or Tenor endpoint from leaving the picker stuck on “Buscando GIFs…” forever.
-- The existing Wikimedia fallback now runs when a keyed provider times out, covering avatars, review GIFs, and profile backgrounds in both apps.
-- Bumped both shared-script cache keys and both footer versions to 1.36.
-- Verified locally with Giphy unreachable: the PWM picker switched to Wikimedia and rendered results instead of hanging.
+### 2026-08-02 - Codex - relevant GIF search through GIPHY proxy
+- Removed Wikimedia Commons from the GIF flow; filename search there produced irrelevant historical files rather than reaction GIFs.
+- Added and deployed the `pwm-gif-search` Cloudflare Worker. It validates requests, keeps the GIPHY key in a Worker secret, allows only the live/local app origins, caches upstream searches, and returns a compact normalized payload.
+- Both apps now search GIPHY through the Worker, show required attribution, and report an error instead of rendering junk if the provider fails. Tenor remains optional.
+- Bumped affected cache keys and both footer versions to 1.37.
+- Verified Worker search for `avatar aang`: 24 relevant Avatar: The Last Airbender results; unit tests, Wrangler dry-run, local PWM UI search, pagination, and live deployment all passed.
