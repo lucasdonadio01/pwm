@@ -612,6 +612,13 @@ window.APPKIT = (function () {
    * a working key it falls back to Wikimedia Commons so search never dies. A "cursor" carries each
    * provider's paging token so "ver más" keeps going. Items: {title,url,preview,provider}. */
   const httpsImg = (v) => { const s = String(v || '').trim(); return /^https:\/\//i.test(s) ? s : ''; };
+  const GIF_FETCH_TIMEOUT = 5000;
+  async function gifFetch(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GIF_FETCH_TIMEOUT);
+    try { return await fetch(url, { signal: controller.signal }); }
+    finally { clearTimeout(timer); }
+  }
   function gifKeys() { const k = (window.WM && WM.keys) || (window.PRB && PRB.keys) || {}; return { giphy: k.giphy || '', tenor: k.tenor || '' }; }
   const gifSearchAvailable = () => { const k = gifKeys(); return !!(k.giphy || k.tenor); };
 
@@ -620,7 +627,7 @@ window.APPKIT = (function () {
     u.searchParams.set('api_key', key); u.searchParams.set('q', q);
     u.searchParams.set('limit', '24'); u.searchParams.set('offset', String(offset || 0));
     u.searchParams.set('rating', 'pg-13'); u.searchParams.set('bundle', 'messaging_non_clips');
-    const r = await fetch(u); if (!r.ok) throw new Error('giphy ' + r.status);
+    const r = await gifFetch(u); if (!r.ok) throw new Error('giphy ' + r.status);
     const d = await r.json(); const im = (g, k) => (g.images[k] || {}).url;
     const items = (d.data || []).map((g) => ({
       title: g.title || 'GIF', provider: 'giphy',
@@ -636,7 +643,7 @@ window.APPKIT = (function () {
     u.searchParams.set('key', key); u.searchParams.set('q', q); u.searchParams.set('client_key', 'pwm-prb');
     u.searchParams.set('limit', '24'); u.searchParams.set('media_filter', 'gif,tinygif'); u.searchParams.set('contentfilter', 'medium');
     if (pos) u.searchParams.set('pos', String(pos));
-    const r = await fetch(u); if (!r.ok) throw new Error('tenor ' + r.status);
+    const r = await gifFetch(u); if (!r.ok) throw new Error('tenor ' + r.status);
     const d = await r.json(); const mf = (g, k) => ((g.media_formats || {})[k] || {}).url;
     const items = (d.results || []).map((g) => ({
       title: g.content_description || g.title || 'GIF', provider: 'tenor',
@@ -650,7 +657,7 @@ window.APPKIT = (function () {
       gsrlimit: '16', gsroffset: String(Math.max(0, Number(offset) || 0)), prop: 'imageinfo',
       iiprop: 'url|mime|size', iiurlwidth: '640', format: 'json', origin: '*',
     });
-    const r = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`); if (!r.ok) throw new Error('wiki');
+    const r = await gifFetch(`https://commons.wikimedia.org/w/api.php?${params}`); if (!r.ok) throw new Error('wiki');
     const d = await r.json();
     const items = Object.values((d.query && d.query.pages) || {}).map((page) => {
       const info = page.imageinfo && page.imageinfo[0];

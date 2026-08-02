@@ -42,8 +42,8 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-08-01 - Claude - pipeline hygiene
-- **The pipeline no longer stomps the version stamp.** `BUILD_VERSION` was hardcoded `'1.4'`, so every data refresh reset PWM's footer while PRB kept climbing (1.4 vs 1.34). It now reads the version out of the existing `data.js` and only refreshes `built`; `FALLBACK_VERSION` is used only if the file does not exist yet. Both apps realigned to **1.35**.
-- **Three crons became two.** `--rss-only` now checks the signup queue first and escalates to a full run when somebody is waiting, which is all the `*/10` watcher ever did. Rationale in the Gotchas: GitHub was dropping ~90% of the scheduled runs and the competing schedules made it worse.
-- Added a `concurrency` group. Two overlapping runs both commit and push `data.js`; the 15' slot can now start a multi-minute full run, so the window was real.
-- Verified: `currentVersion()` reads 1.35 back out of the live `data.js`; `--rss-only --dry-run` still takes the light path on an empty queue and writes nothing. NOT verified: the escalation branch itself, which needs a real pending signup in Supabase.
+### 2026-08-02 - Codex - GIF search timeout
+- GIF provider requests now abort after 5 seconds. This prevents an unreachable Giphy or Tenor endpoint from leaving the picker stuck on “Buscando GIFs…” forever.
+- The existing Wikimedia fallback now runs when a keyed provider times out, covering avatars, review GIFs, and profile backgrounds in both apps.
+- Bumped both shared-script cache keys and both footer versions to 1.36.
+- Verified locally with Giphy unreachable: the PWM picker switched to Wikimedia and rendered results instead of hanging.

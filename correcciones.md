@@ -261,3 +261,8 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - **De tres crons a dos.** El de cada 10 minutos solo servía para importar a alguien que se acababa de registrar; eso ahora lo hace el de 15. GitHub estaba descartando ~9 de cada 10 corridas programadas y tener dos seguidas compitiendo lo empeoraba — por eso el refresco diario no corría hacía días, y por eso nadie vio que el token de TMDB estaba roto.
 - Se agregó un **candado de simultaneidad**: dos corridas a la vez commitean y pushean el mismo archivo y se pisan.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 39. 🚧 [Ambos · GIFs] La búsqueda deja de quedar cargando para siempre
+- Las consultas a Giphy y Tenor ahora se cancelan si el proveedor no responde en 5 segundos. Antes una conexión colgada dejaba el selector eternamente en **“Buscando GIFs…”** y nunca ejecutaba el respaldo.
+- Al vencer ese plazo, la búsqueda pasa automáticamente a Wikimedia Commons; el mismo arreglo cubre foto de perfil, GIF de reseña y fondo personalizado en PWM y PRB.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
