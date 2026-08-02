@@ -4844,6 +4844,53 @@ WM.movies = [
     "trailer": null,
     "tmdb": 49026,
     "featured": false
+  },
+  {
+    "id": "avatar-aang-the-last-airbender",
+    "title": "La leyenda de Aang: El último Airbender",
+    "year": 2026,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Lauren Montgomery",
+    "runtime": 99,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Película de animación que seguirá a Aang y sus amigos, ahora como jóvenes adultos, varios años después de los acontecimientos del final de 'Avatar: The Last Airbender'.",
+    "genres": [
+      "Animación",
+      "Acción",
+      "Aventura",
+      "Fantasía"
+    ],
+    "lang": "en",
+    "backdrop": "https://image.tmdb.org/t/p/original/p7MklBlRr0eRAxJSOnuV4rO08z4.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/iMsORWhD8MawINagL6kvpDVAtS.jpg",
+    "trailer": null,
+    "tmdb": 980431,
+    "popularity": 0
+  },
+  {
+    "id": "spider-man-brand-new-day",
+    "title": "Spider-Man: Brand New Day",
+    "year": 2026,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Destin Daniel Cretton",
+    "runtime": 144,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Han pasado cuatro años desde los acontecimientos de No Way Home, y Peter Parker ahora es un adulto que vive completamente solo, ha desaparecido voluntariamente de las vidas y recuerdos de quienes ama. Combatiendo el crimen en una Nueva York que ya no conoce su nombre, se ha dedicado por completo a proteger su ciudad, pero a medida que aumentan las exigencias sobre él, la presión desencadena una evolución física que amenaza su existencia, al mismo tiempo que un extraño nuevo patrón de crímenes da lugar a una de las amenazas más poderosas a las que se ha enfrentado.",
+    "genres": [
+      "Ciencia ficción",
+      "Acción",
+      "Aventura"
+    ],
+    "lang": "en",
+    "backdrop": "https://image.tmdb.org/t/p/original/qeQJx07rK2xm8SD2sJxFKhE7gs0.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/tluwRNA7k0XfTtDkdLYKX1KOSCJ.jpg",
+    "trailer": null,
+    "tmdb": 969681,
+    "popularity": 0
   }
 ];
 
@@ -5421,6 +5468,15 @@ WM.letterboxd = {
       "rating": 1.5,
       "review": "que carajos hna salí de ahí dejalo",
       "loggedAt": "2026-01-26T22:41:26.000Z"
+    },
+    "avatar-aang-the-last-airbender": {
+      "rating": 3.5,
+      "review": "Yo vt.tiktok.com/ZS4SG6wVV/",
+      "loggedAt": "2026-08-02T07:37:49.000Z"
+    },
+    "spider-man-brand-new-day": {
+      "rating": 4,
+      "loggedAt": "2026-08-02T07:34:28.000Z"
     }
   },
   "luke": {
