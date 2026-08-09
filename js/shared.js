@@ -507,6 +507,114 @@ window.APPKIT = (function () {
     setTimeout(() => { const q = el.querySelector('#ap-query'); if (q) q.focus(); }, 60);
   }
 
+  /* ============================================================ fotos de reseña
+   * Van al blob `reviewpix:<itemId>:<userId>` como data URL, así que TIENEN que pesar poco:
+   * se reescalan a 1280px de lado mayor y se bajan de calidad hasta entrar en ~180KB.
+   * Un GIF chico se guarda tal cual (si lo pasás por canvas pierde la animación). */
+  const MAX_REVIEW_PICS = 4;
+  const PIC_MAX_SIDE = 1280;
+  const PIC_MAX_BYTES = 180 * 1024;
+
+  function shrinkImage(src, maxSide, maxBytes) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode'));
+      img.onload = () => {
+        const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
+        let w = Math.max(1, Math.round(img.width * ratio));
+        let h = Math.max(1, Math.round(img.height * ratio));
+        let quality = 0.82, out = '';
+        for (let pass = 0; pass < 6; pass++) {
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          const ctx = cv.getContext('2d');
+          ctx.fillStyle = '#0b0b0f'; ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          try { out = cv.toDataURL('image/jpeg', quality); } catch { return reject(new Error('canvas')); }
+          if (out.length * 0.75 <= maxBytes) return resolve(out);
+          if (quality > 0.5) quality -= 0.12;                    // primero baja calidad
+          else { w = Math.round(w * 0.8); h = Math.round(h * 0.8); }  // después, tamaño
+        }
+        resolve(out);
+      };
+      img.src = src;
+    });
+  }
+
+  const readAsDataURL = (file) => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error('read'));
+    fr.readAsDataURL(file);
+  });
+
+  /* Elige hasta `slots` imágenes del dispositivo y devuelve un array de data URLs ya livianas. */
+  function pickReviewPics(onReady, slots) {
+    const room = Math.max(0, slots == null ? MAX_REVIEW_PICS : slots);
+    if (!room) return toast(`Podés subir hasta ${MAX_REVIEW_PICS} fotos por reseña.`, 'bad');
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', async () => {
+      const files = Array.from(inp.files || []);
+      inp.remove();
+      if (!files.length) return;
+      const extra = files.length - room;
+      const picked = files.slice(0, room);
+      toast(picked.length > 1 ? 'Preparando las fotos…' : 'Preparando la foto…');
+      const out = [];
+      for (const file of picked) {
+        if (file.size > MAX_UPLOAD) { toast(`"${file.name}" pesa más de 10MB. Probá con una más chica.`, 'bad'); continue; }
+        try {
+          const raw = await readAsDataURL(file);
+          // Un GIF chico entra animado; uno grande se aplana a JPEG (pierde el movimiento, pero entra).
+          out.push(file.type === 'image/gif' && file.size <= MAX_GIF_UPLOAD ? raw : await shrinkImage(raw, PIC_MAX_SIDE, PIC_MAX_BYTES));
+        } catch { toast(`No pude procesar "${file.name}".`, 'bad'); }
+      }
+      if (!out.length) return;
+      if (extra > 0) toast(`Entraron ${out.length}: son hasta ${MAX_REVIEW_PICS} fotos por reseña.`);
+      onReady(out);
+    });
+    inp.click();
+  }
+
+  /* Visor a pantalla completa para las fotos de una reseña. */
+  function openLightbox(urls, start) {
+    const list = (urls || []).filter(Boolean);
+    if (!list.length) return;
+    let i = Math.min(Math.max(0, start || 0), list.length - 1);
+    let el = document.getElementById('lightbox');
+    if (!el) { el = document.createElement('div'); el.id = 'lightbox'; el.className = 'lightbox'; document.body.appendChild(el); }
+    // El visor se abre ARRIBA del sheet, que ya bloqueó el scroll: al cerrar hay que devolverlo como estaba.
+    const prevOverflow = document.body.style.overflow;
+    const close = () => { el.hidden = true; el.innerHTML = ''; document.body.style.overflow = prevOverflow; document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === 'ArrowLeft') go(-1);
+    };
+    el.innerHTML =
+      `<div class="lightbox__scrim" data-lbclose></div>` +
+      `<button class="lightbox__x" data-lbclose aria-label="Cerrar">${icon('close')}</button>` +
+      `<img class="lightbox__img" id="lb-img" alt="Foto de la reseña">` +
+      (list.length > 1
+        ? `<button class="lightbox__nav lightbox__nav--prev" id="lb-prev" aria-label="Anterior">${icon('chevron_left')}</button>` +
+          `<button class="lightbox__nav lightbox__nav--next" id="lb-next" aria-label="Siguiente">${icon('chevron_right')}</button>` +
+          `<span class="lightbox__count" id="lb-count"></span>`
+        : '');
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    const img = el.querySelector('#lb-img'), count = el.querySelector('#lb-count');
+    const draw = () => { img.src = list[i]; if (count) count.textContent = `${i + 1} / ${list.length}`; };
+    const go = (step) => { i = (i + step + list.length) % list.length; draw(); };
+    el.querySelectorAll('[data-lbclose]').forEach((b) => b.addEventListener('click', close));
+    const prev = el.querySelector('#lb-prev'), next = el.querySelector('#lb-next');
+    if (prev) prev.addEventListener('click', () => go(-1));
+    if (next) next.addEventListener('click', () => go(1));
+    document.addEventListener('keydown', onKey);
+    draw();
+  }
+
   function pickBackground(onReady) {
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/jpeg,image/png,image/webp,image/gif'; inp.style.display = 'none';
@@ -1207,6 +1315,7 @@ window.APPKIT = (function () {
     rampAt, autoColor, tierRows, normalizeRows, newRowId, openRowEditor,
     accounts, activity, sha256, pinPad, DEFAULT_PIN,
     pickPhoto, pickGif, pickBackground, openCropper, profileBackground, MAX_UPLOAD, MAX_GIF_UPLOAD,
+    pickReviewPics, openLightbox, shrinkImage, MAX_REVIEW_PICS,
     renderBoardImage, shareBoardImage, openShareBoard,
   };
 })();

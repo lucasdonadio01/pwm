@@ -64,9 +64,14 @@ WM.store = (function () {
     const rows = await res.json();
     const next = {};
     rows.forEach((r) => { (next[r.film_id] = next[r.film_id] || {})[r.user_id] = { rating: typeof r.rating === 'number' ? r.rating : null, review: r.review || '', liked: !!r.liked, tier: r.tier || null, updatedAt: r.updated_at }; });
-    const res2 = await sbFetch(`settings?app=eq.${c.app}&select=key,value`);
+    // Las fotos de reseña son pesadas: se excluyen del pull y se piden de a una al abrir la reseña.
+    const [res2, res3] = await Promise.all([
+      sbFetch(`settings?app=eq.${c.app}&select=key,value&key=not.like.${PIX_PREFIX}*`),
+      sbFetch(`settings?app=eq.${c.app}&select=key&key=like.${PIX_PREFIX}*`),
+    ]);
     const nextSettings = {};
     if (res2.ok) { (await res2.json()).forEach((r) => (nextSettings[r.key] = r.value)); }
+    if (res3.ok) { pixIndex = new Set((await res3.json()).map((r) => r.key)); pixReady = true; pixCache.clear(); }
     state = next; settings = nextSettings;
     await pullShared();
     saveLocal();
@@ -81,6 +86,16 @@ WM.store = (function () {
       shared = next;
     } catch {}
   }
+  /* ---- fotos de reseña (lazy) ----
+   * Una fila de `settings` por reseña: key `reviewpix:<filmId>:<userId>`, value = array de imágenes.
+   * Quedan afuera del pull general (pesan) y NO se guardan en localStorage (reventarían la cuota):
+   * al abrir una reseña se piden a Supabase y se cachean en memoria mientras dure la pestaña. */
+  const PIX_PREFIX = 'reviewpix:';
+  const pixCache = new Map();
+  let pixIndex = new Set();
+  let pixReady = false;
+  const pixKey = (filmId, userId) => `${PIX_PREFIX}${filmId}:${userId}`;
+
   function pushEntry(filmId, userId) {
     if (!sb()) return;
     const e = entry(filmId, userId);
@@ -221,6 +236,45 @@ WM.store = (function () {
       all[filmId] = all[filmId] || {};
       if (url) all[filmId][userId] = url; else delete all[filmId][userId];
       settings.reviewgif = all; saveLocal(); notify(); pushSetting('reviewgif');
+    },
+
+    /* Fotos propias adjuntas a una reseña (array de data URLs). Sólo se muestran al ABRIR la reseña,
+     * así que también se cargan recién ahí: una fila propia por reseña, pedida a demanda. */
+    reviewPicsCached(filmId, userId) { const v = pixCache.get(pixKey(filmId, userId)); return Array.isArray(v) ? v.slice() : null; },
+    hasReviewPics(filmId, userId) {
+      const cached = pixCache.get(pixKey(filmId, userId));
+      if (Array.isArray(cached)) return cached.length > 0;
+      return pixIndex.has(pixKey(filmId, userId));
+    },
+    async loadReviewPics(filmId, userId) {
+      const key = pixKey(filmId, userId);
+      const cached = pixCache.get(key);
+      if (Array.isArray(cached)) return cached.slice();
+      if (!sb() || (pixReady && !pixIndex.has(key))) { pixCache.set(key, []); return []; }
+      try {
+        const r = await sbFetch(`settings?app=eq.${sb().app}&key=eq.${encodeURIComponent(key)}&select=value`);
+        if (!r.ok) throw new Error('sb pix ' + r.status);
+        const rows = await r.json();
+        const list = Array.isArray(rows[0] && rows[0].value) ? rows[0].value.filter((x) => typeof x === 'string' && x) : [];
+        pixCache.set(key, list);
+        if (list.length) pixIndex.add(key); else pixIndex.delete(key);
+        return list.slice();
+      } catch { return null; }   // null = no pude leerlas (offline); [] = no hay
+    },
+    async saveReviewPics(filmId, userId, list) {
+      const key = pixKey(filmId, userId);
+      const clean = (list || []).filter((x) => typeof x === 'string' && x);
+      pixCache.set(key, clean);
+      if (clean.length) pixIndex.add(key); else pixIndex.delete(key);
+      notify();
+      if (!sb()) return true;
+      try {
+        const r = await sbFetch('settings', {
+          method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({ app: sb().app, key, value: clean, updated_at: new Date().toISOString() }),
+        });
+        return r.ok;
+      } catch { return false; }
     },
 
     // Likes on a specific user's written review (separate from liking the film itself).

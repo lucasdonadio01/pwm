@@ -273,3 +273,11 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - La búsqueda conserva la frase exacta, pide resultados en español para Argentina, pagina de a 24 y muestra la atribución de GIPHY. Si el proveedor falla, se muestra un error en vez de resultados basura.
 - Probado con **“avatar aang”**: devuelve 24 resultados de Avatar: The Last Airbender en la primera página.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 41. 🚧 [Ambos · Reseñas] Fotos en la reseña, visibles solo al abrirla
+- En el formulario de la reseña hay un botón **Fotos**: subís hasta **4 imágenes** desde el celular o la compu, con miniaturas y una ✕ para sacar cualquiera. Se guardan solas, no hace falta apretar "Guardar reseña".
+- **No se ven en ningún lado hasta abrir la reseña.** Ni en las tarjetas del inicio, ni en "Lo que dijeron los demás". Ahí solo aparece un aviso chiquito (`📷 Tiene fotos — abrí la reseña`) y un iconito en el chip del usuario, para que se sepa que hay algo.
+- Con la reseña abierta se muestran en una galería; tocando una se abre a **pantalla completa** con flechas, contador y Escape para salir.
+- **Peso:** una foto de 8MB entra reescalada a 1280px y ~170KB (el recorte pasa por el navegador, igual que la foto de perfil). Un GIF de hasta 1MB se guarda animado; uno más pesado se aplana a foto.
+- **Cómo se guardan:** una fila propia de `settings` por reseña (`reviewpix:<id>:<usuario>`), que queda **afuera** de la carga inicial — se pide recién cuando abrís esa reseña. Así el arranque de la app no se hace más lento por más fotos que haya. Tampoco se guardan en el navegador (llenarían el almacenamiento local).
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

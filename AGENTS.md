@@ -10,10 +10,11 @@ Two sibling apps, static vanilla site (**no build step**), one repo:
 - **PRB** (books) → `prb/index.html`, `prb/js/`
 
 Live at `lucasdonadio01.github.io/pwm/` and `/pwm/prb/` (GitHub Pages, publishes on push to `main`).
+One piece of infra outside the repo: GIF search goes through the **`pwm-gif-search` Cloudflare Worker** (`workers/gif-search/`), which holds the GIPHY key as a Worker secret and only allows the live/local origins. No key ships in the frontend configs.
 
 ## Golden rules
 1. **Shared code → `js/shared.js` (`APPKIT`)**, loaded by both apps: accounts + PIN, photo cropper, tier-row config, image export, toast. Don't duplicate it in either `app.js`.
-2. **New data → JSON blobs in the `settings` table.** Never change the Supabase schema. Keys in use: `reading`, `watchmeta`, `tierlists`, `tierdata`, `tierrows`, `calendars`, `calevents`, `accounts`, `extra_films`, `extra_books`, `order`.
+2. **New data → JSON blobs in the `settings` table.** Never change the Supabase schema. Keys in use: `reading`, `watchmeta`, `tierlists`, `tierdata`, `tierrows`, `calendars`, `calevents`, `accounts`, `extra_films`, `extra_books`, `order`, `reviewgif`, `reviewlikes`, `reviewpix:<itemId>:<userId>` (this last one is heavy + lazy — see the Log).
 3. **There is REAL user data in Supabase.** Never bulk-delete `reviews`/`settings`. If you write while testing, clean it up afterwards.
 4. **Cache-bust:** touched JS or CSS -> bump `?v=` in **both** `index.html` files. Otherwise stale assets ship (this already broke the "Leyendo" layout once). PWM's is rewritten with a timestamp by every full pipeline run (a data refresh needs a fresh `data.js` URL); PRB's is hand-bumped and stays a plain number. Either is fine, they do not have to match.
 5. **Footer version stamp:** `WM.build` / `PRB.build` in `js/data.js` and `prb/js/data.js`, bumped by hand. The pipeline **reads and preserves** the existing version and only refreshes `built` -- it used to hardcode it and quietly reset PWM on every run.
@@ -42,9 +43,11 @@ Promoted out of old Log entries so they survive the "replace, don't append" rule
 
 ## Log — ONLY the latest entry. Replace it, don't append (history is in `git log`).
 
-### 2026-08-02 - Codex - relevant GIF search through GIPHY proxy
-- Removed Wikimedia Commons from the GIF flow; filename search there produced irrelevant historical files rather than reaction GIFs.
-- Added and deployed the `pwm-gif-search` Cloudflare Worker. It validates requests, keeps the GIPHY key in a Worker secret, allows only the live/local app origins, caches upstream searches, and returns a compact normalized payload.
-- Both apps now search GIPHY through the Worker, show required attribution, and report an error instead of rendering junk if the provider fails. Tenor remains optional.
-- Bumped affected cache keys and both footer versions to 1.37.
-- Verified Worker search for `avatar aang`: 24 relevant Avatar: The Last Airbender results; unit tests, Wrangler dry-run, local PWM UI search, pagination, and live deployment all passed.
+### 2026-08-09 - Claude - photos on reviews (PWM + PRB), 1.38
+_(Previous entry: Codex's GIPHY-proxy Worker, 1.37 — it is in `git log`, and the Worker itself is now noted under "What this is".)_
+- **New: up to 4 photos per review, rendered ONLY in the opened review** (`mode: 'review'` sheet). Never in home cards, never in "lo que dijeron los demás" — those get a marker (`.verdict__pics`, an icon in the home chip) that opens the review. Full-screen viewer in `APPKIT.openLightbox`.
+- **They are the first lazy `settings` blob.** One row per review, `reviewpix:<itemId>:<userId>`, deliberately kept **out of the bulk pull** (`key=not.like.reviewpix:*`) and out of localStorage — base64 photos would bloat the boot payload and blow the 5MB quota. `pull()` also fetches the bare KEY list, so `hasReviewPics()` is sync and a review with no photos costs zero requests. Values land in an in-memory cache, cleared on every pull.
+- Store API (both apps, same names): `hasReviewPics` / `reviewPicsCached` (sync) · `loadReviewPics` / `saveReviewPics` (async; `loadReviewPics` returns `null` when it could not read, `[]` when there is nothing).
+- `APPKIT.shrinkImage(src, maxSide, maxBytes)` is the new browser-side compressor: worst case (7.6MB of random noise) → 168KB / 1280×960 / 393ms. Reuse it, don't write another canvas resize.
+- **Gotcha fixed while here:** an overlay opened on top of the sheet must restore `document.body.style.overflow` to its previous value, not `''` — resetting it unlocks the page behind a sheet that is still open. `openLightbox` does that; the older pickers still hardcode `''` (harmless today, they only open from full-page views).
+- Verified in the real browser against the live Supabase: index + lazy fetch round-trip, gallery, lightbox nav, editor add/remove, and that the pix key never reaches `getSetting()` or localStorage. The scratch rows written for that test were deleted; `settings` is back to its original 10 keys.

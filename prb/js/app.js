@@ -1417,6 +1417,54 @@
     });
   }
 
+  /* ---------- fotos de la reseña ----------
+   * Se guardan aparte (blob propio por reseña) y se piden recién acá: no aparecen en las tarjetas
+   * ni en "lo que dijeron los demás", sólo con la reseña abierta. */
+  const MAX_PICS = K.MAX_REVIEW_PICS;
+
+  function mountReviewShots(host, bookId, userId) {
+    if (!host) return;
+    store.loadReviewPics(bookId, userId).then((list) => {
+      if (!list || !list.length) { host.hidden = true; host.innerHTML = ''; return; }
+      host.hidden = false;
+      host.innerHTML = list.map((src, i) =>
+        `<button type="button" class="review-shots__item" data-shot="${i}" aria-label="Ver foto ${i + 1}">` +
+        `<img src="${escapeHtml(src)}" alt="Foto ${i + 1} de la reseña" loading="lazy"></button>`).join('');
+      host.querySelectorAll('[data-shot]').forEach((el) => el.addEventListener('click', () => K.openLightbox(list, +el.dataset.shot)));
+    });
+  }
+
+  function mountReviewPicEditor(root, b, u) {
+    const host = $('#review-pics', root), btn = $('#review-pics-btn', root);
+    if (!host || !btn) return;
+    let list = store.reviewPicsCached(b.id, u.id) || [];
+    const draw = () => {
+      host.hidden = !list.length;
+      host.innerHTML = list.map((src, i) =>
+        `<div class="review-pic"><img src="${escapeHtml(src)}" alt="Foto ${i + 1} de tu reseña">` +
+        `<button type="button" class="review-pic__x" data-pic="${i}" aria-label="Quitar foto">${icon('close')}</button></div>`).join('');
+      host.querySelectorAll('[data-pic]').forEach((el) => el.addEventListener('click', () => {
+        if (guestBlock()) return;
+        list = list.filter((_, i) => i !== +el.dataset.pic); commit();
+      }));
+      btn.innerHTML = `${icon('add_photo_alternate')} ${list.length ? `Fotos (${list.length})` : 'Fotos'}`;
+    };
+    const commit = () => {
+      draw();
+      store.saveReviewPics(b.id, u.id, list).then((ok) => { if (!ok) K.toast('No pude guardar las fotos. Probá de nuevo.', 'bad'); });
+    };
+    if (store.reviewPicsCached(b.id, u.id) == null) store.loadReviewPics(b.id, u.id).then((l) => { if (l && !list.length) { list = l; draw(); } });
+    btn.addEventListener('click', () => {
+      if (guestBlock()) return;
+      K.pickReviewPics((pics) => {
+        list = list.concat(pics).slice(0, MAX_PICS);
+        commit();
+        K.toast(pics.length > 1 ? 'Fotos guardadas ✓' : 'Foto guardada ✓');
+      }, MAX_PICS - list.length);
+    });
+    draw();
+  }
+
   /* ============================================================= SHEET */
   const sheet = $('#sheet');
   function openSheet(b, options = {}) {
@@ -1432,7 +1480,7 @@
     const selectedGif = store.getReviewGif(b.id, reviewOwner.id);
     const excludedUserId = reviewMode ? reviewOwner.id : u.id;
     const others = Object.values(users).filter((x) => x.id !== excludedUserId).map((x) => ({ u: x, e: verdictOf(b.id, x.id) }))
-      .filter(({ u: ou, e }) => typeof e.rating === 'number' || e.review || e.liked || store.getReviewGif(b.id, ou.id));
+      .filter(({ u: ou, e }) => typeof e.rating === 'number' || e.review || e.liked || store.getReviewGif(b.id, ou.id) || store.hasReviewPics(b.id, ou.id));
     const readonlyReview =
       `<div class="rate-box rate-box--review"><div class="rate-box__head review-focus__head">${avatarHTML(reviewOwner)}` +
       `<span class="rate-box__you">Reseña de ${profileLink(reviewOwner.id, reviewOwner.name)}</span>` +
@@ -1441,8 +1489,9 @@
       (typeof selected.rating === 'number' ? `${starsMarkup(selected.rating, 'md')}<span class="stars-value">${selected.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
       (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
       `</div>` +
-      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : (selectedGif ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`)) +
+      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : (selectedGif || store.hasReviewPics(b.id, reviewOwner.id) ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`)) +
       (selectedGif ? `<img class="review-focus__gif" src="${escapeHtml(selectedGif)}" alt="GIF de la reseña" loading="lazy">` : '') +
+      `<div class="review-shots" id="review-shots" hidden></div>` +
       readingLine(b, reviewOwner.id) + reviewLikeHTML(b, reviewOwner, u) + `</div>`;
     const editor =
       `<div class="rate-box${editingReview ? ' rate-box--editing' : ''}><div class="rate-box__head">${avatarHTML(u)}` +
@@ -1451,7 +1500,10 @@
       readingBlockHTML(b, u) +
       `<div class="review-field"><label for="review">Tu reseña</label><textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
       (meGif ? `<div class="review-gif"><img src="${escapeHtml(meGif)}" alt="GIF de tu reseña"><button type="button" class="review-gif__x" id="review-gif-remove" aria-label="Quitar GIF">${icon('close')}</button></div>` : '') +
+      `<div class="review-pics" id="review-pics" hidden></div>` +
+      `<p class="review-pics__hint">${icon('visibility')} Las fotos se ven sólo al abrir la reseña.</p>` +
       `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} ${editingReview ? 'Guardar cambios' : 'Guardar reseña'}</button>` +
+      `<button type="button" class="btn btn--soft" id="review-pics-btn">${icon('add_photo_alternate')} Fotos</button>` +
       `<button type="button" class="btn btn--soft" id="review-gif-btn">${icon('gif_box')} ${meGif ? 'Cambiar GIF' : 'GIF'}</button>` +
       (editingReview ? `<button class="btn btn--soft" id="cancel-review">Cancelar</button>` : '') +
       `<button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button>` +
@@ -1469,13 +1521,14 @@
         others.map(({ u: ou, e }) => `<div class="verdict">${avatarHTML(ou, 'avatar verdict__avatar')}<div class="verdict__main"><div class="verdict__row">${profileLink(ou.id, ou.name, 'verdict__name')}` +
           (typeof e.rating === 'number' ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
           (e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
-          `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${store.getReviewGif(b.id, ou.id) ? `<img class="verdict__gif" src="${escapeHtml(store.getReviewGif(b.id, ou.id))}" alt="GIF" loading="lazy" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">` : ''}${readingLine(b, ou.id)}</div></div>`).join('') +
+          `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${store.getReviewGif(b.id, ou.id) ? `<img class="verdict__gif" src="${escapeHtml(store.getReviewGif(b.id, ou.id))}" alt="GIF" loading="lazy" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">` : ''}${store.hasReviewPics(b.id, ou.id) ? `<button type="button" class="verdict__pics" data-review-book="${escapeHtml(b.id)}" data-review-user="${escapeHtml(ou.id)}">${icon('photo_library')} Tiene fotos — abrí la reseña</button>` : ''}${readingLine(b, ou.id)}</div></div>`).join('') +
         `</div>` : '') +
       `</div></div>`;
     if (editorVisible) {
       const editOptions = editingReview ? { mode: 'review', reviewUserId: u.id, editing: true } : {};
       mountStars($('#rate-stars', sheet), b, u, me.rating);
       wireReadingBlock(sheet, b, u, () => openSheet(b, editOptions));
+      mountReviewPicEditor(sheet, b, u);
       $('#rate-clear', sheet).addEventListener('click', () => { if (guestBlock()) return; store.setRating(b.id, u.id, null); openSheet(b, editOptions); });
       $('#save-review', sheet).addEventListener('click', () => {
         if (guestBlock()) return;
@@ -1499,6 +1552,7 @@
       const cancel = $('#cancel-review', sheet);
       if (cancel) cancel.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id }));
     } else {
+      mountReviewShots($('#review-shots', sheet), b.id, reviewOwner.id);
       const edit = $('#edit-review', sheet);
       if (edit) edit.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id, editing: true }));
       const reviewLike = $('#review-like', sheet);

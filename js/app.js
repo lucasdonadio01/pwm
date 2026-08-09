@@ -844,11 +844,13 @@
       const e = verdictOf(f.id, u.id);
       const rated = typeof e.rating === 'number';
       const hasReview = !!(e.review || '').trim();
+      const hasPics = store.hasReviewPics(f.id, u.id);
       if (!rated && !hasReview) return '';
-      return `<span class="hrperson" title="${escapeHtml(u.name)}${rated ? ` · ${e.rating.toFixed(1)}` : ''}${hasReview ? ' · con reseña' : ''}">` +
+      return `<span class="hrperson" title="${escapeHtml(u.name)}${rated ? ` · ${e.rating.toFixed(1)}` : ''}${hasReview ? ' · con reseña' : ''}${hasPics ? ' · con fotos' : ''}">` +
         avatarHTML(u, 'avatar hrperson__av') +
         (rated ? `<b>${icon('star')}${e.rating.toFixed(1)}</b>` : `<b class="hrperson__none">—</b>`) +
         (hasReview ? `<span class="hrperson__ic">${icon('rate_review')}</span>` : '') +
+        (hasPics ? `<span class="hrperson__ic">${icon('photo_library')}</span>` : '') +
         `</span>`;
     }).join('');
   }
@@ -2446,6 +2448,54 @@
     return parts.length ? `<p class="verdict__dates">${icon('event')} ${parts.join(' · ')}</p>` : '';
   }
 
+  /* ---------- fotos de la reseña ----------
+   * Se guardan aparte (blob propio por reseña) y se piden recién acá: no aparecen en las tarjetas
+   * del home ni en "lo que dijeron los demás", sólo con la reseña abierta. */
+  const MAX_PICS = K.MAX_REVIEW_PICS;
+
+  function mountReviewShots(host, filmId, userId) {
+    if (!host) return;
+    store.loadReviewPics(filmId, userId).then((list) => {
+      if (!list || !list.length) { host.hidden = true; host.innerHTML = ''; return; }
+      host.hidden = false;
+      host.innerHTML = list.map((src, i) =>
+        `<button type="button" class="review-shots__item" data-shot="${i}" aria-label="Ver foto ${i + 1}">` +
+        `<img src="${escapeHtml(src)}" alt="Foto ${i + 1} de la reseña" loading="lazy"></button>`).join('');
+      host.querySelectorAll('[data-shot]').forEach((b) => b.addEventListener('click', () => K.openLightbox(list, +b.dataset.shot)));
+    });
+  }
+
+  function mountReviewPicEditor(root, f, u) {
+    const host = $('#review-pics', root), btn = $('#review-pics-btn', root);
+    if (!host || !btn) return;
+    let list = store.reviewPicsCached(f.id, u.id) || [];
+    const draw = () => {
+      host.hidden = !list.length;
+      host.innerHTML = list.map((src, i) =>
+        `<div class="review-pic"><img src="${escapeHtml(src)}" alt="Foto ${i + 1} de tu reseña">` +
+        `<button type="button" class="review-pic__x" data-pic="${i}" aria-label="Quitar foto">${icon('close')}</button></div>`).join('');
+      host.querySelectorAll('[data-pic]').forEach((b) => b.addEventListener('click', () => {
+        if (guestBlock()) return;
+        list = list.filter((_, i) => i !== +b.dataset.pic); commit();
+      }));
+      btn.innerHTML = `${icon('add_photo_alternate')} ${list.length ? `Fotos (${list.length})` : 'Fotos'}`;
+    };
+    const commit = () => {
+      draw();
+      store.saveReviewPics(f.id, u.id, list).then((ok) => { if (!ok) K.toast('No pude guardar las fotos. Probá de nuevo.', 'bad'); });
+    };
+    if (store.reviewPicsCached(f.id, u.id) == null) store.loadReviewPics(f.id, u.id).then((l) => { if (l && !list.length) { list = l; draw(); } });
+    btn.addEventListener('click', () => {
+      if (guestBlock()) return;
+      K.pickReviewPics((pics) => {
+        list = list.concat(pics).slice(0, MAX_PICS);
+        commit();
+        K.toast(pics.length > 1 ? 'Fotos guardadas ✓' : 'Foto guardada ✓');
+      }, MAX_PICS - list.length);
+    });
+    draw();
+  }
+
   function reviewLikeHTML(f, reviewOwner, viewer) {
     const count = store.reviewLikeCount(f.id, reviewOwner.id);
     if (reviewOwner.id === viewer.id) {
@@ -2509,7 +2559,7 @@
     const selectedGif = store.getReviewGif(f.id, reviewOwner.id);
     const excludedUserId = reviewMode ? reviewOwner.id : u.id;
     const others = Object.values(users).filter((x) => x.id !== excludedUserId).map((x) => ({ u: x, e: verdictOf(f.id, x.id) }))
-      .filter(({ u: ou, e }) => typeof e.rating === 'number' || e.review || e.liked || store.getReviewGif(f.id, ou.id));
+      .filter(({ u: ou, e }) => typeof e.rating === 'number' || e.review || e.liked || store.getReviewGif(f.id, ou.id) || store.hasReviewPics(f.id, ou.id));
     const readonlyReview =
       `<div class="rate-box rate-box--review">` +
       `<div class="rate-box__head review-focus__head">${avatarHTML(reviewOwner)}` +
@@ -2519,8 +2569,9 @@
       (typeof selected.rating === 'number' ? `${starsMarkup(selected.rating, 'md')}<span class="stars-value">${selected.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
       (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
       `</div>` +
-      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : (selectedGif ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`)) +
+      (selected.review ? `<p class="review-focus__text">“${escapeHtml(selected.review)}”</p>` : (selectedGif || store.hasReviewPics(f.id, reviewOwner.id) ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña.</p>`)) +
       (selectedGif ? `<img class="review-focus__gif" src="${escapeHtml(selectedGif)}" alt="GIF de la reseña" loading="lazy">` : '') +
+      `<div class="review-shots" id="review-shots" hidden></div>` +
       watchMetaLine(f, reviewOwner.id) +
       reviewLikeHTML(f, reviewOwner, u) +
       `</div>`;
@@ -2533,7 +2584,10 @@
       `<div class="review-field"><label for="review">Tu reseña</label>` +
       `<textarea id="review" placeholder="¿Qué te pareció?">${me.review ? escapeHtml(me.review) : ''}</textarea>` +
       (meGif ? `<div class="review-gif"><img src="${escapeHtml(meGif)}" alt="GIF de tu reseña"><button type="button" class="review-gif__x" id="review-gif-remove" aria-label="Quitar GIF">${icon('close')}</button></div>` : '') +
+      `<div class="review-pics" id="review-pics" hidden></div>` +
+      `<p class="review-pics__hint">${icon('visibility')} Las fotos se ven sólo al abrir la reseña.</p>` +
       `<div class="review-actions"><button class="btn btn--accent" id="save-review">${icon('save')} ${editingReview ? 'Guardar cambios' : 'Guardar reseña'}</button>` +
+      `<button type="button" class="btn btn--soft" id="review-pics-btn">${icon('add_photo_alternate')} Fotos</button>` +
       `<button type="button" class="btn btn--soft" id="review-gif-btn">${icon('gif_box')} ${meGif ? 'Cambiar GIF' : 'GIF'}</button>` +
       (editingReview ? `<button class="btn btn--soft" id="cancel-review">Cancelar</button>` : '') +
       `<button class="btn btn--soft like ${me.liked ? 'is-liked' : ''}" id="sheet-like">${icon('favorite')} ${me.liked ? 'Te gusta' : 'Me gusta'}</button>` +
@@ -2564,7 +2618,7 @@
             `<div class="verdict__main"><div class="verdict__row">${profileLink(ou.id, ou.name, 'verdict__name')}` +
             (typeof e.rating === 'number' ? `${starsMarkup(e.rating, 'sm')}<span class="stars-value">${e.rating.toFixed(1)}</span>` : '<span class="verdict__none">sin puntaje</span>') +
             (e.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
-            `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-film="${escapeHtml(f.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${store.getReviewGif(f.id, ou.id) ? `<img class="verdict__gif" src="${escapeHtml(store.getReviewGif(f.id, ou.id))}" alt="GIF" loading="lazy" data-review-film="${escapeHtml(f.id)}" data-review-user="${escapeHtml(ou.id)}">` : ''}${watchMetaLine(f, ou.id)}</div></div>`).join('') +
+            `</div>${e.review ? `<button type="button" class="verdict__review verdict__review--open" data-review-film="${escapeHtml(f.id)}" data-review-user="${escapeHtml(ou.id)}">“${escapeHtml(e.review)}”</button>` : ''}${store.getReviewGif(f.id, ou.id) ? `<img class="verdict__gif" src="${escapeHtml(store.getReviewGif(f.id, ou.id))}" alt="GIF" loading="lazy" data-review-film="${escapeHtml(f.id)}" data-review-user="${escapeHtml(ou.id)}">` : ''}${store.hasReviewPics(f.id, ou.id) ? `<button type="button" class="verdict__pics" data-review-film="${escapeHtml(f.id)}" data-review-user="${escapeHtml(ou.id)}">${icon('photo_library')} Tiene fotos — abrí la reseña</button>` : ''}${watchMetaLine(f, ou.id)}</div></div>`).join('') +
           `</div>`
         : '') +
 
@@ -2573,6 +2627,7 @@
     if (editorVisible) {
       mountInteractiveStars($('#rate-stars', sheet), f, u, me.rating);
       wireWatchMeta(sheet, f, u);
+      mountReviewPicEditor(sheet, f, u);
       $('#rate-clear', sheet).addEventListener('click', () => {
         if (guestBlock()) return;
         store.setRating(f.id, u.id, null);
@@ -2604,6 +2659,7 @@
       const cancel = $('#cancel-review', sheet);
       if (cancel) cancel.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id }));
     } else {
+      mountReviewShots($('#review-shots', sheet), f.id, reviewOwner.id);
       const edit = $('#edit-review', sheet);
       if (edit) edit.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id, editing: true }));
       const reviewLike = $('#review-like', sheet);
