@@ -17,7 +17,9 @@
   const $ = (s, r = document) => r.querySelector(s);
   const icon = (n) => `<span class="material-symbols-rounded">${n}</span>`;
   const byId = (id) => books.find((b) => b.id === id);
-  const escapeHtml = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Coacciona a texto a propósito: varios campos que pasan por acá (year, páginas…) son números,
+  // y un `s.replace is not a function` se come el render entero de quien lo llamó.
+  const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   // Books the users added by hand (shared via Supabase settings 'extra_books').
   function mergeExtras() { (store.getSetting('extra_books') || []).forEach((b) => { if (!books.some((x) => x.id === b.id)) books.push(b); }); }
@@ -1417,6 +1419,67 @@
     });
   }
 
+  /* ---------- reseña compartida: tarjeta centrada ----------
+   * El que llega por un link no viene a navegar el libro, viene a leer ESA reseña: en vez del sheet
+   * lateral se le muestra una tarjeta en el medio, y al cerrarla queda en la página como si nada. */
+  function openReviewCard(b, owner) {
+    const viewer = currentUser();
+    const v = verdictOf(b.id, owner.id);
+    const gif = store.getReviewGif(b.id, owner.id);
+    const mine = owner.id === viewer.id;
+    let el = document.getElementById('reviewcard');
+    if (!el) { el = document.createElement('div'); el.id = 'reviewcard'; el.className = 'reviewcard'; document.body.appendChild(el); }
+    const prevOverflow = document.body.style.overflow;
+    const close = () => {
+      el.hidden = true; el.innerHTML = '';
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+
+    el.innerHTML =
+      `<div class="reviewcard__scrim" data-rcclose></div>` +
+      `<div class="reviewcard__panel" role="dialog" aria-modal="true" aria-label="Reseña de ${escapeHtml(owner.name)} sobre ${escapeHtml(b.title)}">` +
+      `<div class="reviewcard__hero reviewcard__hero--book" style="background:${art(b)}">` +
+      `<button class="reviewcard__x" data-rcclose aria-label="Cerrar">${icon('close')}</button>` +
+      `<div class="reviewcard__heroinfo">` +
+      `<span class="eyebrow" style="color:var(--lime)">${escapeHtml((b.genres && b.genres[0]) || 'Libro')}</span>` +
+      `<h2>${escapeHtml(b.title)}</h2>` +
+      `<p class="eyebrow">${[b.author, b.year].filter(Boolean).map((x) => escapeHtml(String(x))).join(' · ')}</p>` +
+      `</div></div>` +
+      `<div class="reviewcard__body">` +
+      `<div class="reviewcard__who">${avatarHTML(owner)}` +
+      `<div><b>${escapeHtml(owner.name)}</b><small>${mine ? 'Tu reseña' : 'escribió esta reseña'}</small></div>` +
+      `<div class="reviewcard__score">` +
+      (typeof v.rating === 'number' ? `${starsMarkup(v.rating, 'sm')}<span class="stars-value">${v.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
+      (v.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
+      `</div></div>` +
+      (v.review ? `<p class="reviewcard__text">“${escapeHtml(v.review)}”</p>`
+        : (gif || store.hasReviewPics(b.id, owner.id) ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña escrita.</p>`)) +
+      (gif ? `<img class="review-focus__gif" src="${escapeHtml(gif)}" alt="GIF de la reseña" loading="lazy">` : '') +
+      `<div class="review-shots" id="rc-shots" hidden></div>` +
+      readingLine(b, owner.id) +
+      `<div class="reviewcard__like">${reviewLikeHTML(b, owner, viewer)}</div>` +
+      `<div class="reviewcard__actions">` +
+      `<button type="button" class="btn btn--accent" id="rc-profile">${icon('person')} Ver perfil de ${escapeHtml(owner.name)}</button>` +
+      (mine ? `<button type="button" class="btn btn--soft" id="rc-edit">${icon('edit')} Editar</button>` : '') +
+      `<button type="button" class="btn btn--soft" id="rc-book">${icon('menu_book')} Ver la ficha</button>` +
+      `<button type="button" class="btn btn--ghost" data-rcclose>${icon('close')} Cerrar y seguir</button>` +
+      `</div></div></div>`;
+
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    el.querySelectorAll('[data-rcclose]').forEach((x) => x.addEventListener('click', close));
+    mountReviewShots($('#rc-shots', el), b.id, owner.id);
+    const like = $('#review-like', el);
+    if (like) like.addEventListener('click', () => toggleReviewLike(b, owner, like));
+    $('#rc-profile', el).addEventListener('click', () => { close(); goToProfile(owner.id); });
+    $('#rc-book', el).addEventListener('click', () => { close(); openSheet(b); });
+    const edit = $('#rc-edit', el);
+    if (edit) edit.addEventListener('click', () => { close(); openSheet(b, { mode: 'review', reviewUserId: owner.id, editing: true }); });
+  }
+
   /* Link directo a UNA reseña: `?review=<libro>&user=<autor>`, que `openDeepLink()` abre al entrar
    * (y si el que lo recibe todavía no eligió perfil, se abre apenas entra). */
   function reviewLink(b, reviewOwner) {
@@ -1978,7 +2041,7 @@
     const reviewUser = params.get('user');
     if (!reviewId) return;
     const b = byId(reviewId);
-    if (b) openSheet(b, { mode: 'review', reviewUserId: users[reviewUser] ? reviewUser : currentUser().id });
+    if (b) openReviewCard(b, users[reviewUser] || currentUser());   // link compartido → tarjeta centrada
     else K.toast('Esa reseña ya no está disponible.', 'bad');
     history.replaceState({}, '', location.pathname + location.hash);
   }

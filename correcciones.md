@@ -289,3 +289,12 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Si el link quedó viejo (la peli o el libro ya no está), avisa *"Esa reseña ya no está disponible"* en vez de no hacer nada.
 - La dirección queda limpia una vez que abre, así no te llevás los parámetros puestos al navegar.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 43. 🚧 [Ambos · Reseñas] El link abre una tarjeta en el medio, no el panel del costado
+- Quien entra por un link de reseña ve una **tarjeta centrada** en la pantalla, con la portada arriba, la reseña, las fotos y el puntaje. El panel lateral queda para cuando navegás adentro de la página: el que llega de afuera viene a leer **esa** reseña, no a recorrer la ficha.
+- Abajo tiene los botones: **Ver perfil de [quien la escribió]**, **Ver la ficha** de la peli/libro, y **Cerrar y seguir** (también se cierra con la ✕, tocando afuera o con Escape). Al cerrar quedás en la página, donde estabas.
+- El **me gusta** de la reseña está adentro de la tarjeta. Si la reseña es tuya, en vez del corazón aparece **Editar**.
+- Las fotos se abren a pantalla completa desde la misma tarjeta, sin cerrarla.
+- En el celular la tarjeta entra desde abajo y ocupa el ancho completo.
+- De paso: si a `escapeHtml` le llegaba un número (el año, por ejemplo) reventaba el render entero de quien lo llamara. Ahora convierte a texto en vez de romper — era una bomba de tiempo en las dos apps.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

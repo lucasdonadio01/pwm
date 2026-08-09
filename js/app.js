@@ -2510,6 +2510,67 @@
     });
   }
 
+  /* ---------- reseña compartida: tarjeta centrada ----------
+   * El que llega por un link no viene a navegar la peli, viene a leer ESA reseña: en vez del sheet
+   * lateral se le muestra una tarjeta en el medio, y al cerrarla queda en la página como si nada. */
+  function openReviewCard(f, owner) {
+    const viewer = currentUser();
+    const v = verdictOf(f.id, owner.id);
+    const gif = store.getReviewGif(f.id, owner.id);
+    const mine = owner.id === viewer.id;
+    let el = document.getElementById('reviewcard');
+    if (!el) { el = document.createElement('div'); el.id = 'reviewcard'; el.className = 'reviewcard'; document.body.appendChild(el); }
+    const prevOverflow = document.body.style.overflow;
+    const close = () => {
+      el.hidden = true; el.innerHTML = '';
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+
+    el.innerHTML =
+      `<div class="reviewcard__scrim" data-rcclose></div>` +
+      `<div class="reviewcard__panel" role="dialog" aria-modal="true" aria-label="Reseña de ${escapeHtml(owner.name)} sobre ${escapeHtml(f.title)}">` +
+      `<div class="reviewcard__hero" style="background:${art(f)}">` +
+      `<button class="reviewcard__x" data-rcclose aria-label="Cerrar">${icon('close')}</button>` +
+      `<div class="reviewcard__heroinfo">` +
+      `<span class="eyebrow" style="color:var(--lime)">${kindLabel(f.kind)}</span>` +
+      `<h2>${escapeHtml(f.title)}</h2>` +
+      `<p class="eyebrow">${[f.year, f.director].filter(Boolean).map((x) => escapeHtml(String(x))).join(' · ')}</p>` +
+      `</div></div>` +
+      `<div class="reviewcard__body">` +
+      `<div class="reviewcard__who">${avatarHTML(owner)}` +
+      `<div><b>${escapeHtml(owner.name)}</b><small>${mine ? 'Tu reseña' : 'escribió esta reseña'}</small></div>` +
+      `<div class="reviewcard__score">` +
+      (typeof v.rating === 'number' ? `${starsMarkup(v.rating, 'sm')}<span class="stars-value">${v.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
+      (v.liked ? `<span class="like is-liked">${icon('favorite')}</span>` : '') +
+      `</div></div>` +
+      (v.review ? `<p class="reviewcard__text">“${escapeHtml(v.review)}”</p>`
+        : (gif || store.hasReviewPics(f.id, owner.id) ? '' : `<p class="review-focus__empty">Todavía no dejó una reseña escrita.</p>`)) +
+      (gif ? `<img class="review-focus__gif" src="${escapeHtml(gif)}" alt="GIF de la reseña" loading="lazy">` : '') +
+      `<div class="review-shots" id="rc-shots" hidden></div>` +
+      watchMetaLine(f, owner.id) +
+      `<div class="reviewcard__like">${reviewLikeHTML(f, owner, viewer)}</div>` +
+      `<div class="reviewcard__actions">` +
+      `<button type="button" class="btn btn--accent" id="rc-profile">${icon('person')} Ver perfil de ${escapeHtml(owner.name)}</button>` +
+      (mine ? `<button type="button" class="btn btn--soft" id="rc-edit">${icon('edit')} Editar</button>` : '') +
+      `<button type="button" class="btn btn--soft" id="rc-film">${icon('movie')} Ver la ficha</button>` +
+      `<button type="button" class="btn btn--ghost" data-rcclose>${icon('close')} Cerrar y seguir</button>` +
+      `</div></div></div>`;
+
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    el.querySelectorAll('[data-rcclose]').forEach((b) => b.addEventListener('click', close));
+    mountReviewShots($('#rc-shots', el), f.id, owner.id);
+    const like = $('#review-like', el);
+    if (like) like.addEventListener('click', () => toggleReviewLike(f, owner, like));
+    $('#rc-profile', el).addEventListener('click', () => { close(); goToProfile(owner.id); });
+    $('#rc-film', el).addEventListener('click', () => { close(); openSheet(f); });
+    const edit = $('#rc-edit', el);
+    if (edit) edit.addEventListener('click', () => { close(); openSheet(f, { mode: 'review', reviewUserId: owner.id, editing: true }); });
+  }
+
   function reviewLikeHTML(f, reviewOwner, viewer) {
     const count = store.reviewLikeCount(f.id, reviewOwner.id);
     if (reviewOwner.id === viewer.id) {
@@ -3444,7 +3505,9 @@
       `<div class="footer__meta"><b>PWM</b> — <b style="color:var(--ink-dim)">Project Watch Movies</b>. Watchlists de Letterboxd con actualización semanal · imágenes HD (TMDB) · puntajes IMDb + Rotten Tomatoes (OMDb).<span class="footer__ver">${ver}</span></div>`;
     return f;
   }
-  function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  // Coacciona a texto a propósito: la mitad de los campos que pasan por acá (year, runtime…) son
+  // números, y un `s.replace is not a function` se come el render entero de quien lo llamó.
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
   /* ============================================================= BOOT */
   function openDeepLink() {
@@ -3456,7 +3519,8 @@
     const date = params.get('date');
     if (reviewId) {
       const f = byId(reviewId);
-      if (f) openSheet(f, { mode: 'review', reviewUserId: users[reviewUser] ? reviewUser : currentUser().id });
+      const owner = users[reviewUser] || currentUser();
+      if (f) openReviewCard(f, owner);   // link compartido → tarjeta centrada, no el sheet lateral
       else K.toast('Esa reseña ya no está disponible.', 'bad');
     } else if (calendarShareId) {
       const invite = K.activity.forUser(store, currentUser().id)

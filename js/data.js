@@ -5726,4 +5726,4 @@ WM.importStatus = {
   }
 };
 
-WM.build = {"version":"1.39","built":"2026-08-09T11:55:41-03:00"};
+WM.build = {"version":"1.40","built":"2026-08-09T12:08:03-03:00"};
