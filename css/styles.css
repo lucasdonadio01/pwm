@@ -622,8 +622,8 @@ a { color: inherit; text-decoration: none; }
 .rate-clear { color: var(--ink-faint); font-size: 0.78rem; font-family: 'JetBrains Mono', monospace; }
 .rate-clear:hover { color: var(--ink-dim); }
 .rate-box--review { padding: clamp(1rem, 3vw, 1.35rem); }
-.review-focus__head { margin-bottom: 0.8rem; }
-.review-focus__edit { margin-left: auto; }
+.review-focus__head { margin-bottom: 0.8rem; flex-wrap: wrap; }
+.review-focus__acts { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
 .review-focus__score { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
 .review-focus__text {
   color: var(--ink); font-size: clamp(1rem, 2.4vw, 1.14rem); line-height: 1.65;

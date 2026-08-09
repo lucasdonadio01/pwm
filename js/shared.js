@@ -507,6 +507,40 @@ window.APPKIT = (function () {
     setTimeout(() => { const q = el.querySelector('#ap-query'); if (q) q.focus(); }, 60);
   }
 
+  /* ============================================================ compartir un link
+   * En el celu abre el menú nativo de compartir; en la compu copia al portapapeles.
+   * `execCommand` queda como último recurso: el portapapeles moderno necesita contexto seguro. */
+  async function shareLink(url, opts) {
+    opts = opts || {};
+    if (navigator.share) {
+      try { await navigator.share({ title: opts.title || '', text: opts.text || '', url }); return 'shared'; }
+      catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }   // si falla, seguimos y copiamos
+    }
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(url);
+      else {
+        const ta = document.createElement('textarea');
+        ta.value = url; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        if (!ok) throw new Error('copy');
+      }
+      toast(opts.copiedMessage || 'Link copiado ✓');
+      return 'copied';
+    } catch {
+      toast('No pude copiar el link. Copialo de la barra de direcciones.', 'bad');
+      return 'failed';
+    }
+  }
+
+  /* URL absoluta de la app (sin `index.html`, sin query ni hash) para colgarle parámetros. */
+  function appUrl(params) {
+    const base = location.origin + location.pathname.replace(/index\.html$/i, '');
+    const qs = new URLSearchParams(params || {}).toString();
+    return qs ? `${base}?${qs}` : base;
+  }
+
   /* ============================================================ fotos de reseña
    * Van al blob `reviewpix:<itemId>:<userId>` como data URL, así que TIENEN que pesar poco:
    * se reescalan a 1280px de lado mayor y se bajan de calidad hasta entrar en ~180KB.
@@ -1316,6 +1350,7 @@ window.APPKIT = (function () {
     accounts, activity, sha256, pinPad, DEFAULT_PIN,
     pickPhoto, pickGif, pickBackground, openCropper, profileBackground, MAX_UPLOAD, MAX_GIF_UPLOAD,
     pickReviewPics, openLightbox, shrinkImage, MAX_REVIEW_PICS,
+    shareLink, appUrl,
     renderBoardImage, shareBoardImage, openShareBoard,
   };
 })();

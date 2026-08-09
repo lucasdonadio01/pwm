@@ -1417,6 +1417,20 @@
     });
   }
 
+  /* Link directo a UNA reseña: `?review=<libro>&user=<autor>`, que `openDeepLink()` abre al entrar
+   * (y si el que lo recibe todavía no eligió perfil, se abre apenas entra). */
+  function reviewLink(b, reviewOwner) {
+    return K.appUrl({ review: b.id, user: reviewOwner.id });
+  }
+  function shareReviewLink(b, reviewOwner) {
+    const mine = reviewOwner.id === currentUser().id;
+    K.shareLink(reviewLink(b, reviewOwner), {
+      title: `${b.title} — reseña de ${reviewOwner.name}`,
+      text: mine ? `Mi reseña de ${b.title} en PRB` : `La reseña de ${reviewOwner.name} sobre ${b.title} en PRB`,
+      copiedMessage: 'Link de la reseña copiado ✓',
+    });
+  }
+
   /* ---------- fotos de la reseña ----------
    * Se guardan aparte (blob propio por reseña) y se piden recién acá: no aparecen en las tarjetas
    * ni en "lo que dijeron los demás", sólo con la reseña abierta. */
@@ -1484,8 +1498,10 @@
     const readonlyReview =
       `<div class="rate-box rate-box--review"><div class="rate-box__head review-focus__head">${avatarHTML(reviewOwner)}` +
       `<span class="rate-box__you">Reseña de ${profileLink(reviewOwner.id, reviewOwner.name)}</span>` +
-      (canEditReview ? `<button type="button" class="btn btn--soft btn--xs review-focus__edit" id="edit-review">${icon('edit')} Editar</button>` : '') +
-      `</div><div class="review-focus__score">` +
+      `<div class="review-focus__acts">` +
+      `<button type="button" class="btn btn--soft btn--xs" id="share-review">${icon('link')} Compartir</button>` +
+      (canEditReview ? `<button type="button" class="btn btn--soft btn--xs" id="edit-review">${icon('edit')} Editar</button>` : '') +
+      `</div></div><div class="review-focus__score">` +
       (typeof selected.rating === 'number' ? `${starsMarkup(selected.rating, 'md')}<span class="stars-value">${selected.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
       (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
       `</div>` +
@@ -1553,6 +1569,8 @@
       if (cancel) cancel.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id }));
     } else {
       mountReviewShots($('#review-shots', sheet), b.id, reviewOwner.id);
+      const share = $('#share-review', sheet);
+      if (share) share.addEventListener('click', () => shareReviewLink(b, reviewOwner));
       const edit = $('#edit-review', sheet);
       if (edit) edit.addEventListener('click', () => openSheet(b, { mode: 'review', reviewUserId: u.id, editing: true }));
       const reviewLike = $('#review-like', sheet);
@@ -1960,7 +1978,8 @@
     const reviewUser = params.get('user');
     if (!reviewId) return;
     const b = byId(reviewId);
-    if (b) openSheet(b, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
+    if (b) openSheet(b, { mode: 'review', reviewUserId: users[reviewUser] ? reviewUser : currentUser().id });
+    else K.toast('Esa reseña ya no está disponible.', 'bad');
     history.replaceState({}, '', location.pathname + location.hash);
   }
   function startApp() { applyAccent(); wireProfileNavigation(); wireHashRouting(); renderHeader(); const inicio = parseHash(); setRoute(inicio ? inicio.route : 'home', inicio ? { uid: inicio.uid } : {}); setTimeout(openDeepLink, 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }

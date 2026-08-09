@@ -281,3 +281,11 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - **Peso:** una foto de 8MB entra reescalada a 1280px y ~170KB (el recorte pasa por el navegador, igual que la foto de perfil). Un GIF de hasta 1MB se guarda animado; uno más pesado se aplana a foto.
 - **Cómo se guardan:** una fila propia de `settings` por reseña (`reviewpix:<id>:<usuario>`), que queda **afuera** de la carga inicial — se pide recién cuando abrís esa reseña. Así el arranque de la app no se hace más lento por más fotos que haya. Tampoco se guardan en el navegador (llenarían el almacenamiento local).
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 42. 🚧 [Ambos · Reseñas] Compartir el link de una reseña
+- Con la reseña abierta hay un botón **Compartir** arriba a la derecha, al lado de *Editar*. En el celular abre el menú de compartir de siempre (WhatsApp, Telegram, lo que uses); en la compu **copia el link** y avisa con un cartelito.
+- Anda con **cualquier** reseña, la tuya o la del otro.
+- El que abre el link cae **directo en esa reseña**, con las fotos y todo. Si todavía no eligió perfil, primero entra y la reseña se abre sola apenas pasa.
+- Si el link quedó viejo (la peli o el libro ya no está), avisa *"Esa reseña ya no está disponible"* en vez de no hacer nada.
+- La dirección queda limpia una vez que abre, así no te llevás los parámetros puestos al navegar.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**

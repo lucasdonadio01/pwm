@@ -2496,6 +2496,20 @@
     draw();
   }
 
+  /* Link directo a UNA reseña: `?review=<film>&user=<autor>`, que `openDeepLink()` abre al entrar
+   * (y si el que lo recibe todavía no eligió perfil, se abre apenas entra). */
+  function reviewLink(f, reviewOwner) {
+    return K.appUrl({ review: f.id, user: reviewOwner.id });
+  }
+  function shareReviewLink(f, reviewOwner) {
+    const mine = reviewOwner.id === currentUser().id;
+    K.shareLink(reviewLink(f, reviewOwner), {
+      title: `${f.title} — reseña de ${reviewOwner.name}`,
+      text: mine ? `Mi reseña de ${f.title} en PWM` : `La reseña de ${reviewOwner.name} sobre ${f.title} en PWM`,
+      copiedMessage: 'Link de la reseña copiado ✓',
+    });
+  }
+
   function reviewLikeHTML(f, reviewOwner, viewer) {
     const count = store.reviewLikeCount(f.id, reviewOwner.id);
     if (reviewOwner.id === viewer.id) {
@@ -2564,8 +2578,10 @@
       `<div class="rate-box rate-box--review">` +
       `<div class="rate-box__head review-focus__head">${avatarHTML(reviewOwner)}` +
       `<span class="rate-box__you">Reseña de ${profileLink(reviewOwner.id, reviewOwner.name)}</span>` +
-      (canEditReview ? `<button type="button" class="btn btn--soft btn--xs review-focus__edit" id="edit-review">${icon('edit')} Editar</button>` : '') +
-      `</div><div class="review-focus__score">` +
+      `<div class="review-focus__acts">` +
+      `<button type="button" class="btn btn--soft btn--xs" id="share-review">${icon('link')} Compartir</button>` +
+      (canEditReview ? `<button type="button" class="btn btn--soft btn--xs" id="edit-review">${icon('edit')} Editar</button>` : '') +
+      `</div></div><div class="review-focus__score">` +
       (typeof selected.rating === 'number' ? `${starsMarkup(selected.rating, 'md')}<span class="stars-value">${selected.rating.toFixed(1)}</span>` : `<span class="verdict__none">sin puntaje</span>`) +
       (selected.liked ? `<span class="like is-liked">${icon('favorite')} Le gusta</span>` : '') +
       `</div>` +
@@ -2660,6 +2676,8 @@
       if (cancel) cancel.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id }));
     } else {
       mountReviewShots($('#review-shots', sheet), f.id, reviewOwner.id);
+      const share = $('#share-review', sheet);
+      if (share) share.addEventListener('click', () => shareReviewLink(f, reviewOwner));
       const edit = $('#edit-review', sheet);
       if (edit) edit.addEventListener('click', () => openSheet(f, { mode: 'review', reviewUserId: u.id, editing: true }));
       const reviewLike = $('#review-like', sheet);
@@ -3438,7 +3456,8 @@
     const date = params.get('date');
     if (reviewId) {
       const f = byId(reviewId);
-      if (f) openSheet(f, { mode: 'review', reviewUserId: reviewUser || currentUser().id });
+      if (f) openSheet(f, { mode: 'review', reviewUserId: users[reviewUser] ? reviewUser : currentUser().id });
+      else K.toast('Esa reseña ya no está disponible.', 'bad');
     } else if (calendarShareId) {
       const invite = K.activity.forUser(store, currentUser().id)
         .find((item) => item.type === 'calendar_share_invite' && item.calId === calendarShareId);
