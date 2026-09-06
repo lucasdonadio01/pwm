@@ -4845,6 +4845,121 @@ WM.movies = [
     "trailer": null,
     "tmdb": 49026,
     "featured": false
+  },
+  {
+    "id": "the-ugly-stepsister",
+    "title": "La hermanastra fea",
+    "year": 2025,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Emilie Blichfeldt",
+    "runtime": 109,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Elvira lucha contra su hermosa hermanastra en un reino donde la belleza reina suprema. Ella recurre a medidas extremas para cautivar al príncipe, en medio de una despiadada competición por la perfección física.",
+    "genres": [
+      "Terror",
+      "Comedia",
+      "Drama"
+    ],
+    "lang": "no",
+    "backdrop": "https://image.tmdb.org/t/p/original/kG8bBajeSTUxJGmS47WujcraZUk.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/uI8ho9i1Dl6LUyyJ8ZqkE7SxVq4.jpg",
+    "trailer": null,
+    "tmdb": 1284120,
+    "popularity": 0
+  },
+  {
+    "id": "colony-2026",
+    "title": "Colony",
+    "year": 2026,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "연상호",
+    "runtime": 123,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "El profesor Se-jeong es arrojado a una pesadilla cuando un  virus en rápida mutación se libera durante una conferencia de  biotecnología, lo que lleva a las autoridades a sellar las  instalaciones. Atrapado dentro sin escapatoria, Se-jeong, junto a un  pequeño grupo de supervivientes, debe luchar por mantenerse con vida  mientras los infectados sufren transformaciones horribles.",
+    "genres": [
+      "Acción",
+      "Terror",
+      "Ciencia ficción"
+    ],
+    "lang": "ko",
+    "backdrop": "https://image.tmdb.org/t/p/original/hpBGCnzOvdtQoMyE48gvwp2y5yx.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/pQIpfeenClb2ws9G0kMg3HREjoA.jpg",
+    "trailer": null,
+    "tmdb": 1375646,
+    "popularity": 0
+  },
+  {
+    "id": "27-dresses",
+    "title": "27 vestidos",
+    "year": 2008,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Anne Fletcher",
+    "runtime": 111,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Jane, la eterna dama de honor –lo ha sido hasta 27 veces– pero nunca la novia, debe hacer frente a su peor pesadilla cuando su hermana se compromete con el hombre de sus sueños. A Jane le encanta acudir a bodas y ayudar a la novia en su día más especial. Está enamorada de su jefe, pero el día que se decide a confesarle su amor, su atractiva y caprichosa hermana, a la que siempre ha cuidado, entra en escena.",
+    "genres": [
+      "Comedia",
+      "Romance"
+    ],
+    "lang": "en",
+    "backdrop": "https://image.tmdb.org/t/p/original/esArWR9sImBpEgq3sHCPyP5mcfd.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/4u1KKBa7kQzxPgl51rGWSPlT1Ws.jpg",
+    "trailer": null,
+    "tmdb": 6557,
+    "popularity": 0
+  },
+  {
+    "id": "what-a-girl-wants",
+    "title": "Un sueño para ella",
+    "year": 2003,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Dennie Gordon",
+    "runtime": 100,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Daphne Reynolds es una adolescente que viaja de Nueva York a Londres para ver a su padre, un político que pertenece a la aristocracia y que proyecta casarse con una mujer detestable. Lo que Daphne se propone es conseguir que sus padres vuelvan a estar juntos de nuevo.",
+    "genres": [
+      "Familia",
+      "Comedia",
+      "Drama",
+      "Romance"
+    ],
+    "lang": "en",
+    "backdrop": "https://image.tmdb.org/t/p/original/bZwUUgz0pgl1cEjcvpDSsBfYvzK.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/pSwg5LnbVoAtalbKkYFfx2Wo6fQ.jpg",
+    "trailer": null,
+    "tmdb": 10735,
+    "popularity": 0
+  },
+  {
+    "id": "voicemails-for-isabelle",
+    "title": "Mensajes de voz para Isabelle",
+    "year": 2026,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Leah McKendrick",
+    "runtime": 119,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Una joven deja mensajes de voz bastante explícitos a su difunta hermana, sin saber que los recibe un desconocido que comienza a enamorarse de ella.",
+    "genres": [
+      "Romance",
+      "Comedia",
+      "Drama"
+    ],
+    "lang": "en",
+    "backdrop": "https://image.tmdb.org/t/p/original/2WU6Y6aonzD6uAaCmNnEFlesxxJ.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/ohIYxdaO7WV1zsSPFZVddWNEWkk.jpg",
+    "trailer": null,
+    "tmdb": 614945,
+    "popularity": 0
   }
 ];
 
@@ -5421,6 +5536,27 @@ WM.letterboxd = {
       "rating": 1.5,
       "review": "que carajos hna salí de ahí dejalo",
       "loggedAt": "2026-01-26T22:41:26.000Z"
+    },
+    "the-ugly-stepsister": {
+      "rating": 3.5,
+      "review": "skinny legend i guess…",
+      "loggedAt": "2026-09-06T06:43:39.000Z"
+    },
+    "colony-2026": {
+      "rating": 3,
+      "loggedAt": "2026-09-06T06:38:15.000Z"
+    },
+    "27-dresses": {
+      "rating": 3,
+      "loggedAt": "2026-09-06T06:37:47.000Z"
+    },
+    "what-a-girl-wants": {
+      "rating": 3,
+      "loggedAt": "2026-09-06T06:36:49.000Z"
+    },
+    "voicemails-for-isabelle": {
+      "rating": 3.5,
+      "loggedAt": "2026-09-06T06:36:25.000Z"
     }
   },
   "luke": {
