@@ -4,7 +4,7 @@
     {
       "name": "musuq-simbolos",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8123", "--directory", "musuq-pacha/simbolos"],
+      "runtimeArgs": ["-m", "http.server", "8123", "--directory", "C:/Users/CHIA/Code/musuq-pacha"],
       "port": 8123
     }
   ]

@@ -300,7 +300,7 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
 
 ## 44. 🚧 [Musuq Pacha] Generador de símbolos de pueblos originarios
-- Web aparte, en `musuq-pacha/simbolos/`. Se abre `index.html` y listo: **no necesita internet ni instalar nada**.
+- **Vive en su propio repo**, `github.com/lucasdonadio01/musuq-pacha`, y está publicado en **https://lucasdonadio01.github.io/musuq-pacha/**. Se abre `index.html` y listo: **no necesita internet ni instalar nada**.
 - **La portada es un mosaico**: la pantalla entera se llena de baldosas, cada una con su propio símbolo y su color de fondo, y en el medio el bloque negro con **MUSUQ PACHA** y el botón **empezar**. Alrededor del mosaico queda un marco por donde se ve el fondo de píxeles moverse.
 - **Las baldosas van cambiando solas**: cada segundo cambia una parte (no todas juntas), y cambian con **el mismo morph que el mini juego** — los píxeles viajan de una figura a la otra — mientras el color de fondo de la baldosa se cruza al nuevo. Nunca queda quieto.
 - **Pasando el mouse por el mosaico** la baldosa se agranda, y **las de alrededor también un poco**, así se levanta como una ola. La que tenés debajo del cursor se queda quieta (no se regenera). Si barrés, quedan varias grandes atrás. **Un click en una baldosa le genera un símbolo nuevo.** Las baldosas cambian cada **0,7 segundos** y no salen calaveras.
