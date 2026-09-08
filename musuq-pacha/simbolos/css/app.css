@@ -27,7 +27,7 @@ html, body {
 
 /* ---------- portada ---------- */
 #portada { position: relative; z-index: 2; height: 100%; }
-#mosaico { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#mosaico { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
 
 /* El bloque del título ocupa baldosas enteras del mosaico: Mosaico le escribe
    la posición y la medida, acá va solo el aspecto. */

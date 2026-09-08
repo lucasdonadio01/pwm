@@ -39,11 +39,21 @@ baldosas, con un desfasaje adentro de la tanda: siempre hay algo cambiando pero 
 cambia todo de golpe. Como es el mismo motor, **el morph de la portada es exactamente el
 del juego** y no pueden quedar desincronizados. El mosaico deja un marco alrededor por
 donde se ve el PixelBlast, y se detiene al entrar para no comer cuadros.
+**Al pasar el mouse** la baldosa crece y queda arriba de las vecinas, y mientras la
+tengas debajo del cursor **no se regenera**: esa figura se queda. El calor baja despacio,
+así que un barrido deja varias grandes atrás como estela. **Un click la regenera.**
 
-**Siete familias de patrones, una semilla.** `organico` crece por vecindad sobre media
+**El espejo se fuerza en un solo lugar.** `generarGrilla` pasa toda figura por
+`espejar()` antes de devolverla, así ninguna familia puede sacar algo torcido por más
+que se agregue una nueva después. Medido: 60 generaciones seguidas, 0 asimétricas.
+
+**Ocho familias de patrones, una semilla.** `organico` crece por vecindad sobre media
 grilla y espeja; `flor` recorta pétalos con `cos(ángulo · n)`; `mandala` sortea un
 octante y lo replica ocho veces; `trama` repite rombos y cruces (es la que mejor lee en
-las baldosas chicas); `calavera`, `demonio` y `animal` son plantillas con variación. Todo sale de un `mulberry32` sembrado, así que **la semilla que se muestra
+las baldosas chicas); `abstracto` arma emblemas de barras y columnas; `calavera`,
+`demonio` (cara con cuernos, ceño y colmillos) y `animal` son plantillas con variación.
+El menú tiene **pesos**: flores, demonios y abstractos salen más seguido, que son los
+que mejor leen como símbolo. Todo sale de un `mulberry32` sembrado, así que **la semilla que se muestra
 abajo del nombre del pueblo reproduce el símbolo exacto** — `Simbolo.generar(t, 0x2735CC9B)`
 devuelve el mismo dibujo. Es la firma única de cada generación.
 

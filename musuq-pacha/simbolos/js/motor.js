@@ -20,6 +20,16 @@ const Motor = (() => {
 
   const clave = (x, y) => x + ',' + y;
 
+  const espejar = (celdas, N) => {
+    const s = new Set();
+    for (const k of celdas) {
+      const [x, y] = k.split(',').map(Number);
+      s.add(clave(x, y));
+      s.add(clave(N - 1 - x, y));
+    }
+    return s;
+  };
+
   /* mulberry32: la semilla hace que un simbolo se pueda volver a generar igual,
      y es lo que se muestra abajo del nombre del pueblo como firma unica */
   function dado(semilla) {
@@ -131,18 +141,71 @@ const Motor = (() => {
     return s;
   }
 
+  /* Cara de demonio: mandibula en punta, cuernos que suben y se abren, ojos
+     inclinados hacia afuera (que es lo que da el ceño) y boca con colmillos */
   function demonio(R, N) {
-    const s = calavera(R, N), c = (N - 1) / 2;
+    const s = new Set(), c = (N - 1) / 2;
     const dentro = (x, y) => x >= 0 && y >= 0 && x < N && y < N;
-    const ancho = Math.max(2, Math.round(N * 0.30));
-    const alto = Math.max(2, Math.round(N * 0.28));
-    let x = c - ancho, y = Math.max(0, c - alto - 1);
-    for (let i = 0, largo = Math.max(2, Math.round(N / 3)); i < largo; i++) {
-      y--;
-      if (i % 2 === 0) x--;
-      if (dentro(x, y)) { s.add(clave(x, y)); s.add(clave(2 * c - x, y)); }
+    const ancho = Math.max(2, Math.round(N * 0.32));
+    const alto = Math.max(2, Math.round(N * 0.30));
+    const tope = Math.max(1, c - alto);
+
+    for (let y = tope; y < Math.min(N, c + alto); y++) {
+      const punta = Math.max(0, y - c);                  // la cara se angosta al bajar
+      for (let x = c - ancho; x <= c + ancho; x++)
+        if (Math.abs(x - c) <= ancho - punta && dentro(x, y)) s.add(clave(x, y));
     }
-    if (R() < 0.6 && dentro(c, c + 3)) s.add(clave(c, c + 3));
+
+    let hx = c - ancho, hy = tope;
+    for (let i = 0, largo = Math.max(2, Math.round(N / 3.2)); i < largo; i++) {
+      hy--;
+      if (i % 2 === 0) hx--;
+      if (dentro(hx, hy)) { s.add(clave(hx, hy)); s.add(clave(2 * c - hx, hy)); }
+    }
+
+    const oy = Math.max(tope, c - Math.max(1, Math.round(alto * 0.45)));
+    const ox = Math.max(1, Math.round(ancho * 0.55));
+    for (let d = 0; d < (N >= 11 ? 2 : 1); d++) {
+      s.delete(clave(c - ox - d, oy + d));               // el ojo baja hacia afuera
+      s.delete(clave(c + ox + d, oy + d));
+    }
+
+    const boca = c + Math.max(1, Math.round(alto * 0.45));
+    for (let x = c - ancho + 2; x <= c + ancho - 2; x += 2) s.delete(clave(x, boca));
+    if (R() < 0.5) s.delete(clave(c, c));                // tabique
+    return s;
+  }
+
+  /* Emblema abstracto: barras y columnas simetricas, sin azar sucio. Es la
+     familia que reemplaza al crecimiento libre cuando se quiere algo que lea
+     como signo y no como mancha. */
+  function abstracto(R, N) {
+    const s = new Set(), c = (N - 1) / 2;
+    const dentro = (x, y) => x >= 0 && y >= 0 && x < N && y < N;
+
+    for (let i = 0, barras = 2 + Math.floor(R() * 3); i < barras; i++) {
+      const y = Math.floor(R() * N);
+      const grueso = 1 + Math.floor(R() * 2);
+      const medio = 1 + Math.floor(R() * (c + 1));
+      for (let dy = 0; dy < grueso; dy++)
+        for (let x = c - medio; x <= c + medio; x++)
+          if (dentro(x, y + dy)) s.add(clave(x, y + dy));
+    }
+
+    for (let i = 0, cols = 1 + Math.floor(R() * 2); i < cols; i++) {
+      const col = Math.floor(R() * (c + 1));
+      const y0 = Math.floor(R() * (N / 2));
+      const y1 = y0 + 2 + Math.floor(R() * (N - y0 - 2));
+      for (let y = y0; y < Math.min(N, y1); y++) {
+        if (dentro(c - col, y)) s.add(clave(c - col, y));
+        if (dentro(c + col, y)) s.add(clave(c + col, y));
+      }
+    }
+
+    for (let i = 0, muescas = Math.floor(R() * 3); i < muescas; i++) {
+      const x = Math.floor(R() * (c + 1)), y = Math.floor(R() * N);
+      s.delete(clave(x, y)); s.delete(clave(N - 1 - x, y));
+    }
     return s;
   }
 
@@ -190,9 +253,17 @@ const Motor = (() => {
     calavera: { nombre: 'calavera', armar: calavera },
     demonio: { nombre: 'demonio', armar: demonio },
     animal: { nombre: 'animal', armar: animal },
-    trama: { nombre: 'trama', armar: trama }
+    trama: { nombre: 'trama', armar: trama },
+    abstracto: { nombre: 'abstracto', armar: abstracto }
   };
   const NOMBRES = Object.keys(FAMILIAS);
+
+  /* Menu con pesos: las repeticiones son la probabilidad. Las flores, las caras
+     de demonio y los patrones simetricos salen mas seguido porque son los que
+     mejor leen como simbolo; el crecimiento libre queda de condimento. */
+  const MENU = ['flor', 'flor', 'flor', 'demonio', 'demonio', 'demonio',
+                'mandala', 'mandala', 'abstracto', 'abstracto', 'abstracto',
+                'trama', 'calavera', 'animal', 'organico'];
 
   /* ---------- una figura ---------- */
   function crear(lado) {
@@ -203,10 +274,13 @@ const Motor = (() => {
 
     function generarGrilla(sem, paleta, familias) {
       const R = dado(sem);
-      const menu = familias && familias.length ? familias : NOMBRES;
+      const menu = familias && familias.length ? familias : MENU;
       familia = menu[Math.floor(R() * menu.length)];
       let celdas = FAMILIAS[familia].armar(R, N);
-      if (celdas.size < 4) { familia = 'organico'; celdas = organico(R, N); }
+      if (celdas.size < 4) { familia = 'flor'; celdas = flor(R, N); }
+      // el espejo se fuerza acá y no en cada familia: así ninguna puede
+      // devolver una figura torcida, por mas que se agregue una nueva despues
+      celdas = espejar(celdas, N);
 
       // color en manchas, resuelto con min(x, N-1-x) para que el espejo lo copie
       const dominante = Math.floor(R() * Math.min(3, paleta.length));
@@ -402,5 +476,5 @@ const Motor = (() => {
     };
   }
 
-  return { crear, aRgb, aHex, mezcla, oscurecer, luz, suave, firma, dado, FAMILIAS, NOMBRES };
+  return { crear, aRgb, aHex, mezcla, oscurecer, luz, suave, firma, dado, FAMILIAS, NOMBRES, MENU };
 })();

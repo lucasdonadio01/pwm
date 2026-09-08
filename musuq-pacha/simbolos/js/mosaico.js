@@ -11,12 +11,14 @@ const Mosaico = (() => {
   const CADA = 950;          // ms entre tandas
   const PORCION = 0.22;      // parte de las baldosas que cambia en cada tanda
   const CRUCE = 920;         // ms del cambio de color de fondo, igual que el viaje
-  // las tramas y los mandalas son los que mejor leen a 7 celdas, van repetidos
-  // para que salgan mas seguido que las calaveras
-  const MENU = ['trama', 'trama', 'trama', 'mandala', 'mandala', 'flor', 'flor',
-                'animal', 'organico', 'calavera', 'demonio'];
+  const CRECE = 0.16;        // cuanto se agranda la baldosa bajo el cursor
+  const ENFRIA = 0.026;      // cuanto baja el calor por cuadro: es la cola del barrido
+  // las tramas, los mandalas y las flores son los que mejor leen a 7 celdas
+  const MENU = ['trama', 'trama', 'mandala', 'mandala', 'flor', 'flor',
+                'demonio', 'demonio', 'abstracto', 'abstracto', 'calavera'];
 
-  let cv, ctx, bloque, baldosas = [];
+  let cv, ctx, bloque, baldosas = [], indice = new Map();
+  let raton = { x: -1, y: -1 };
   let cols = 0, filas = 0, tam = 100, ox = 0, oy = 0;
   let hueco = { c0: 0, f0: 0, cw: 0, fh: 0 };
   let raf = 0, reloj = 0, vivo = false;
@@ -96,24 +98,52 @@ const Mosaico = (() => {
       if (tapada(c, f)) continue;
       const vieja = previas[i++];
       if (vieja) { vieja.c = c; vieja.f = f; baldosas.push(vieja); continue; }
-      const b = { c, f, motor: Motor.crear(LADO), cDe: [0, 0, 0], cA: [0, 0, 0], tf: 0 };
+      const b = { c, f, motor: Motor.crear(LADO), cDe: [0, 0, 0], cA: [0, 0, 0], tf: 0, calor: 0 };
       const comb = combinacion();
       b.cDe = b.cA = Motor.aRgb(comb.fondo);
       b.tf = performance.now();
       b.motor.generar(performance.now() - CRUCE, null, comb.colores, MENU);
       baldosas.push(b);
     }
+    indice = new Map(baldosas.map(b => [b.c + ',' + b.f, b]));
   }
+
+  const baldosaEn = (px, py) => {
+    if (px < 0 || py < 0) return null;
+    return indice.get(Math.floor((px - ox) / tam) + ',' + Math.floor((py - oy) / tam)) || null;
+  };
 
   function pintar(ahora) {
     ctx.clearRect(0, 0, innerWidth, innerHeight);
     const lado = tam - AIRE;
-    const celda = lado / (LADO + 2);          // una celda de margen a cada lado
+    const encima = baldosaEn(raton.x, raton.y);
+
+    // el calor sube de golpe bajo el cursor y baja despacio: al barrer con el
+    // mouse quedan varias baldosas grandes atras, como una estela
     for (const b of baldosas) {
-      const x = ox + b.c * tam, y = oy + b.f * tam;
-      if (x > innerWidth || y > innerHeight || x + lado < 0 || y + lado < 0) continue;
+      b.calor = b === encima ? b.calor + (1 - b.calor) * 0.34
+                             : Math.max(0, b.calor - ENFRIA);
+    }
+
+    // las mas calientes se dibujan ultimas para que queden arriba de las vecinas
+    const orden = baldosas.slice().sort((a, b) => a.calor - b.calor);
+    for (const b of orden) {
+      const escala = 1 + CRECE * b.calor;
+      const l = lado * escala;
+      const x = ox + b.c * tam + (lado - l) / 2;
+      const y = oy + b.f * tam + (lado - l) / 2;
+      const celda = l / (LADO + 2);           // una celda de margen a cada lado
       ctx.fillStyle = Motor.aHex(fondoActual(b, ahora));
-      ctx.fillRect(x, y, lado, lado);
+      if (b.calor > 0.02) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,' + (0.22 * b.calor).toFixed(3) + ')';
+        ctx.shadowBlur = 18 * b.calor;
+        ctx.shadowOffsetY = 5 * b.calor;
+        ctx.fillRect(x, y, l, l);
+        ctx.restore();
+      } else {
+        ctx.fillRect(x, y, l, l);
+      }
       b.motor.dibujar(ctx, x + celda, y + celda, celda, ahora, {});
     }
   }
@@ -127,17 +157,27 @@ const Mosaico = (() => {
   function tanda() {
     if (!vivo || !baldosas.length) return;
     const ahora = performance.now();
+    // la que estás mirando no se toca: mientras tengas el cursor encima,
+    // esa generación se queda quieta
+    const libres = baldosas.filter(b => b.calor < 0.5);
+    if (!libres.length) return;
     const cuantas = Math.max(1, Math.round(baldosas.length * PORCION));
     const elegidas = new Set();
-    while (elegidas.size < cuantas) elegidas.add(Math.floor(Math.random() * baldosas.length));
+    while (elegidas.size < Math.min(cuantas, libres.length)) elegidas.add(Math.floor(Math.random() * libres.length));
     // pequeño desfasaje adentro de la tanda: no arrancan todas en el mismo cuadro
-    [...elegidas].forEach((i, n) => regenerar(baldosas[i], ahora + n * 26));
+    [...elegidas].forEach((i, n) => regenerar(libres[i], ahora + n * 26));
   }
 
   function iniciar(canvas, elBloque) {
     cv = canvas; bloque = elBloque; vivo = true;
     medir();
     addEventListener('resize', medir);
+    cv.addEventListener('pointermove', e => { raton = { x: e.clientX, y: e.clientY }; });
+    cv.addEventListener('pointerleave', () => { raton = { x: -1, y: -1 }; });
+    cv.addEventListener('pointerdown', e => {
+      const b = baldosaEn(e.clientX, e.clientY);
+      if (b) regenerar(b, performance.now());     // un click, una generación nueva
+    });
     raf = requestAnimationFrame(bucle);
     reloj = setInterval(tanda, CADA);
   }
