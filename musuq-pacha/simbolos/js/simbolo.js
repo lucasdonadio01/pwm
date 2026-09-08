@@ -89,7 +89,7 @@ const Simbolo = (() => {
       const izq = [
         [pueblo.nombre, '500', 1],
         [pueblo.region, '300', 0.6],
-        [figura.familia + ' · generación ' + String(generacion).padStart(2, '0'), '300', 0.6],
+        ['generación ' + String(generacion).padStart(2, '0'), '300', 0.6],
         ['semilla ' + figura.firmaSemilla, '300', 0.6]
       ];
       const arranque = H / 2 - ((izq.length - 1) * salto) / 2;

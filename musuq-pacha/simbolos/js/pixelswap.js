@@ -10,7 +10,7 @@ const PixelSwap = (() => {
   const esperar = ms => new Promise(r => setTimeout(r, ms));
   const revolver = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
-  function tapa(destino, { celda = 22, color = '#1B1A19', fijo = false } = {}) {
+  function tapa(destino, { celda = 22, color = '#1B1A19', colores = null, fijo = false } = {}) {
     const caja = fijo ? { width: innerWidth, height: innerHeight } : destino.getBoundingClientRect();
     const cols = Math.max(1, Math.ceil(caja.width / celda));
     const filas = Math.max(1, Math.ceil(caja.height / celda));
@@ -21,7 +21,11 @@ const PixelSwap = (() => {
     const celdas = [];
     for (let i = 0; i < cols * filas; i++) {
       const d = document.createElement('i');
-      d.style.background = color;
+      // cada celda toma su propio color: tapado con un solo color la pantalla
+      // se iba a negro un instante y se leía como un corte, no como transición
+      d.style.background = colores && colores.length
+        ? colores[Math.floor(Math.random() * colores.length)]
+        : color;
       capa.appendChild(d);
       celdas.push(d);
     }

@@ -25,20 +25,46 @@ const Mosaico = (() => {
 
   const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
 
-  /* Cada baldosa toma un pueblo entero: el fondo es uno de sus colores y la
-     figura se pinta con los que contrastan contra ese fondo. Así cada cuadrado
-     es una combinación que ese pueblo realmente usaba. */
+  /* El repertorio de la portada es la paleta viva más todos los colores de los
+     pueblos, sin repetidos. En el juego cada pueblo mantiene su paleta; acá lo
+     que importa es que la combinación salte a la vista. */
+  const POZO = (() => {
+    const vistos = new Set(), lista = [];
+    for (const c of PALETA_VIVA.concat(...PUEBLOS.map(p => p.colores))) {
+      const k = c.h.toLowerCase();
+      if (!vistos.has(k)) { vistos.add(k); lista.push(c); }
+    }
+    return lista;
+  })();
+
+  /* Fondo y figura se eligen complementarios: se puntúa cada candidato por la
+     distancia de tono contra el fondo (180° es el complementario exacto) más la
+     diferencia de luminancia, y se sortean tres entre los mejores. Se toman los
+     mejores seis y no el primero para que no salga siempre la misma dupla. */
   function combinacion() {
-    const p = PUEBLOS[Math.floor(Math.random() * PUEBLOS.length)];
-    const fondo = p.colores[Math.floor(Math.random() * p.colores.length)];
-    const lf = Motor.luz(fondo.h);
-    // se ordena por distancia de luminancia y se toman los tres que mas
-    // contrastan: filtrar por umbral dejaba baldosas donde la figura no se veia
-    const tinta = p.colores
-      .filter(c => c.h !== fondo.h)
-      .sort((a, b) => Math.abs(Motor.luz(b.h) - lf) - Math.abs(Motor.luz(a.h) - lf))
-      .slice(0, 3);
-    return { fondo: fondo.h, colores: tinta };
+    const fondo = POZO[Math.floor(Math.random() * POZO.length)];
+    const lf = Motor.luz(fondo.h), tf = Motor.tono(fondo.h);
+    const neutro = tf.s < 0.18;
+
+    const puntaje = c => {
+      const dl = Math.abs(Motor.luz(c.h) - lf);
+      if (neutro || Motor.tono(c.h).s < 0.18) return dl * 2.2;   // sin tono útil: solo luz
+      return (Motor.distanciaTono(c.h, fondo.h) / 180) * 1.5 + dl;
+    };
+
+    let candidatos = POZO.filter(c => c.h !== fondo.h && Math.abs(Motor.luz(c.h) - lf) > 0.13);
+    if (candidatos.length < 3) candidatos = POZO.filter(c => c.h !== fondo.h);
+    const mejores = candidatos
+      .map(c => ({ c, p: puntaje(c) }))
+      .sort((a, b) => b.p - a.p)
+      .slice(0, 6)
+      .map(x => x.c);
+
+    const colores = [];
+    while (colores.length < 3 && mejores.length) {
+      colores.push(mejores.splice(Math.floor(Math.random() * mejores.length), 1)[0]);
+    }
+    return { fondo: fondo.h, colores };
   }
 
   function fondoActual(b, ahora) {

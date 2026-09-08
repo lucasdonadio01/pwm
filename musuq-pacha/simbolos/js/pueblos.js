@@ -133,3 +133,18 @@ const PUEBLOS = [
     ]
   }
 ];
+
+/* Paleta viva: los colores de marca del proyecto. No reemplazan a las paletas
+   de los pueblos —esas son el argumento de la tesis y se usan en el juego—
+   sino que se suman a ellas en el mosaico de la portada, donde lo que importa
+   es que las combinaciones sean brillantes y salten a la vista. */
+const PALETA_VIVA = [
+  { h: '#1D7AA9', n: 'azul' },
+  { h: '#B2E139', n: 'lima' },
+  { h: '#6B8703', n: 'oliva' },
+  { h: '#F47ADD', n: 'rosa' },
+  { h: '#FFB33F', n: 'ámbar' },
+  { h: '#9C3A01', n: 'tierra quemada' },
+  { h: '#D92F1B', n: 'rojo' },
+  { h: '#F66227', n: 'naranja' }
+];

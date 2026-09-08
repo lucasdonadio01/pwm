@@ -15,6 +15,23 @@ const Motor = (() => {
   const oscurecer = (h, f) => aHex(aRgb(h).map(v => v * (1 - f)));
   const luz = h => { const c = aRgb(h); return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255; };
 
+  /* Tono y saturación, para poder pedir complementarios. Un color casi gris no
+     tiene tono útil: eso lo marca la saturación baja y quien decide se maneja
+     solo con la luminancia. */
+  function tono(hex) {
+    const [r, g, b] = aRgb(hex).map(v => v / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    if (!d) return { h: 0, s: 0 };
+    let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (h * 60 + 360) % 360, s: d / max };
+  }
+
+  /* Distancia de tono en grados, 0 a 180: 180 es el complementario exacto */
+  function distanciaTono(a, b) {
+    const d = Math.abs(tono(a).h - tono(b).h);
+    return d > 180 ? 360 - d : d;
+  }
+
   /* easeInOutQuart: salida y llegada muy suaves, es lo que da el morph largo */
   const suave = t => t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 
@@ -476,5 +493,5 @@ const Motor = (() => {
     };
   }
 
-  return { crear, aRgb, aHex, mezcla, oscurecer, luz, suave, firma, dado, FAMILIAS, NOMBRES, MENU };
+  return { crear, aRgb, aHex, mezcla, oscurecer, luz, tono, distanciaTono, suave, firma, dado, FAMILIAS, NOMBRES, MENU };
 })();

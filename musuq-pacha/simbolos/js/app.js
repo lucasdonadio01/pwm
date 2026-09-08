@@ -255,13 +255,14 @@
   async function entrar() {
     if (entrar.yendo) return;
     entrar.yendo = true;
+    const colores = PALETA_VIVA.map(c => c.h).concat(pueblo.colores.map(c => c.h));
     await PixelSwap.pantalla(async () => {
       Mosaico.detener();                       // el mosaico deja de comer cuadros
       portada.hidden = true;
       taller.hidden = false;
       dibujarMapa();
       generar();
-    }, { color: tinta });
+    }, { colores, celda: 30 });
     ondaDesdeElSimbolo();
     avisar('pintá con Q, borrá con W, seleccioná con E · G genera');
   }
