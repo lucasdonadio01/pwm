@@ -127,6 +127,9 @@
   /* ---------- bucle de dibujo ---------- */
   function cuadro(ahora) {
     const r = lienzo.getBoundingClientRect();
+    // mientras el taller esta oculto el lienzo mide cero: si igual midieramos,
+    // la geometria queda en cero y despues los clicks no encuentran ninguna celda
+    if (!r.width || !r.height) { requestAnimationFrame(cuadro); return; }
     const d = dpr();
     const w = Math.round(r.width * d), h = Math.round(r.height * d);
     if (lienzo.width !== w || lienzo.height !== h) { lienzo.width = w; lienzo.height = h; }
@@ -250,7 +253,10 @@
 
   /* ---------- portada ---------- */
   async function entrar() {
+    if (entrar.yendo) return;
+    entrar.yendo = true;
     await PixelSwap.pantalla(async () => {
+      Mosaico.detener();                       // el mosaico deja de comer cuadros
       portada.hidden = true;
       taller.hidden = false;
       dibujarMapa();
@@ -260,17 +266,7 @@
     avisar('pintá con Q, borrá con W, seleccioná con E · G genera');
   }
 
-  /* Contador de carga: 4 segundos, con la cuenta desacelerando al final.
-     Va por setInterval y no por rAF para que no se frene si la pestaña
-     pierde el foco justo en la entrada. */
-  function cargar() {
-    const el = $('#carga'), arranque = performance.now(), dura = 4000;
-    const reloj = setInterval(() => {
-      const u = Math.min(1, (performance.now() - arranque) / dura);
-      el.textContent = Math.round(100 * (1 - Math.pow(1 - u, 1.7)));
-      if (u >= 1) { clearInterval(reloj); entrar(); }
-    }, 45);
-  }
+  $('#entrar').addEventListener('click', entrar);
 
   /* ---------- arranque ---------- */
   Simbolo.pueblo = pueblo;
@@ -280,8 +276,8 @@
   armarPaleta();
   if (!Fondo.iniciar($('#fondo'))) $('#fondo').style.display = 'none';
   requestAnimationFrame(cuadro);
-  cargar();
+  Mosaico.iniciar($('#mosaico'), $('#bloque'));
 
   // gancho para inspeccionar desde la consola
-  window.__mp = { Simbolo, Fondo, componerCuadro, entrar, get pueblo() { return pueblo; } };
+  window.__mp = { Simbolo, Fondo, Mosaico, componerCuadro, entrar, get pueblo() { return pueblo; } };
 })();

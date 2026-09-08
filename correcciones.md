@@ -301,7 +301,9 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 
 ## 44. 🚧 [Musuq Pacha] Generador de símbolos de pueblos originarios
 - Web aparte, en `musuq-pacha/simbolos/`. Se abre `index.html` y listo: **no necesita internet ni instalar nada**.
-- Arranca con **MUSUQ PACHA** quieto en el centro, en Space Grotesk, y un **contador de 0 a 100 % que tarda 4 segundos**. Al llegar a 100 la pantalla se tapa de píxeles y aparece el generador: el efecto de swap quedó solo ahí, no en el título.
+- **La portada es un mosaico**: la pantalla entera se llena de baldosas, cada una con su propio símbolo y su color de fondo, y en el medio el bloque negro con **MUSUQ PACHA** y el botón **empezar**. Alrededor del mosaico queda un marco por donde se ve el fondo de píxeles moverse.
+- **Las baldosas van cambiando solas**: cada segundo cambia una parte (no todas juntas), y cambian con **el mismo morph que el mini juego** — los píxeles viajan de una figura a la otra — mientras el color de fondo de la baldosa se cruza al nuevo. Nunca queda quieto.
+- Al tocar **empezar**, la pantalla se tapa de píxeles y aparece el generador.
 - **Elegís el pueblo** (Omaguaca, Diaguita, Querandí, Comechingón, Guaraní, Mapuche, Tehuelche y Selk'nam) y te propone los colores de su territorio: cada color tiene nombre y sale del bioma o de materiales documentados (ocre de quebrada, urucú, quillango, azul de witral).
 - **Abajo de la lista hay un mapa de Argentina hecho con píxeles** y se pinta la zona donde estuvo ese pueblo. El contorno no está dibujado a mano: es Natural Earth rasterizado con la misma proyección del tablero.
 - **Generás al azar con el botón o con la tecla G,** y ahora salen **seis familias de figuras**: orgánico, flor, mandala, calavera, demonio y animal. Todas simétricas.

@@ -13,12 +13,14 @@ pide la entrega offline del TP2.
 |---|---|
 | `js/pueblos.js` | Los 8 pueblos, su bioma y su paleta. Los colores salen del territorio y de materiales documentados (tierras, minerales, tintes, lanas), no de gusto |
 | `js/mapa.js` | Argentina rasterizada a 22 × 50 píxeles, con la zona de cada pueblo marcada. Sale de Natural Earth 110m con la misma proyección Albers del tablero |
+| `js/motor.js` | **El motor compartido**: familias de patrones, semilla y morph. Una instancia por figura |
+| `js/simbolo.js` | La figura del juego: fachada sobre una instancia del motor, más la geometría del lienzo, la selección y las volantas |
+| `js/mosaico.js` | La portada: una baldosa por instancia del motor, cambiando por tandas |
 | `js/fondo.js` | El **PixelBlast** de reactbits porteado a WebGL crudo: un fragment shader, sin three.js ni postprocessing |
 | `js/pixelswap.js` | El **Pixel Swap** de reactbits: grilla de celdas que tapa la pantalla, cambia lo de abajo y se retira. Es el barrido que entra al generador |
-| `js/simbolo.js` | La grilla, las familias de patrones, la semilla y el **morph** entre generaciones |
 | `js/app.js` | La interfaz y la descarga |
 
-## Las cuatro decisiones que importan
+## Las decisiones que importan
 
 **El morph, que es lo de `species-in-pieces.com`.** Cuando pasás de una generación a
 otra, ningún píxel se apaga y se vuelve a prender: cada píxel encendido **conserva su
@@ -30,10 +32,18 @@ Los que sobran se van hacia afuera achicándose a cero; los que faltan nacen del
 El que ya estaba en su lugar casi no se mueve, que es lo que hace que se lea como una
 figura que se reacomoda y no como una que se borra.
 
-**Seis familias de patrones, una semilla.** `organico` crece por vecindad sobre media
+**La portada es el mismo motor, muchas veces.** El mosaico que rodea al título es
+una grilla de baldosas y **cada baldosa es una instancia de `Motor`** con su propio
+pueblo, su fondo y su figura de 7 × 7. Cada 950 ms se regenera una quinta parte de las
+baldosas, con un desfasaje adentro de la tanda: siempre hay algo cambiando pero nunca
+cambia todo de golpe. Como es el mismo motor, **el morph de la portada es exactamente el
+del juego** y no pueden quedar desincronizados. El mosaico deja un marco alrededor por
+donde se ve el PixelBlast, y se detiene al entrar para no comer cuadros.
+
+**Siete familias de patrones, una semilla.** `organico` crece por vecindad sobre media
 grilla y espeja; `flor` recorta pétalos con `cos(ángulo · n)`; `mandala` sortea un
-octante y lo replica ocho veces; `calavera`, `demonio` y `animal` son plantillas con
-variación. Todo sale de un `mulberry32` sembrado, así que **la semilla que se muestra
+octante y lo replica ocho veces; `trama` repite rombos y cruces (es la que mejor lee en
+las baldosas chicas); `calavera`, `demonio` y `animal` son plantillas con variación. Todo sale de un `mulberry32` sembrado, así que **la semilla que se muestra
 abajo del nombre del pueblo reproduce el símbolo exacto** — `Simbolo.generar(t, 0x2735CC9B)`
 devuelve el mismo dibujo. Es la firma única de cada generación.
 

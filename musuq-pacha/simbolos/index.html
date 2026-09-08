@@ -5,18 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MUSUQ PACHA · generador de símbolos</title>
 <meta name="description" content="Generador de símbolos en grilla para los pueblos originarios argentinos. Musuq Pacha, TIF UADE 2026.">
-<link rel="stylesheet" href="css/fuente.css?v=2">
-<link rel="stylesheet" href="css/app.css?v=2">
+<link rel="stylesheet" href="css/fuente.css?v=3">
+<link rel="stylesheet" href="css/app.css?v=3">
 </head>
 <body>
 
 <canvas id="fondo" aria-hidden="true"></canvas>
 
 <section id="portada">
-  <p class="ojo">pueblos originarios · generador de símbolos</p>
-  <h1 class="titulo"><span>MUSUQ PACHA</span></h1>
-  <p class="pie">un símbolo por pueblo, pintado píxel a píxel</p>
-  <p class="carga"><span id="carga">0</span>%</p>
+  <canvas id="mosaico" aria-hidden="true"></canvas>
+  <div class="bloque" id="bloque">
+    <h1 class="titulo">MUSUQ PACHA</h1>
+    <p class="ojo">pueblos originarios · generador de símbolos</p>
+    <button class="boton boton--grande" id="entrar">empezar</button>
+  </div>
 </section>
 
 <main id="taller" hidden>
@@ -86,11 +88,13 @@
   </footer>
 </main>
 
-<script src="js/pueblos.js?v=2"></script>
-<script src="js/mapa.js?v=2"></script>
-<script src="js/fondo.js?v=2"></script>
-<script src="js/pixelswap.js?v=2"></script>
-<script src="js/simbolo.js?v=2"></script>
-<script src="js/app.js?v=2"></script>
+<script src="js/pueblos.js?v=3"></script>
+<script src="js/mapa.js?v=3"></script>
+<script src="js/motor.js?v=3"></script>
+<script src="js/fondo.js?v=3"></script>
+<script src="js/pixelswap.js?v=3"></script>
+<script src="js/simbolo.js?v=3"></script>
+<script src="js/mosaico.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>
