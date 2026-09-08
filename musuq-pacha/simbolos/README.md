@@ -17,7 +17,7 @@ pide la entrega offline del TP2.
 | `js/simbolo.js` | La figura del juego: fachada sobre una instancia del motor, más la geometría del lienzo, la selección y las volantas |
 | `js/mosaico.js` | La portada: una baldosa por instancia del motor, cambiando por tandas |
 | `js/fondo.js` | El **PixelBlast** de reactbits porteado a WebGL crudo: un fragment shader, sin three.js ni postprocessing |
-| `js/pixelswap.js` | El **Pixel Swap** de reactbits: grilla de celdas que tapa la pantalla, cambia lo de abajo y se retira. Es el barrido que entra al generador |
+| `js/pixelswap.js` | El **Pixel Transition** de reactbits: grilla gruesa (12 columnas) donde cada celda aparece entera, no crece, escalonadas dentro de 0,4 s. Es el barrido que entra al generador |
 | `js/app.js` | La interfaz y la descarga |
 
 ## Las decisiones que importan
@@ -39,21 +39,30 @@ baldosas, con un desfasaje adentro de la tanda: siempre hay algo cambiando pero 
 cambia todo de golpe. Como es el mismo motor, **el morph de la portada es exactamente el
 del juego** y no pueden quedar desincronizados. El mosaico deja un marco alrededor por
 donde se ve el PixelBlast, y se detiene al entrar para no comer cuadros.
-**Al pasar el mouse** la baldosa crece y queda arriba de las vecinas, y mientras la
-tengas debajo del cursor **no se regenera**: esa figura se queda. El calor baja despacio,
-así que un barrido deja varias grandes atrás como estela. **Un click la regenera.**
+**Al pasar el mouse** la baldosa crece y queda arriba de las vecinas, y **las vecinas
+crecen un poco también**, con una caída cuadrática por distancia: el conjunto se levanta
+como una ola. Mientras la tengas debajo del cursor **no se regenera**. El calor baja
+despacio, así que un barrido deja varias grandes atrás. **Un click la regenera.**
 
 **El espejo se fuerza en un solo lugar.** `generarGrilla` pasa toda figura por
 `espejar()` antes de devolverla, así ninguna familia puede sacar algo torcido por más
 que se agregue una nueva después. Medido: 60 generaciones seguidas, 0 asimétricas.
 
+**La variedad está adentro de las familias, no en el sorteo.** `flor` tiene **ocho
+especies** (margarita, girasol, estrella, trébol, anillos, capullo, doble y espiga) y
+`mandala` **cinco trazas** (octante, chakana, rombos anidados, radios y damero radial).
+Entre las dos se llevan el 65 % del sorteo, medido sobre 120 generaciones. `demonio` es
+una careta de oni —cara ancha, barbilla en punta, cuernos de tres estilos, ojos rasgados
+y boca con colmillos— y sale poco a propósito.
+
 **Ocho familias de patrones, una semilla.** `organico` crece por vecindad sobre media
 grilla y espeja; `flor` recorta pétalos con `cos(ángulo · n)`; `mandala` sortea un
 octante y lo replica ocho veces; `trama` repite rombos y cruces (es la que mejor lee en
-las baldosas chicas); `abstracto` arma emblemas de barras y columnas; `calavera`,
-`demonio` (cara con cuernos, ceño y colmillos) y `animal` son plantillas con variación.
-El menú tiene **pesos**: flores, demonios y abstractos salen más seguido, que son los
-que mejor leen como símbolo. Todo sale de un `mulberry32` sembrado, así que **la semilla que se muestra
+las baldosas chicas); `abstracto` arma emblemas de barras y columnas; `calavera`
+y `animal` son plantillas con variación. El menú tiene **pesos**: flores y mandalas se
+llevan la mayoría. Hay además un **piso de llenado**: si una variante cae en una figura
+de tres celdas se descarta y se genera una flor, porque en una baldosa chica eso se lee
+como un error y no como un símbolo. Todo sale de un `mulberry32` sembrado, así que **la semilla que se muestra
 abajo del nombre del pueblo reproduce el símbolo exacto** — `Simbolo.generar(t, 0x2735CC9B)`
 devuelve el mismo dibujo. Es la firma única de cada generación.
 

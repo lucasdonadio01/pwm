@@ -262,7 +262,7 @@
       taller.hidden = false;
       dibujarMapa();
       generar();
-    }, { colores, celda: 30 });
+    }, { colores });
     ondaDesdeElSimbolo();
     avisar('pintá con Q, borrá con W, seleccioná con E · G genera');
   }

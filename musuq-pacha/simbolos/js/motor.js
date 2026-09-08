@@ -104,33 +104,206 @@ const Motor = (() => {
     return s;
   }
 
-  function flor(R, N) {
+  /* Un lienzo con las primitivas que usan las flores y los mandalas: poner una
+     celda redondeando, tirar un rayo desde el centro, un disco y un anillo. */
+  function lienzo(N) {
     const s = new Set(), c = (N - 1) / 2;
-    const petalos = [4, 5, 6, 8][Math.floor(R() * 4)];
-    const radio = Math.floor(N / 2) - (R() < 0.4 ? 1 : 0);
-    const nucleo = R() < 0.5 ? 1 : 1.6;
-    const giro = R() * Math.PI;
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const dx = x - c, dy = y - c, r = Math.hypot(dx, dy);
-      if (r <= nucleo) { s.add(clave(x, y)); continue; }
-      if (r > radio + 0.35) continue;
-      if (Math.cos(Math.atan2(dy, dx) * petalos + giro) > (r / radio) * 0.95 - 0.2) s.add(clave(x, y));
-    }
-    return s;
+    const poner = (x, y) => {
+      x = Math.round(x); y = Math.round(y);
+      if (x >= 0 && y >= 0 && x < N && y < N) s.add(clave(x, y));
+    };
+    const rayo = (ang, desde, hasta, cx, cy) => {
+      for (let r = desde; r <= hasta; r += 0.45)
+        poner((cx == null ? c : cx) + Math.cos(ang) * r, (cy == null ? c : cy) + Math.sin(ang) * r);
+    };
+    const disco = (cx, cy, rad) => {
+      for (let y = Math.floor(cy - rad); y <= cy + rad; y++)
+        for (let x = Math.floor(cx - rad); x <= cx + rad; x++)
+          if (Math.hypot(x - cx, y - cy) <= rad + 0.15) poner(x, y);
+    };
+    const anillo = (rad, paso) => {
+      for (let a = 0; a < Math.PI * 2; a += paso) poner(c + Math.cos(a) * rad, c + Math.sin(a) * rad);
+    };
+    return { s, c, poner, rayo, disco, anillo };
   }
 
-  function mandala(R, N) {
-    const s = new Set(), c = (N - 1) / 2;
-    const dentro = (x, y) => x >= 0 && y >= 0 && x < N && y < N;
-    const poner = (dx, dy) => [[dx, dy], [-dx, dy], [dx, -dy], [-dx, -dy], [dy, dx], [-dy, dx], [dy, -dx], [-dy, -dx]]
-      .forEach(([a, b]) => { if (dentro(c + a, c + b)) s.add(clave(c + a, c + b)); });
-    poner(0, 0);
-    const tope = Math.floor(c);
-    for (let dx = 1; dx <= tope; dx++) for (let dy = 0; dy <= dx; dy++) if (R() < 0.45) poner(dx, dy);
-    const anillo = 1 + Math.floor(R() * tope);
-    for (let dy = 0; dy <= anillo; dy++) poner(anillo, dy);
-    return s;
+  /* ---------- flores ----------
+     Ocho especies. Es la familia que mas sale, asi que la variedad tiene que
+     estar acá adentro y no depender del sorteo de familias. */
+
+  function margarita(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    const petalos = [5, 6, 8, 10][Math.floor(R() * 4)];
+    const nucleo = R() < 0.5 ? 0.9 : 1.5;
+    L.disco(L.c, L.c, nucleo);
+    for (let i = 0; i < petalos; i++)
+      L.rayo(-Math.PI / 2 + i * 2 * Math.PI / petalos, nucleo + 0.8, radio);
+    return L.s;
   }
+
+  function girasol(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    const centro = Math.max(1, radio - 2 + (R() < 0.5 ? 0 : 1));
+    L.disco(L.c, L.c, centro);
+    const petalos = 8 + Math.floor(R() * 5);
+    for (let i = 0; i < petalos; i++)
+      L.rayo(-Math.PI / 2 + i * 2 * Math.PI / petalos, centro + 0.6, radio);
+    return L.s;
+  }
+
+  function estrella(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    const puntas = [4, 5, 6, 8][Math.floor(R() * 4)];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = x - L.c, dy = y - L.c, r = Math.hypot(dx, dy);
+      if (r > radio + 0.3) continue;
+      const punta = Math.max(0, Math.cos((Math.atan2(dy, dx) + Math.PI / 2) * puntas));
+      if (r <= radio * (0.32 + 0.68 * Math.pow(punta, 0.55)) + 0.25) L.poner(x, y);
+    }
+    return L.s;
+  }
+
+  function trebol(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    const hojas = [3, 4, 6][Math.floor(R() * 3)];
+    const rad = Math.max(1, Math.round(radio * 0.46));
+    const dist = radio - rad + 0.15;
+    for (let i = 0; i < hojas; i++) {
+      const a = -Math.PI / 2 + i * 2 * Math.PI / hojas;
+      L.disco(L.c + Math.cos(a) * dist, L.c + Math.sin(a) * dist, rad);
+    }
+    if (R() < 0.6) L.disco(L.c, L.c, 0.9);
+    return L.s;
+  }
+
+  function anillos(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    L.disco(L.c, L.c, R() < 0.5 ? 0.6 : 1.4);
+    const salto = R() < 0.5 ? 1 : 2;
+    for (let r = 2; r <= radio; r += salto) {
+      // el anillo punteado solo en grillas grandes: a 7 celdas queda salpicado
+      const cortado = N >= 9 && R() < 0.25;
+      L.anillo(r, Math.PI / (r * (cortado ? 1.8 : 4)));
+    }
+    return L.s;
+  }
+
+  function capullo(R, N) {
+    const L = lienzo(N), c = L.c;
+    const alto = Math.max(2, Math.round(N * 0.34));
+    const ancho = Math.max(1, Math.round(N * 0.27));
+    for (let y = c - alto; y <= c + 1; y++)
+      for (let x = c - ancho; x <= c + ancho; x++) {
+        const dy = (y - c) / alto, dx = (x - c) / ancho;
+        if (dx * dx + dy * dy <= 1.06) L.poner(x, y);
+      }
+    if (R() < 0.6) L.s.delete(clave(c, c - alto));      // la muesca de arriba
+    for (let y = c + 2; y < N; y++) L.poner(c, y);       // tallo
+    const hoja = c + 3;
+    if (hoja < N) { L.poner(c - 1, hoja); L.poner(c - 2, hoja); L.poner(c + 1, hoja); L.poner(c + 2, hoja); }
+    return L.s;
+  }
+
+  function doble(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    const k = [4, 6][Math.floor(R() * 2)];
+    L.disco(L.c, L.c, 1);
+    for (let i = 0; i < k; i++) {
+      const a = -Math.PI / 2 + i * 2 * Math.PI / k;
+      L.disco(L.c + Math.cos(a) * radio * 0.55, L.c + Math.sin(a) * radio * 0.55, Math.max(0.9, radio * 0.28));
+    }
+    for (let i = 0; i < k; i++)
+      L.rayo(-Math.PI / 2 + (i + 0.5) * 2 * Math.PI / k, radio * 0.5, radio);
+    return L.s;
+  }
+
+  function espiga(R, N) {
+    const L = lienzo(N), c = L.c;
+    const radio = Math.max(1, Math.round(N * 0.28));
+    const cy = Math.max(radio, Math.round(N * 0.32));
+    const petalos = [4, 5, 6][Math.floor(R() * 3)];
+    L.disco(c, cy, 1);
+    for (let i = 0; i < petalos; i++)
+      L.rayo(-Math.PI / 2 + i * 2 * Math.PI / petalos, 1.4, radio, c, cy);
+    for (let y = cy + radio; y < N; y++) L.poner(c, y);
+    const hoja = Math.min(N - 1, cy + radio + 2);
+    L.poner(c - 1, hoja); L.poner(c - 2, hoja - 1);
+    L.poner(c + 1, hoja); L.poner(c + 2, hoja - 1);
+    return L.s;
+  }
+
+  const ESPECIES = [margarita, girasol, estrella, trebol, anillos, capullo, doble, espiga];
+  const flor = (R, N) => ESPECIES[Math.floor(R() * ESPECIES.length)](R, N);
+
+  /* ---------- mandalas ----------
+     Cinco trazas distintas, todas de simetria radial. */
+
+  function octante(R, N) {
+    const L = lienzo(N), c = L.c;
+    const ocho = (dx, dy) => [[dx, dy], [-dx, dy], [dx, -dy], [-dx, -dy], [dy, dx], [-dy, dx], [dy, -dx], [-dy, -dx]]
+      .forEach(([a, b]) => L.poner(c + a, c + b));
+    ocho(0, 0);
+    const tope = Math.floor(c);
+    for (let dx = 1; dx <= tope; dx++) for (let dy = 0; dy <= dx; dy++) if (R() < 0.45) ocho(dx, dy);
+    const aro = 1 + Math.floor(R() * tope);
+    for (let dy = 0; dy <= aro; dy++) ocho(aro, dy);
+    return L.s;
+  }
+
+  /* Cruz escalonada, la chakana andina: bloque central y cuatro brazos */
+  function chakana(R, N) {
+    const L = lienzo(N), c = L.c;
+    const lado = Math.max(0, Math.floor(N / 7));
+    const bloque = (cx, cy, l) => {
+      for (let y = cy - l; y <= cy + l; y++) for (let x = cx - l; x <= cx + l; x++) L.poner(x, y);
+    };
+    bloque(c, c, lado);
+    const d = 2 * lado + 1;
+    bloque(c - d, c, lado); bloque(c + d, c, lado);
+    bloque(c, c - d, lado); bloque(c, c + d, lado);
+    if (R() < 0.5 && lado >= 1) {
+      bloque(c - d, c - d, lado - 1); bloque(c + d, c - d, lado - 1);
+      bloque(c - d, c + d, lado - 1); bloque(c + d, c + d, lado - 1);
+    }
+    if (R() < 0.7) L.s.delete(clave(c, c));
+    return L.s;
+  }
+
+  function rombos(R, N) {
+    const L = lienzo(N), c = L.c, radio = Math.floor(N / 2);
+    const salto = R() < 0.5 ? 2 : 3;
+    const desfase = Math.floor(R() * salto);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const d = Math.abs(x - c) + Math.abs(y - c);
+      if (d <= radio && (d + desfase) % salto === 0) L.poner(x, y);
+    }
+    return L.s;
+  }
+
+  function radios(R, N) {
+    const L = lienzo(N), radio = Math.floor(N / 2);
+    const k = [4, 6, 8, 12][Math.floor(R() * 4)];
+    for (let i = 0; i < k; i++) L.rayo(-Math.PI / 2 + i * 2 * Math.PI / k, 1, radio);
+    L.disco(L.c, L.c, R() < 0.5 ? 0.6 : 1.4);
+    const aro = 1 + Math.floor(R() * Math.max(1, radio - 1));
+    L.anillo(aro, Math.PI / (aro * 4));
+    return L.s;
+  }
+
+  function dameroRadial(R, N) {
+    const L = lienzo(N), c = L.c, radio = Math.floor(N / 2);
+    const sectores = 4 + 2 * Math.floor(R() * 3);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = x - c, dy = y - c, r = Math.hypot(dx, dy);
+      if (r > radio + 0.3) continue;
+      const sector = Math.floor(((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI)) * sectores);
+      if ((sector + Math.floor(r)) % 2 === 0) L.poner(x, y);
+    }
+    return L.s;
+  }
+
+  const TRAZAS = [octante, chakana, rombos, radios, dameroRadial];
+  const mandala = (R, N) => TRAZAS[Math.floor(R() * TRAZAS.length)](R, N);
 
   function calavera(R, N) {
     const s = new Set(), c = (N - 1) / 2;
@@ -158,39 +331,53 @@ const Motor = (() => {
     return s;
   }
 
-  /* Cara de demonio: mandibula en punta, cuernos que suben y se abren, ojos
-     inclinados hacia afuera (que es lo que da el ceño) y boca con colmillos */
+  /* Careta de oni: cara ancha de barbilla angosta, cuernos, cejas gruesas
+     inclinadas hacia adentro, ojos rasgados y boca con colmillos. La variedad
+     sale del estilo de cuerno, del ancho de la boca y del tamaño de los ojos:
+     antes todos los demonios salian practicamente iguales. */
   function demonio(R, N) {
-    const s = new Set(), c = (N - 1) / 2;
-    const dentro = (x, y) => x >= 0 && y >= 0 && x < N && y < N;
-    const ancho = Math.max(2, Math.round(N * 0.32));
+    const L = lienzo(N), c = L.c;
+    const ancho = Math.max(2, Math.round(N * 0.34));
     const alto = Math.max(2, Math.round(N * 0.30));
     const tope = Math.max(1, c - alto);
+    const menton = Math.min(N - 1, c + alto);
 
-    for (let y = tope; y < Math.min(N, c + alto); y++) {
-      const punta = Math.max(0, y - c);                  // la cara se angosta al bajar
-      for (let x = c - ancho; x <= c + ancho; x++)
-        if (Math.abs(x - c) <= ancho - punta && dentro(x, y)) s.add(clave(x, y));
+    for (let y = tope; y <= menton; y++) {
+      const angosta = y > c ? Math.min(ancho - 1, y - c) : 0;
+      for (let x = c - ancho + angosta; x <= c + ancho - angosta; x++) L.poner(x, y);
     }
 
-    let hx = c - ancho, hy = tope;
-    for (let i = 0, largo = Math.max(2, Math.round(N / 3.2)); i < largo; i++) {
-      hy--;
-      if (i % 2 === 0) hx--;
-      if (dentro(hx, hy)) { s.add(clave(hx, hy)); s.add(clave(2 * c - hx, hy)); }
+    const estilo = Math.floor(R() * 3);
+    const largo = Math.max(2, Math.round(N / 3.4));
+    for (let i = 0; i < largo; i++) {
+      const y = tope - 1 - i;
+      if (y < 0) break;
+      let x;
+      if (estilo === 0) x = c - ancho + 1;                              // rectos
+      else if (estilo === 1) x = c - ancho + 1 - Math.floor(i / 2);     // abiertos
+      else x = c - Math.max(1, Math.round(ancho * 0.55));               // juntos
+      L.poner(x, y); L.poner(2 * c - x, y);
+      if (estilo === 2 && i === largo - 1) { L.poner(x - 1, y); L.poner(2 * c - x + 1, y); }
     }
 
-    const oy = Math.max(tope, c - Math.max(1, Math.round(alto * 0.45)));
-    const ox = Math.max(1, Math.round(ancho * 0.55));
-    for (let d = 0; d < (N >= 11 ? 2 : 1); d++) {
-      s.delete(clave(c - ox - d, oy + d));               // el ojo baja hacia afuera
-      s.delete(clave(c + ox + d, oy + d));
+    // ojos rasgados: bajan hacia afuera, que es lo que arma el ceño
+    const ojoY = tope + Math.max(1, Math.round(alto * 0.6));
+    const ojoX = Math.max(1, Math.round(ancho * 0.55));
+    const grueso = N >= 11 ? 2 : 1;
+    for (let d = 0; d < grueso; d++) {
+      L.s.delete(clave(c - ojoX - d, ojoY + d));
+      L.s.delete(clave(c + ojoX + d, ojoY + d));
+      if (N >= 13) { L.s.delete(clave(c - ojoX - d, ojoY + d + 1)); L.s.delete(clave(c + ojoX + d, ojoY + d + 1)); }
     }
 
-    const boca = c + Math.max(1, Math.round(alto * 0.45));
-    for (let x = c - ancho + 2; x <= c + ancho - 2; x += 2) s.delete(clave(x, boca));
-    if (R() < 0.5) s.delete(clave(c, c));                // tabique
-    return s;
+    // boca ancha, con los colmillos que quedan en pie
+    const bocaY = Math.min(menton - 1, c + Math.max(1, Math.round(alto * 0.45)));
+    const bocaAncho = Math.max(1, Math.round(ancho * (0.5 + R() * 0.4)));
+    for (let x = c - bocaAncho; x <= c + bocaAncho; x++) L.s.delete(clave(x, bocaY));
+    L.poner(c - bocaAncho, bocaY); L.poner(c + bocaAncho, bocaY);       // colmillos
+    if (R() < 0.5) L.poner(c, bocaY);
+    if (R() < 0.4) L.s.delete(clave(c, c));                             // tabique
+    return L.s;
   }
 
   /* Emblema abstracto: barras y columnas simetricas, sin azar sucio. Es la
@@ -275,12 +462,13 @@ const Motor = (() => {
   };
   const NOMBRES = Object.keys(FAMILIAS);
 
-  /* Menu con pesos: las repeticiones son la probabilidad. Las flores, las caras
-     de demonio y los patrones simetricos salen mas seguido porque son los que
-     mejor leen como simbolo; el crecimiento libre queda de condimento. */
-  const MENU = ['flor', 'flor', 'flor', 'demonio', 'demonio', 'demonio',
-                'mandala', 'mandala', 'abstracto', 'abstracto', 'abstracto',
-                'trama', 'calavera', 'animal', 'organico'];
+  /* Menu con pesos: las repeticiones son la probabilidad. Las flores y
+     los mandalas se llevan la mitad del sorteo: son los que mejor leen como
+     simbolo y los que mas variantes internas tienen. */
+  const MENU = ['flor', 'flor', 'flor', 'flor', 'flor', 'flor',
+                'mandala', 'mandala', 'mandala', 'mandala', 'mandala',
+                'trama', 'trama', 'demonio', 'abstracto', 'calavera',
+                'animal', 'organico'];
 
   /* ---------- una figura ---------- */
   function crear(lado) {
@@ -294,7 +482,9 @@ const Motor = (() => {
       const menu = familias && familias.length ? familias : MENU;
       familia = menu[Math.floor(R() * menu.length)];
       let celdas = FAMILIAS[familia].armar(R, N);
-      if (celdas.size < 4) { familia = 'flor'; celdas = flor(R, N); }
+      // piso de llenado: sin esto algunas variantes caen en una figura de tres
+      // celdas que en una baldosa chica se lee como un error
+      if (celdas.size < Math.max(6, N * N * 0.11)) { familia = 'flor'; celdas = flor(R, N); }
       // el espejo se fuerza acá y no en cada familia: así ninguna puede
       // devolver una figura torcida, por mas que se agregue una nueva despues
       celdas = espejar(celdas, N);

@@ -8,14 +8,15 @@
 const Mosaico = (() => {
   const LADO = 7;            // celdas por baldosa
   const AIRE = 9;            // px entre baldosas, por donde asoma el PixelBlast
-  const CADA = 950;          // ms entre tandas
+  const CADA = 700;          // ms entre tandas
   const PORCION = 0.22;      // parte de las baldosas que cambia en cada tanda
   const CRUCE = 920;         // ms del cambio de color de fondo, igual que el viaje
   const CRECE = 0.16;        // cuanto se agranda la baldosa bajo el cursor
   const ENFRIA = 0.026;      // cuanto baja el calor por cuadro: es la cola del barrido
-  // las tramas, los mandalas y las flores son los que mejor leen a 7 celdas
-  const MENU = ['trama', 'trama', 'mandala', 'mandala', 'flor', 'flor',
-                'demonio', 'demonio', 'abstracto', 'abstracto', 'calavera'];
+  // flores y mandalas se llevan la mayoria: son las que mas variantes tienen
+  // y las que mejor leen a 7 celdas. Sin calaveras.
+  const MENU = ['flor', 'flor', 'flor', 'flor', 'mandala', 'mandala', 'mandala',
+                'mandala', 'trama', 'trama', 'demonio', 'abstracto'];
 
   let cv, ctx, bloque, baldosas = [], indice = new Map();
   let raton = { x: -1, y: -1 };
@@ -144,11 +145,19 @@ const Mosaico = (() => {
     const lado = tam - AIRE;
     const encima = baldosaEn(raton.x, raton.y);
 
-    // el calor sube de golpe bajo el cursor y baja despacio: al barrer con el
-    // mouse quedan varias baldosas grandes atras, como una estela
+    // El calor no cae solo en la baldosa de abajo del cursor: se reparte a las
+    // vecinas segun la distancia, y por eso el conjunto se levanta como una ola.
+    // Sube de golpe y baja despacio, asi un barrido deja estela.
     for (const b of baldosas) {
-      b.calor = b === encima ? b.calor + (1 - b.calor) * 0.34
-                             : Math.max(0, b.calor - ENFRIA);
+      let objetivo = 0;
+      if (encima) {
+        const d = Math.hypot(b.c - encima.c, b.f - encima.f);
+        const cerca = Math.max(0, 1 - d / 2.6);
+        objetivo = cerca * cerca;                  // caida marcada: el centro manda
+      }
+      b.calor = objetivo > b.calor
+        ? b.calor + (objetivo - b.calor) * 0.30
+        : Math.max(objetivo, b.calor - ENFRIA);
     }
 
     // las mas calientes se dibujan ultimas para que queden arriba de las vecinas
@@ -185,7 +194,7 @@ const Mosaico = (() => {
     const ahora = performance.now();
     // la que estás mirando no se toca: mientras tengas el cursor encima,
     // esa generación se queda quieta
-    const libres = baldosas.filter(b => b.calor < 0.5);
+    const libres = baldosas.filter(b => b.calor < 0.75);
     if (!libres.length) return;
     const cuantas = Math.max(1, Math.round(baldosas.length * PORCION));
     const elegidas = new Set();

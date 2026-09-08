@@ -5,7 +5,8 @@
    barrido de pantalla completa que entra al generador. */
 
 const PixelSwap = (() => {
-  const PASO = 190;                 // ms que tarda una celda en aparecer
+  const PASO = 60;                  // ms que tarda una celda en aparecer: casi de golpe
+  const TANDA = 400;                // ms entre la primera celda y la ultima
   const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esperar = ms => new Promise(r => setTimeout(r, ms));
   const revolver = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -31,21 +32,21 @@ const PixelSwap = (() => {
     }
     (fijo ? document.body : destino).appendChild(capa);
 
-    const mover = (escala, disp) => {
+    // Las celdas no crecen de a poco: aparecen enteras, escalonadas dentro de
+    // la tanda. Es lo que hace que se lea como pixel y no como un fundido.
+    const mover = escala => {
       const orden = revolver(celdas.map((_, i) => i));
-      const max = disp * (celdas.length - 1);
+      const disp = TANDA / Math.max(1, celdas.length - 1);
       orden.forEach((idx, rango) => {
         celdas[idx].style.transitionDelay = (rango * disp) + 'ms';
         celdas[idx].style.transform = 'scale(' + escala + ')';
       });
-      return esperar(PASO + max + 40);
+      return esperar(PASO + TANDA + 40);
     };
-
-    const disp = Math.min(3.2, 420 / celdas.length * 2.2);
     return {
       capa,
-      cubrir: () => mover(1.04, disp),
-      descubrir: () => mover(0, disp),
+      cubrir: () => mover(1.04),
+      descubrir: () => mover(0),
       quitar: () => capa.remove()
     };
   }
@@ -65,10 +66,12 @@ const PixelSwap = (() => {
   /* Barrido de pantalla completa: tapa todo, corre el cambio, se retira */
   async function pantalla(cambio, opc) {
     if (reduce()) { await cambio(); return; }
-    const t = tapa(document.body, Object.assign({ celda: 34, fijo: true }, opc));
+    // 12 columnas de ancho: bloques grandes, como la grilla de 8 del referente
+    const gruesa = Math.round(innerWidth / 12);
+    const t = tapa(document.body, Object.assign({ celda: gruesa, fijo: true }, opc));
     await t.cubrir();
     await cambio();
-    await esperar(160);
+    await esperar(120);
     await t.descubrir();
     t.quitar();
   }

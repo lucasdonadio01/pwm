@@ -55,7 +55,7 @@ html, body {
 .pxswap--fijo { position: fixed; z-index: 90; }
 .pxswap i {
   display: block; transform: scale(0); transform-origin: center;
-  transition: transform 190ms linear;
+  transition: transform 60ms linear;
 }
 
 /* ---------- botones ---------- */
