@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MUSUQ PACHA · generador de símbolos</title>
+<meta name="description" content="Generador de símbolos en grilla para los pueblos originarios argentinos. Musuq Pacha, TIF UADE 2026.">
+<link rel="stylesheet" href="css/fuente.css?v=1">
+<link rel="stylesheet" href="css/app.css?v=1">
+</head>
+<body>
+
+<canvas id="fondo" aria-hidden="true"></canvas>
+
+<section id="portada">
+  <p class="ojo">pueblos originarios · generador de símbolos</p>
+  <h1 class="titulo" id="titulo"><span>MUSUQ PACHA</span></h1>
+  <p class="pie">un símbolo por pueblo, pintado píxel a píxel</p>
+  <button class="boton boton--grande" id="entrar">empezar</button>
+</section>
+
+<main id="taller" hidden>
+  <header class="barra">
+    <span class="marca">MUSUQ PACHA</span>
+    <small>generador de símbolos</small>
+  </header>
+
+  <aside class="rail rail--izq">
+    <h2 class="rotulo">pueblo</h2>
+    <ul class="pueblos" id="listaPueblos"></ul>
+  </aside>
+
+  <section class="escena">
+    <canvas id="lienzo"></canvas>
+  </section>
+
+  <aside class="rail rail--der">
+    <h2 class="rotulo">herramienta</h2>
+    <div class="segm" id="modos">
+      <button data-modo="pincel" aria-pressed="true">pincel</button>
+      <button data-modo="borrador" aria-pressed="false">borrador</button>
+      <button data-modo="seleccion" aria-pressed="false">selección</button>
+    </div>
+
+    <h2 class="rotulo">colores del territorio</h2>
+    <div class="paleta" id="paleta"></div>
+    <p class="fila"><span id="notaColor">—</span></p>
+    <label class="fila"><span>color libre</span><input type="color" id="colorLibre" value="#B5654A"></label>
+
+    <h2 class="rotulo">lienzo</h2>
+    <label class="fila"><span>fondo</span><input type="color" id="colorFondo" value="#F2EDE5"></label>
+    <label class="fila"><span>grilla</span>
+      <select id="lado">
+        <option value="7">7 × 7</option>
+        <option value="9" selected>9 × 9</option>
+        <option value="11">11 × 11</option>
+        <option value="13">13 × 13</option>
+      </select>
+    </label>
+    <label class="fila"><span>densidad</span><input type="range" id="densidad" min="25" max="70" value="45"></label>
+    <label class="fila"><span>espejo al pintar</span><input type="checkbox" id="espejo" checked></label>
+  </aside>
+
+  <footer class="acciones">
+    <button class="boton boton--fuerte" id="generar">generar<kbd>G</kbd></button>
+    <button class="boton" id="limpiar">vaciar</button>
+    <span class="sep"></span>
+    <button class="boton" id="png">descargar PNG</button>
+    <button class="boton" id="gif">descargar GIF</button>
+    <span class="estado" id="estado" role="status" aria-live="polite"></span>
+  </footer>
+</main>
+
+<script src="js/pueblos.js?v=1"></script>
+<script src="js/fondo.js?v=1"></script>
+<script src="js/pixelswap.js?v=1"></script>
+<script src="js/simbolo.js?v=1"></script>
+<script src="js/gif.js?v=1"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

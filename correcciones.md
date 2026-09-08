@@ -298,3 +298,15 @@ Filtro para ver la watchlist de **tal usuario** (Bian / Luke / Todas), default *
 - En el celular la tarjeta entra desde abajo y ocupa el ancho completo.
 - De paso: si a `escapeHtml` le llegaba un número (el año, por ejemplo) reventaba el render entero de quien lo llamara. Ahora convierte a texto en vez de romper — era una bomba de tiempo en las dos apps.
 - Estado: **🚧 hecho, falta aprobación de Lucas.**
+
+## 44. 🚧 [Musuq Pacha] Generador de símbolos de pueblos originarios
+- Web aparte, en `musuq-pacha/simbolos/`. Se abre `index.html` y listo: **no necesita internet ni instalar nada**.
+- Arranca con **MUSUQ PACHA** en el centro, en Space Grotesk, con el efecto de píxeles que tapan la palabra y la cambian (va rotando entre *MUSUQ PACHA*, *TIEMPO NUEVO* y *MUNDO QUE VIENE*). Con **empezar** la pantalla se tapa de píxeles y aparece el generador.
+- **Elegís el pueblo** (Omaguaca, Diaguita, Querandí, Comechingón, Guaraní, Mapuche, Tehuelche y Selk'nam) y te propone los colores de su territorio: cada color tiene nombre y sale del bioma o de materiales documentados (ocre de quebrada, urucú, quillango, azul de witral).
+- **Generás al azar con el botón o con la tecla G.** Los símbolos salen siempre simétricos, espejados sobre el eje vertical, que es lo que hace que lean como emblema.
+- **El paso de un símbolo al otro es un morph, no un cambio seco:** cada píxel se queda con el lugar más cercano del símbolo nuevo y **viaja hasta ahí** haciendo una curva, achicándose un poco en el medio y cambiando de color en el camino, escalonado desde el centro hacia afuera. Los que sobran se achican hasta desaparecer y los que faltan nacen del centro. Es el efecto de `species-in-pieces.com`.
+- **También pintás a mano:** pincel, borrador y un modo **selección** para marcar varias celdas y cambiarles el color a todas juntas. Con *espejo al pintar* prendido, pintás de un lado y aparece del otro.
+- **Todo es configurable:** color de fondo (cualquiera, y si es oscuro se invierten los textos solos), tamaño de grilla de 7×7 a 13×13, y densidad del símbolo.
+- El fondo de toda la página es un campo de puntos animado (el PixelBlast de reactbits, rehecho a mano) **apenas más oscuro que el fondo**, que reacciona al mouse y tira ondas al hacer click y al generar.
+- **Se baja en PNG** (2000 px) **y en GIF animado** (2 segundos, ~730 KB), los dos con el fondo animado, el símbolo y las volantas de los costados con el nombre del pueblo y los colores usados — igual que las referencias que pasaste.
+- Estado: **🚧 hecho, falta aprobación de Lucas.**
