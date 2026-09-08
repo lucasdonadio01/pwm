@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MUSUQ PACHA · generador de símbolos</title>
 <meta name="description" content="Generador de símbolos en grilla para los pueblos originarios argentinos. Musuq Pacha, TIF UADE 2026.">
-<link rel="stylesheet" href="css/fuente.css?v=1">
-<link rel="stylesheet" href="css/app.css?v=1">
+<link rel="stylesheet" href="css/fuente.css?v=2">
+<link rel="stylesheet" href="css/app.css?v=2">
 </head>
 <body>
 
@@ -14,9 +14,9 @@
 
 <section id="portada">
   <p class="ojo">pueblos originarios · generador de símbolos</p>
-  <h1 class="titulo" id="titulo"><span>MUSUQ PACHA</span></h1>
+  <h1 class="titulo"><span>MUSUQ PACHA</span></h1>
   <p class="pie">un símbolo por pueblo, pintado píxel a píxel</p>
-  <button class="boton boton--grande" id="entrar">empezar</button>
+  <p class="carga"><span id="carga">0</span>%</p>
 </section>
 
 <main id="taller" hidden>
@@ -28,6 +28,9 @@
   <aside class="rail rail--izq">
     <h2 class="rotulo">pueblo</h2>
     <ul class="pueblos" id="listaPueblos"></ul>
+    <h2 class="rotulo">territorio</h2>
+    <canvas class="mapa" id="mapa"></canvas>
+    <p class="mapa__pie" id="mapaPie"></p>
   </aside>
 
   <section class="escena">
@@ -37,9 +40,22 @@
   <aside class="rail rail--der">
     <h2 class="rotulo">herramienta</h2>
     <div class="segm" id="modos">
-      <button data-modo="pincel" aria-pressed="true">pincel</button>
-      <button data-modo="borrador" aria-pressed="false">borrador</button>
-      <button data-modo="seleccion" aria-pressed="false">selección</button>
+      <button data-modo="pincel" data-tecla="q" aria-pressed="true" title="Pincel (Q)" aria-label="Pincel">
+        <svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M240-120q-45 0-89-22t-71-58q26 0 53-20.5t27-59.5q0-50 35-85t85-35q50 0 85 35t35 85q0 66-47 113t-113 47Zm0-80q33 0 56.5-23.5T320-280q0-17-11.5-28.5T280-320q-17 0-28.5 11.5T240-280q0 23-5.5 42T220-202q5 2 10 2h10Zm230-160L360-470l358-358q11-11 27.5-11.5T774-828l54 54q12 12 12 28t-12 28L470-360Zm-190 80Z"/></svg>
+        <small>q</small>
+      </button>
+      <button data-modo="borrador" data-tecla="w" aria-pressed="false" title="Borrador (W)" aria-label="Borrador">
+        <svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M690-240h190v80H610l80-80Zm-500 80-85-85q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L520-160H190Zm296-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/></svg>
+        <small>w</small>
+      </button>
+      <button data-modo="seleccion" data-tecla="e" aria-pressed="false" title="Selección (E)" aria-label="Selección">
+        <svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M440-120v-400h400v80H576l264 264-56 56-264-264v264h-80Zm-160 0v-80h80v80h-80Zm-80-640h-80q0-33 23.5-56.5T200-840v80Zm80 0v-80h80v80h-80Zm160 0v-80h80v80h-80Zm160 0v-80h80v80h-80Zm160 0v-80q33 0 56.5 23.5T840-760h-80ZM200-200v80q-33 0-56.5-23.5T120-200h80Zm-80-80v-80h80v80h-80Zm0-160v-80h80v80h-80Zm0-160v-80h80v80h-80Zm640 0v-80h80v80h-80Z"/></svg>
+        <small>e</small>
+      </button>
+      <button data-modo="cuentagotas" data-tecla="i" aria-pressed="false" title="Copiar color (I)" aria-label="Copiar color">
+        <svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M120-120v-190l358-358-58-56 58-56 76 76 124-124q5-5 12.5-8t15.5-3q8 0 15 3t13 8l94 94q5 6 8 13t3 15q0 8-3 15.5t-8 12.5L705-555l76 78-57 57-56-58-358 358H120Zm80-80h78l332-334-76-76-334 332v78Zm447-410 96-96-37-37-96 96 37 37Zm0 0-37-37 37 37Z"/></svg>
+        <small>i</small>
+      </button>
     </div>
 
     <h2 class="rotulo">colores del territorio</h2>
@@ -52,30 +68,29 @@
     <label class="fila"><span>grilla</span>
       <select id="lado">
         <option value="7">7 × 7</option>
-        <option value="9" selected>9 × 9</option>
-        <option value="11">11 × 11</option>
+        <option value="9">9 × 9</option>
+        <option value="11" selected>11 × 11</option>
         <option value="13">13 × 13</option>
       </select>
     </label>
-    <label class="fila"><span>densidad</span><input type="range" id="densidad" min="25" max="70" value="45"></label>
     <label class="fila"><span>espejo al pintar</span><input type="checkbox" id="espejo" checked></label>
   </aside>
 
   <footer class="acciones">
     <button class="boton boton--fuerte" id="generar">generar<kbd>G</kbd></button>
     <button class="boton" id="limpiar">vaciar</button>
+    <span class="semilla" id="semilla"></span>
     <span class="sep"></span>
     <button class="boton" id="png">descargar PNG</button>
-    <button class="boton" id="gif">descargar GIF</button>
     <span class="estado" id="estado" role="status" aria-live="polite"></span>
   </footer>
 </main>
 
-<script src="js/pueblos.js?v=1"></script>
-<script src="js/fondo.js?v=1"></script>
-<script src="js/pixelswap.js?v=1"></script>
-<script src="js/simbolo.js?v=1"></script>
-<script src="js/gif.js?v=1"></script>
-<script src="js/app.js?v=1"></script>
+<script src="js/pueblos.js?v=2"></script>
+<script src="js/mapa.js?v=2"></script>
+<script src="js/fondo.js?v=2"></script>
+<script src="js/pixelswap.js?v=2"></script>
+<script src="js/simbolo.js?v=2"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>

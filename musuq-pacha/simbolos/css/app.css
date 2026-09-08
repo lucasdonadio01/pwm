@@ -44,6 +44,11 @@ html, body {
 }
 .titulo span { display: block; }
 .pie { font-size: 13px; color: var(--suave); letter-spacing: .04em; }
+.carga {
+  font-size: 26px; font-weight: 300; letter-spacing: .06em;
+  font-variant-numeric: tabular-nums; color: var(--tinta); margin-top: 10px;
+}
+.carga span { display: inline-block; min-width: 2.1ch; text-align: right; }
 
 /* ---------- pixel swap ---------- */
 .pxswap {
@@ -122,12 +127,21 @@ html, body {
 /* controles */
 .segm { display: flex; }
 .segm button {
-  flex: 1; font: 400 11px/1 'Space Grotesk', sans-serif; letter-spacing: .04em;
-  padding: 8px 4px; background: none; color: var(--tinta);
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 2px; background: none; color: var(--tinta);
   border: 1px solid var(--linea); border-right: 0; cursor: pointer;
+  transition: background 130ms, color 130ms;
 }
 .segm button:last-child { border-right: 1px solid var(--linea); }
+.segm button:hover { background: rgba(0, 0, 0, .05); }
+.segm button svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+.segm button small { font: 400 9px/1 'Space Grotesk', sans-serif; letter-spacing: .1em; opacity: .55; text-transform: uppercase; }
 .segm button[aria-pressed="true"] { background: var(--tinta); color: var(--fondo); border-color: var(--tinta); }
+.segm button[aria-pressed="true"] small { opacity: .7; }
+
+/* mapa del territorio */
+.mapa { display: block; margin: 2px 0 0; }
+.mapa__pie { font-size: 10.5px; color: var(--suave); letter-spacing: .02em; margin-top: 6px; }
 
 .paleta { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .paleta button {
@@ -157,6 +171,10 @@ html, body {
   background: var(--velo);
 }
 .acciones .sep { flex: 1; }
+.semilla {
+  font-size: 10.5px; color: var(--suave); letter-spacing: .1em;
+  font-variant-numeric: tabular-nums; margin-left: 6px;
+}
 .estado { font-size: 11px; color: var(--suave); letter-spacing: .04em; min-width: 150px; text-align: right; }
 
 @media (max-width: 1040px) {

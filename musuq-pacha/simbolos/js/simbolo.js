@@ -9,12 +9,12 @@ const Simbolo = (() => {
   const ESCALON = 340;      // ms entre el primer pixel que sale y el ultimo
   const POP = 300;          // ms del pintado a mano
 
-  let N = 9;                        // celdas por lado (impar)
+  let N = 11;                       // celdas por lado (impar)
   let grilla = new Map();           // "gx,gy" -> hex
   let pixeles = [];                 // objetos animados
   let t0 = 0, generacion = 0;
   let pueblo = PUEBLOS[0];
-  let densidad = 0.45;
+  let semilla = 0, familia = 'organico';
   let seleccion = new Set();
   let hover = null;
   let quieto = false;
@@ -31,54 +31,183 @@ const Simbolo = (() => {
   const clave = (x, y) => x + ',' + y;
   const azar = a => a[Math.floor(Math.random() * a.length)];
 
-  /* ---------- generacion con simetria espejo ---------- */
-  function generarGrilla() {
-    const mitad = (N + 1) >> 1;              // columnas 0..mitad-1, el resto se espeja
-    const media = new Set();
-    const dentro = (x, y) => x >= 0 && x < mitad && y >= 0 && y < N;
+  /* ---------- azar con semilla ---------- */
+  /* mulberry32: la semilla hace que un simbolo se pueda volver a generar igual,
+     y es lo que se muestra abajo del nombre del pueblo como firma unica */
+  function dado(semilla) {
+    let a = semilla >>> 0;
+    return () => {
+      a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
 
-    // 1. tallo vertical sobre la columna central
-    const alto = 3 + Math.floor(Math.random() * (N - 3));
-    const desde = Math.max(0, Math.floor((N - alto) / 2) + (Math.random() < 0.5 ? 0 : 1));
+  const firma = n => {
+    const h = (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
+    return h.slice(0, 4) + '-' + h.slice(4);
+  };
+
+  /* ---------- familias de patrones ---------- */
+  const dentro = (x, y) => x >= 0 && y >= 0 && x < N && y < N;
+  const centro = () => (N - 1) / 2;
+
+  /* Crecimiento libre sobre media grilla, espejado. Es el que da las formas
+     que no se te ocurren; las otras familias son plantillas reconocibles. */
+  function organico(R) {
+    const mitad = (N + 1) >> 1, media = new Set();
+    const enMedia = (x, y) => x >= 0 && x < mitad && y >= 0 && y < N;
+    const alto = 3 + Math.floor(R() * (N - 3));
+    const desde = Math.max(0, Math.floor((N - alto) / 2));
     for (let y = desde; y < Math.min(N, desde + alto); y++) media.add(clave(mitad - 1, y));
 
-    // 2. crecimiento por vecindad
-    const meta = Math.max(6, Math.round(mitad * N * densidad));
+    const meta = Math.max(6, Math.round(mitad * N * 0.45));
     const vecinos = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     let vueltas = 0;
     while (media.size < meta && vueltas++ < 900) {
-      const [cx, cy] = azar([...media]).split(',').map(Number);
-      const [dx, dy] = azar(vecinos);
-      if (dentro(cx + dx, cy + dy)) media.add(clave(cx + dx, cy + dy));
+      const lista = [...media];
+      const [cx, cy] = lista[Math.floor(R() * lista.length)].split(',').map(Number);
+      const [dx, dy] = vecinos[Math.floor(R() * 4)];
+      if (enMedia(cx + dx, cy + dy)) media.add(clave(cx + dx, cy + dy));
     }
-
-    // 3. brazos horizontales: le dan la lectura de emblema
-    for (let i = 0, brazos = 1 + Math.floor(Math.random() * 2); i < brazos; i++) {
-      const y = Math.floor(Math.random() * N);
-      const largo = 2 + Math.floor(Math.random() * (mitad - 1));
-      for (let x = mitad - largo; x < mitad; x++) if (dentro(x, y)) media.add(clave(x, y));
+    for (let i = 0, brazos = 1 + Math.floor(R() * 2); i < brazos; i++) {
+      const y = Math.floor(R() * N), largo = 2 + Math.floor(R() * (mitad - 1));
+      for (let x = mitad - largo; x < mitad; x++) if (enMedia(x, y)) media.add(clave(x, y));
     }
-
-    // 4. huecos: el negativo tambien dibuja
-    for (let i = 0, huecos = Math.floor(Math.random() * 4); i < huecos; i++) {
+    for (let i = 0, huecos = Math.floor(R() * 4); i < huecos; i++) {
       const rodeados = [...media].filter(k => {
         const [x, y] = k.split(',').map(Number);
         return vecinos.every(([dx, dy]) => media.has(clave(x + dx, y + dy)));
       });
-      if (rodeados.length) media.delete(azar(rodeados));
+      if (rodeados.length) media.delete(rodeados[Math.floor(R() * rodeados.length)]);
     }
-
-    // 5. color en manchas de 2x2, resuelto sobre la media grilla para que el espejo lo copie
-    const paleta = pueblo.colores;
-    const dominante = Math.floor(Math.random() * Math.min(3, paleta.length));
-    const semilla = Math.random() * 999;
-    const nueva = new Map();
+    const s = new Set();
     for (const k of media) {
       const [x, y] = k.split(',').map(Number);
-      const r = Math.abs(Math.sin(Math.floor(x / 2) * 7.13 + Math.floor(y / 2) * 3.71 + semilla) * 43758.5453) % 1;
+      s.add(clave(x, y)); s.add(clave(N - 1 - x, y));
+    }
+    return s;
+  }
+
+  /* Petalos que salen del nucleo: cos(a * petalos) recortado por el radio */
+  function flor(R) {
+    const s = new Set(), c = centro();
+    const petalos = [4, 5, 6, 8][Math.floor(R() * 4)];
+    const radio = Math.floor(N / 2) - (R() < 0.4 ? 1 : 0);
+    const nucleo = R() < 0.5 ? 1 : 1.6;
+    const giro = R() * Math.PI;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = x - c, dy = y - c, r = Math.hypot(dx, dy);
+      if (r <= nucleo) { s.add(clave(x, y)); continue; }
+      if (r > radio + 0.35) continue;
+      if (Math.cos(Math.atan2(dy, dx) * petalos + giro) > (r / radio) * 0.95 - 0.2) s.add(clave(x, y));
+    }
+    return s;
+  }
+
+  /* Simetria de 8: se sortea un octante y se replica. Es la chakana / mandala */
+  function mandala(R) {
+    const s = new Set(), c = centro();
+    const poner = (dx, dy) => [[dx, dy], [-dx, dy], [dx, -dy], [-dx, -dy], [dy, dx], [-dy, dx], [dy, -dx], [-dy, -dx]]
+      .forEach(([a, b]) => { if (dentro(c + a, c + b)) s.add(clave(c + a, c + b)); });
+    poner(0, 0);
+    const tope = Math.floor(c);
+    for (let dx = 1; dx <= tope; dx++) for (let dy = 0; dy <= dx; dy++) if (R() < 0.45) poner(dx, dy);
+    const anillo = 1 + Math.floor(R() * tope);
+    for (let dy = 0; dy <= anillo; dy++) poner(anillo, dy);
+    return s;
+  }
+
+  /* Craneo: boveda, cuencas vacias, tabique y mandibula con dientes */
+  function calavera(R) {
+    const s = new Set(), c = centro();
+    const ancho = Math.max(2, Math.round(N * 0.30));
+    const alto = Math.max(2, Math.round(N * 0.28));
+    const tope = Math.max(0, c - alto - 1);
+    for (let y = tope; y <= c + 1; y++)
+      for (let x = c - ancho; x <= c + ancho; x++)
+        if (dentro(x, y) && !(y === tope && Math.abs(x - c) === ancho)) s.add(clave(x, y));
+
+    const grueso = N >= 11 ? 2 : 1;
+    const ojoY = Math.max(tope + 1, c - Math.max(1, Math.round(alto * 0.4)));
+    const ojoX = Math.max(1, Math.round(ancho * 0.55));
+    for (let dy = 0; dy < grueso; dy++) for (let dx = 0; dx < grueso; dx++) {
+      s.delete(clave(c - ojoX - dx, ojoY + dy));
+      s.delete(clave(c + ojoX + dx, ojoY + dy));
+    }
+    s.delete(clave(c, c));
+    if (R() < 0.5) s.delete(clave(c, c - 1));
+
+    const quijada = c + 2;
+    for (let x = c - ancho + 1; x <= c + ancho - 1; x++) if (dentro(x, quijada)) s.add(clave(x, quijada));
+    for (let x = c - ancho + 2; x <= c + ancho - 2; x += 2) s.delete(clave(x, quijada));
+    return s;
+  }
+
+  /* La calavera con cuernos que suben y se abren */
+  function demonio(R) {
+    const s = calavera(R), c = centro();
+    const ancho = Math.max(2, Math.round(N * 0.30));
+    const alto = Math.max(2, Math.round(N * 0.28));
+    let x = c - ancho, y = Math.max(0, c - alto - 1);
+    for (let i = 0, largo = Math.max(2, Math.round(N / 3)); i < largo; i++) {
+      y--;
+      if (i % 2 === 0) x--;
+      if (dentro(x, y)) { s.add(clave(x, y)); s.add(clave(2 * c - x, y)); }
+    }
+    if (R() < 0.6 && dentro(c, c + 3)) s.add(clave(c, c + 3));
+    return s;
+  }
+
+  /* Bicho de frente: cabeza con orejas, cuerpo y patas */
+  function animal(R) {
+    const s = new Set(), c = centro();
+    const cuerpo = 1 + Math.floor(R() * Math.max(1, Math.floor(c)));
+    const y0 = c, y1 = Math.min(N - 2, c + 1 + Math.floor(R() * 2));
+    for (let y = y0; y <= y1; y++) for (let x = c - cuerpo; x <= c + cuerpo; x++) if (dentro(x, y)) s.add(clave(x, y));
+
+    const cabeza = Math.max(1, cuerpo - 1), cy = y0 - 2;
+    for (let y = Math.max(0, cy - 1); y <= cy; y++)
+      for (let x = c - cabeza; x <= c + cabeza; x++) if (dentro(x, y)) s.add(clave(x, y));
+    if (dentro(c, y0 - 1)) s.add(clave(c, y0 - 1));
+
+    const orejas = Math.max(0, cy - 2);
+    if (dentro(c - cabeza, orejas)) { s.add(clave(c - cabeza, orejas)); s.add(clave(c + cabeza, orejas)); }
+    if (R() < 0.5 && dentro(c - cabeza - 1, orejas)) { s.add(clave(c - cabeza - 1, orejas)); s.add(clave(c + cabeza + 1, orejas)); }
+
+    for (const px of [c - cuerpo, c + cuerpo])
+      for (let y = y1 + 1; y < Math.min(N, y1 + 3); y++) if (dentro(px, y)) s.add(clave(px, y));
+    return s;
+  }
+
+  const FAMILIAS = {
+    organico: { nombre: 'orgánico', armar: organico },
+    flor: { nombre: 'flor', armar: flor },
+    mandala: { nombre: 'mandala', armar: mandala },
+    calavera: { nombre: 'calavera', armar: calavera },
+    demonio: { nombre: 'demonio', armar: demonio },
+    animal: { nombre: 'animal', armar: animal }
+  };
+  const NOMBRES = Object.keys(FAMILIAS);
+
+  function generarGrilla(sem) {
+    const R = dado(sem);
+    familia = NOMBRES[Math.floor(R() * NOMBRES.length)];
+    let celdas = FAMILIAS[familia].armar(R);
+    if (celdas.size < 4) { familia = 'organico'; celdas = organico(R); }
+
+    // color en manchas, resuelto con min(x, N-1-x) para que el espejo lo copie
+    const paleta = pueblo.colores;
+    const dominante = Math.floor(R() * Math.min(3, paleta.length));
+    const corrimiento = R() * 999;
+    const nueva = new Map();
+    for (const k of celdas) {
+      const [x, y] = k.split(',').map(Number);
+      const ex = Math.min(x, N - 1 - x);
+      const r = Math.abs(Math.sin(Math.floor(ex / 2) * 7.13 + Math.floor(y / 2) * 3.71 + corrimiento) * 43758.5453) % 1;
       const idx = r > 0.55 ? Math.floor(r * paleta.length) % paleta.length : dominante;
-      nueva.set(clave(x, y), paleta[idx].h);
-      nueva.set(clave(N - 1 - x, y), paleta[idx].h);            // espejo
+      nueva.set(k, paleta[idx].h);
     }
     return nueva;
   }
@@ -258,6 +387,11 @@ const Simbolo = (() => {
 
     // 2. los pixeles del simbolo
     let animando = false;
+    ctx.save();
+    // sombra corta: despega el pixel del fondo sin que se note como sombra
+    ctx.shadowColor = 'rgba(0,0,0,0.24)';
+    ctx.shadowBlur = g.celda * 0.14;
+    ctx.shadowOffsetY = g.celda * 0.05;
     for (const p of pixeles) {
       const e = leer(p, ahora);
       if (e.u < 1) animando = true;
@@ -270,6 +404,7 @@ const Simbolo = (() => {
       ctx.fillRect(-lado / 2, -lado / 2, lado + 0.5, lado + 0.5);
       ctx.restore();
     }
+    ctx.restore();
     if (!animando) pixeles = pixeles.filter(p => p.sA > 0);
 
     // 3. seleccion y cursor, solo en pantalla
@@ -295,12 +430,18 @@ const Simbolo = (() => {
       ctx.textBaseline = 'alphabetic';
 
       ctx.textAlign = 'left';
-      ctx.font = '500 ' + cuerpo + 'px "Space Grotesk", system-ui, sans-serif';
-      ctx.fillText(pueblo.nombre, W * 0.06, H / 2 - salto * 0.2);
-      ctx.font = '300 ' + cuerpo + 'px "Space Grotesk", system-ui, sans-serif';
-      ctx.globalAlpha = 0.6;
-      ctx.fillText(pueblo.region, W * 0.06, H / 2 + salto * 0.8);
-      ctx.fillText('generación ' + String(generacion).padStart(2, '0'), W * 0.06, H / 2 + salto * 1.8);
+      const izq = [
+        [pueblo.nombre, '500', 1],
+        [pueblo.region, '300', 0.6],
+        [FAMILIAS[familia].nombre + ' · generación ' + String(generacion).padStart(2, '0'), '300', 0.6],
+        ['semilla ' + firma(semilla), '300', 0.6]
+      ];
+      const arranque = H / 2 - ((izq.length - 1) * salto) / 2;
+      izq.forEach(([texto, peso, alfa], i) => {
+        ctx.font = peso + ' ' + cuerpo + 'px "Space Grotesk", system-ui, sans-serif';
+        ctx.globalAlpha = alfa;
+        ctx.fillText(texto, W * 0.06, arranque + i * salto);
+      });
       ctx.globalAlpha = 1;
 
       ctx.textAlign = 'right';
@@ -323,7 +464,11 @@ const Simbolo = (() => {
   }
 
   return {
-    generar(ahora) { generacion++; morphA(generarGrilla(), ahora); },
+    generar(ahora, sem) {
+      generacion++;
+      semilla = sem == null ? (Math.random() * 0xFFFFFFFF) >>> 0 : sem >>> 0;
+      morphA(generarGrilla(semilla), ahora);
+    },
     limpiar(ahora) { morphA(new Map(), ahora); },
     componer, celdaEn, pintar, borrar, pixelEn, oscurecer, aRgb, aHex,
     recolorear(hex) {
@@ -348,8 +493,9 @@ const Simbolo = (() => {
     set lado(v) { N = v; },
     get pueblo() { return pueblo; },
     set pueblo(p) { pueblo = p; },
-    get densidad() { return densidad; },
-    set densidad(v) { densidad = v; },
+    get semilla() { return semilla; },
+    get firmaSemilla() { return firma(semilla); },
+    get familia() { return FAMILIAS[familia].nombre; },
     get generacion() { return generacion; },
     get grilla() { return grilla; },
     get seleccion() { return seleccion; },

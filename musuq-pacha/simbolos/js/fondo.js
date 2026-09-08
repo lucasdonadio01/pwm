@@ -43,37 +43,47 @@ const Fondo = (() => {
       return v;
     }
 
+    // Bayer analitico: es lo que da el borde deshilachado del referente, en vez
+    // de un recorte duro entre "hay pixel" y "no hay pixel"
+    float bayer2(vec2 a){ a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
+    float bayer4(vec2 a){ return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+
     void main(){
       vec2 celda  = floor(gl_FragCoord.xy / uPixel);
       vec2 centro = (celda + 0.5) * uPixel;
 
-      float n = fbm(celda * 0.115 + vec2(uTime * 0.05, -uTime * 0.028));
-      n = n * 1.36 - 0.28 + uDensidad;
-      n += (hash(celda + 0.5) - 0.5) * 0.30;   // dispersion por celda: rompe la mancha
+      float campo = fbm(celda * 0.040 + vec2(uTime * 0.045, -uTime * 0.026));
+      // El smoothstep es la clave: aplasta a cero todo lo que este por debajo
+      // del piso, asi los claros quedan de verdad vacios en vez de salpicados
+      // de puntos sueltos, y satura los nucleos. Sin esto el fbm tramaba la
+      // pantalla entera de forma pareja y no se parecia al referente.
+      campo = smoothstep(0.38, 0.78, campo) * 2.0 - 0.45 + uDensidad;
 
-      n += 0.34 * exp(-distance(centro, uRaton) / 90.0);
+      campo += 0.42 * exp(-distance(centro, uRaton) / 95.0);
 
       for (int i = 0; i < ${MAX_ONDAS}; i++) {
         vec3 o = uOndas[i];
         float edad = uTime - o.z;
         float viva = step(0.0, o.z) * step(0.0, edad) * step(edad, ${VIDA_ONDA.toFixed(1)});
-        float anillo = exp(-abs(distance(centro, o.xy) - edad * 430.0) / 48.0);
-        n += anillo * max(0.0, 1.0 - edad / ${VIDA_ONDA.toFixed(1)}) * 0.9 * viva;
+        float anillo = exp(-abs(distance(centro, o.xy) - edad * 430.0) / 52.0);
+        campo += anillo * max(0.0, 1.0 - edad / ${VIDA_ONDA.toFixed(1)}) * 1.1 * viva;
       }
 
       vec2 q = gl_FragCoord.xy / uRes;
-      float borde = smoothstep(0.0, 0.18, q.x) * smoothstep(0.0, 0.18, 1.0 - q.x)
-                  * smoothstep(0.0, 0.14, q.y) * smoothstep(0.0, 0.14, 1.0 - q.y);
-      n *= mix(0.5, 1.0, borde);
+      float borde = smoothstep(0.0, 0.20, q.x) * smoothstep(0.0, 0.20, 1.0 - q.x)
+                  * smoothstep(0.0, 0.15, q.y) * smoothstep(0.0, 0.15, 1.0 - q.y);
+      campo *= mix(0.42, 1.0, borde);
 
-      // el punto nunca llega a tocar al vecino: siempre queda aire entre pixeles,
-      // que es lo que hace que se lea como campo de puntos y no como mancha
-      float cobertura = clamp((n - 0.42) / 0.30, 0.0, 1.0) * 0.60;
-      float d = length(fract(gl_FragCoord.xy / uPixel) - 0.5);
+      // la celda esta prendida o apagada: todos los cuadrados miden lo mismo
+      float encendida = step(bayer4(celda) / 0.9375, campo);
+      // pero el nucleo de cada mancha pinta mas fuerte que el fleco
+      float fuerza = mix(0.42, 1.0, smoothstep(0.30, 1.05, campo));
+
+      vec2 f = abs(fract(gl_FragCoord.xy / uPixel) - 0.5);
       float aa = 0.9 / uPixel;
-      float forma = 1.0 - smoothstep(cobertura * 0.5 - aa, cobertura * 0.5 + aa, d);
+      float cuadrado = 1.0 - smoothstep(0.31 - aa, 0.31 + aa, max(f.x, f.y));
 
-      gl_FragColor = vec4(mix(uFondo, uTinta, forma), 1.0);
+      gl_FragColor = vec4(mix(uFondo, uTinta, encendida * fuerza * cuadrado), 1.0);
     }`;
 
   function rgb(hex) {
