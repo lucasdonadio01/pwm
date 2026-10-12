@@ -4913,6 +4913,27 @@ WM.movies = [
     "trailer": null,
     "tmdb": 49026,
     "featured": false
+  },
+  {
+    "id": "12-angry-men",
+    "title": "Doce hombres sin piedad",
+    "year": 1957,
+    "kind": "movie",
+    "owner": "watched",
+    "director": "Sidney Lumet",
+    "runtime": 92,
+    "imdb": null,
+    "rt": null,
+    "synopsis": "Tras escuchar todos los testimonios y valorar las pruebas presentadas, un jurado popular compuesto por doce hombres tiene que decidir, por unanimidad, si absuelve o condena a muerte a un joven acusado de haber matado a su padre. Al principio, once están completamente convencidos de su culpabilidad y se inclinan por la condena, pero el que discrepa empieza a plantear dudas razonables que, poco a poco, van resquebrajando la inicial seguridad de los demás.",
+    "genres": [
+      "Drama"
+    ],
+    "lang": "en",
+    "backdrop": "https://image.tmdb.org/t/p/original/qqHQsStV6exghCM7zbObuYBiYxw.jpg",
+    "poster": "https://image.tmdb.org/t/p/w780/t88XfoxO5cX3f0qaSxWsBS0Lc3.jpg",
+    "trailer": null,
+    "tmdb": 389,
+    "popularity": 0
   }
 ];
 
@@ -5492,6 +5513,10 @@ WM.letterboxd = {
       "rating": 2.5,
       "review": "tomboy snow white",
       "loggedAt": "2026-02-08T06:15:08.000Z"
+    },
+    "12-angry-men": {
+      "rating": 3.5,
+      "loggedAt": "2026-10-12T05:31:47.000Z"
     }
   },
   "luke": {
